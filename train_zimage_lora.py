@@ -1,0 +1,663 @@
+#!/usr/bin/env python3
+"""
+Z-Image LoRA Training Script
+Trains LoRA adapters for Z-Image (base) models with YAML configuration support.
+"""
+
+import argparse
+import inspect
+import logging
+import math
+import os
+import random
+import time
+from pathlib import Path
+from typing import Optional
+
+import torch
+import yaml
+from accelerate import Accelerator
+from accelerate.utils import set_seed
+from diffusers import AutoencoderKL, ZImagePipeline
+from diffusers.models.transformers import ZImageTransformer2DModel
+from safetensors.torch import save_file
+from torch.optim import AdamW
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from maltrainer.models.lora import LoRANetwork
+from maltrainer.models.scheduler import get_flow_match_scheduler
+from maltrainer.data.dataset import ZImageDataset
+from maltrainer.utils.config import load_config, save_config_to_output
+from maltrainer.utils.logging_utils import setup_logging
+
+logger = logging.getLogger(__name__)
+
+
+class ZImageLoRATrainer:
+    """Trainer for Z-Image LoRA models."""
+    
+    def __init__(self, config: dict):
+        self.config = config
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
+        
+        # Initialize accelerator
+        self.accelerator = Accelerator(
+            mixed_precision=config.get("mixed_precision", "bf16"),
+            gradient_accumulation_steps=config.get("gradient_accumulation_steps", 1),
+        )
+        
+        self.is_main_process = self.accelerator.is_main_process
+        
+        # Log device info
+        if self.is_main_process:
+            device_name = torch.cuda.get_device_name(self.device) if self.device.type == "cuda" else "CPU"
+            logger.info(f"Training on device: {self.device} ({device_name})")
+            if self.device.type == "cuda":
+                logger.info(f"Total VRAM: {torch.cuda.get_device_properties(self.device).total_memory / 1024**3:.2f} GB")
+        
+        # Add file logging if configured
+        log_dir = Path(config.get("output", {}).get("path", "./output"))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_dir / "training.log")
+        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        logging.getLogger().addHandler(file_handler)
+
+        # Create a dedicated logger for progress updates that writes only to file
+        self.progress_logger = logging.getLogger("progress")
+        self.progress_logger.setLevel(logging.INFO)
+        self.progress_logger.addHandler(file_handler)
+        self.progress_logger.propagate = False
+
+        
+    def load_model(self):
+        """Load Z-Image model components."""
+        logger.info("Loading Z-Image model...")
+        
+        model_path = self.config["model"]["name_or_path"]
+        
+        # Load transformer
+        transformer = ZImageTransformer2DModel.from_pretrained(
+            model_path,
+            subfolder="transformer",
+            torch_dtype=self.dtype,
+        )
+        transformer.enable_gradient_checkpointing()
+        
+        # Load text encoder
+        text_encoder = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            subfolder="text_encoder",
+            torch_dtype=self.dtype,
+        )
+        
+        # Load tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            subfolder="tokenizer",
+        )
+        
+        # Load VAE
+        vae = AutoencoderKL.from_pretrained(
+            model_path,
+            subfolder="vae",
+            torch_dtype=torch.float32,  # VAE always float32
+        )
+        
+        # Set requires_grad
+        transformer.requires_grad_(False)
+        text_encoder.requires_grad_(False)
+        vae.requires_grad_(False)
+        
+        # Move everything to GPU for the 5090
+        transformer.to(self.device)
+        text_encoder.to(self.device)
+        vae.to(self.device)
+        
+        self.transformer = transformer
+        self.text_encoder = text_encoder
+        self.tokenizer = tokenizer
+        self.vae = vae
+        
+        logger.info("Model loaded successfully")
+        
+    def create_lora_network(self):
+        """Create LoRA network for the transformer."""
+        logger.info("Creating LoRA network...")
+        
+        lora_config = self.config.get("lora", {})
+        
+        self.lora_network = LoRANetwork(
+            transformer=self.transformer,
+            rank=lora_config.get("rank", 4),
+            alpha=lora_config.get("alpha", 1.0),
+            target_modules=lora_config.get("target_modules", ["to_q", "to_k", "to_v", "to_out"]),
+        )
+        self.lora_network.prefix = lora_config.get("prefix", "")
+        
+        self.lora_network.to(self.device, dtype=self.dtype)
+        logger.info(f"LoRA network created with rank={lora_config.get('rank', 4)}")
+        
+    def create_dataset(self):
+        """Create training dataset."""
+        logger.info("Creating dataset...")
+        
+        dataset_config = self.config["dataset"]
+        
+        self.train_dataset = ZImageDataset(
+            data_root=dataset_config["path"],
+            resolution=dataset_config.get("resolution", 512),
+            center_crop=dataset_config.get("center_crop", True),
+            random_flip=dataset_config.get("random_flip", False),
+            trigger_token=dataset_config.get("trigger", None),
+            repeats=dataset_config.get("repeats", 1),
+        )
+
+        default_caption = dataset_config.get("default_caption", "")
+        trigger = dataset_config.get("trigger", "").strip()
+        
+        if default_caption:
+            # Smart replacement: if caption is empty or just the trigger, use default_caption
+            # Note: Dataset already prepends trigger if it exists
+            new_captions = []
+            for c in self.train_dataset.captions:
+                c_clean = c.strip()
+                # If it is empty or just the trigger token, it means no specific caption was found
+                if not c_clean or c_clean == trigger:
+                    # Construct full caption
+                    if trigger and default_caption and trigger not in default_caption:
+                        new_captions.append(f"{trigger} {default_caption}")
+                    else:
+                        new_captions.append(default_caption)
+                else:
+                    new_captions.append(c)
+            self.train_dataset.captions = new_captions
+        
+        self.train_dataloader = DataLoader(
+            self.train_dataset,
+            batch_size=self.config["train"].get("batch_size", 1),
+            shuffle=True,
+            num_workers=dataset_config.get("num_workers", 0),
+        )
+        
+        trigger = dataset_config.get("trigger", None)
+        empty_captions = sum(1 for c in self.train_dataset.captions if not c)
+        if not trigger and empty_captions > 0:
+            logger.warning(
+                "Detected %d empty captions and no trigger token. "
+                "Training may fail to learn a consistent concept. "
+                "Add dataset.trigger or provide caption .txt files.",
+                empty_captions,
+            )
+        
+        logger.info(f"Dataset created with {len(self.train_dataset)} samples")
+        
+    def setup_optimizer(self):
+        """Setup optimizer and scheduler."""
+        train_config = self.config["train"]
+
+        def _to_float(value, default: float) -> float:
+            if value is None:
+                return float(default)
+            if isinstance(value, (int, float)):
+                return float(value)
+            return float(str(value))
+
+        lr = _to_float(train_config.get("learning_rate", 1e-4), 1e-4)
+        beta1 = _to_float(train_config.get("adam_beta1", 0.9), 0.9)
+        beta2 = _to_float(train_config.get("adam_beta2", 0.999), 0.999)
+        weight_decay = _to_float(train_config.get("weight_decay", 0.01), 0.01)
+        eps = _to_float(train_config.get("adam_epsilon", 1e-8), 1e-8)
+
+        optimizer_name = str(train_config.get("optimizer", "adamw")).lower()
+        use_weight_decay = 0.0 if train_config.get("weight_decay_exclude_lora", False) else weight_decay
+
+        if optimizer_name in {"adamw8bit", "adam8bit"}:
+            try:
+                import bitsandbytes as bnb
+                optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
+                self.optimizer = optimizer_cls(
+                    self.lora_network.parameters(),
+                    lr=lr,
+                    betas=(beta1, beta2),
+                    weight_decay=use_weight_decay,
+                    eps=eps,
+                )
+                logger.info("Using optimizer: %s", optimizer_name)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load bitsandbytes optimizer (%s). Falling back to AdamW. Error: %s",
+                    optimizer_name,
+                    e,
+                )
+                self.optimizer = AdamW(
+                    self.lora_network.parameters(),
+                    lr=lr,
+                    betas=(beta1, beta2),
+                    weight_decay=use_weight_decay,
+                    eps=eps,
+                )
+        else:
+            self.optimizer = AdamW(
+                self.lora_network.parameters(),
+                lr=lr,
+                betas=(beta1, beta2),
+                weight_decay=use_weight_decay,
+                eps=eps,
+            )
+        
+        self.noise_scheduler = get_flow_match_scheduler()
+        
+    def train(self):
+        """Main training loop."""
+        train_config = self.config["train"]
+        aitk_weighting = [
+            0.905706524848938, 0.9097874164581299, 0.9251009821891785, 0.9399133920669556,
+            0.9497355818748474, 0.962195873260498, 0.9691638946533203, 0.9927358627319336,
+            1.01659095287323, 1.0392684936523438, 1.0429067611694336, 1.0677919387817383,
+            1.092896580696106, 1.1149251461029053, 1.1015851497650146, 1.1209120750427246,
+            1.1399472951889038, 1.1559219360351562, 1.143755555152893, 1.160578727722168,
+            1.1761468648910522, 1.1895899772644043, 1.1867371797561646, 1.1993824243545532,
+            1.2113513946533203, 1.2201216220855713, 1.221794605255127, 1.2329251766204834,
+            1.2426395416259766, 1.251118540763855, 1.2562459707260132, 1.2668883800506592,
+            1.2760146856307983, 1.2822540998458862, 1.2892439365386963, 1.2972776889801025,
+            1.3042182922363281, 1.3104143142700195, 1.3190876245498657, 1.3253265619277954,
+            1.3295484781265259, 1.3324649333953857, 1.3436106443405151, 1.3482736349105835,
+            1.351183533668518, 1.3556060791015625, 1.359933614730835, 1.3625402450561523,
+            1.3641390800476074, 1.3723753690719604, 1.3748365640640259, 1.3776681423187256,
+            1.3802807331085205, 1.3848408460617065, 1.3877429962158203, 1.390969157218933,
+            1.3927756547927856, 1.4031920433044434, 1.4064390659332275, 1.4097232818603516,
+            1.4132285118103027, 1.4208053350448608, 1.4254504442214966, 1.4294012784957886,
+            1.4323071241378784, 1.44380521774292, 1.4465110301971436, 1.4490883350372314,
+            1.451446533203125, 1.458960771560669, 1.460111379623413, 1.4603426456451416,
+            1.4595434665679932, 1.4694839715957642, 1.470526099205017, 1.4705318212509155,
+            1.4697961807250977, 1.477265477180481, 1.4771337509155273, 1.4768965244293213,
+            1.4760032892227173, 1.4871419668197632, 1.4877341985702515, 1.488408088684082,
+            1.489357829093933, 1.4884581565856934, 1.4882304668426514, 1.4878745079040527,
+            1.4949846267700195, 1.4957915544509888, 1.4951081275939941, 1.4950779676437378,
+            1.4995663166046143, 1.4994632005691528, 1.4986882209777832, 1.4976568222045898,
+            1.5038518905639648, 1.503743052482605, 1.502982258796692, 1.502566933631897,
+            1.5068002939224243, 1.506575584411621, 1.5067178010940552, 1.5050104856491089,
+            1.508437991142273, 1.5073161125183105, 1.506223440170288, 1.504751205444336,
+            1.512485384941101, 1.5121595859527588, 1.5116060972213745, 1.5102864503860474,
+            1.5156408548355103, 1.5157924890518188, 1.5142825841903687, 1.5141233205795288,
+            1.5191627740859985, 1.518998622894287, 1.5177574157714844, 1.516713261604309,
+            1.5186537504196167, 1.5179635286331177, 1.5159885883331299, 1.5150446891784668,
+            1.5226575136184692, 1.5215232372283936, 1.5201103687286377, 1.5225480794906616,
+            1.5215368270874023, 1.520209789276123, 1.5184354782104492, 1.5220975875854492,
+            1.5209708213806152, 1.519667625427246, 1.5177332162857056, 1.5203157663345337,
+            1.519271731376648, 1.5175830125808716, 1.5161852836608887, 1.517741322517395,
+            1.5163099765777588, 1.5150357484817505, 1.513055682182312, 1.5154107809066772,
+            1.513993501663208, 1.5126358270645142, 1.510875940322876, 1.5125701427459717,
+            1.510590672492981, 1.5086392164230347, 1.5068501234054565, 1.5094420909881592,
+            1.5080277919769287, 1.5060293674468994, 1.5040230751037598, 1.504892110824585,
+            1.5031654834747314, 1.5013214349746704, 1.499170184135437, 1.500420331954956,
+            1.4979915618896484, 1.4959659576416016, 1.494127631187439, 1.4961415529251099,
+            1.494597315788269, 1.4926577806472778, 1.4904958009719849, 1.4913445711135864,
+            1.489889144897461, 1.4880430698394775, 1.4873780012130737, 1.485144019126892,
+            1.4830609560012817, 1.48123037815094, 1.483134150505066, 1.4808504581451416,
+            1.4793643951416016, 1.4773707389831543, 1.4774049520492554, 1.4752962589263916,
+            1.4733281135559082, 1.4712235927581787, 1.470260500907898, 1.4684780836105347,
+            1.4657323360443115, 1.4639259576797485, 1.4644291400909424, 1.4621423482894897,
+            1.4604870080947876, 1.4585931301116943, 1.458650827407837
+        ]
+        num_epochs = train_config.get("num_epochs", 10)
+        save_every = train_config.get("save_every", 500)
+        
+        # Log device and model info right before training
+        if self.is_main_process:
+            device_name = torch.cuda.get_device_name(self.device) if self.device.type == "cuda" else "CPU"
+            print(f"--- Training Configuration ---")
+            print(f"Device: {device_name}")
+            print(f"Dtype: {self.dtype}")
+            print(f"Transformer: {sum(p.numel() for p in self.transformer.parameters())/1e9:.2f}B params")
+            print(f"Text Encoder: {sum(p.numel() for p in self.text_encoder.parameters())/1e9:.2f}B params")
+            print(f"-------------------------------")
+
+        # Prepare for training
+        self.lora_network, self.optimizer, self.train_dataloader = self.accelerator.prepare(
+            self.lora_network, self.optimizer, self.train_dataloader
+        )
+        
+        global_step = 0
+        grad_accum = self.accelerator.gradient_accumulation_steps
+        steps_per_epoch = math.ceil(len(self.train_dataloader) / max(grad_accum, 1))
+        total_steps = num_epochs * steps_per_epoch
+        num_train_timesteps = self.noise_scheduler.config.num_train_timesteps
+        
+        logger.info("Starting training...")
+        
+        progress_bar = tqdm(
+            total=total_steps,
+            desc="Training Steps",
+            disable=not self.is_main_process,
+        )
+        
+        for epoch in range(num_epochs):
+            self.lora_network.train()
+            
+            for batch in self.train_dataloader:
+                with self.accelerator.accumulate(self.lora_network):
+                    # Get pixel values and captions from batch
+                    pixel_values = batch["pixel_values"].to(self.device)
+                    captions = batch["caption"]
+                    
+                    # Encode with VAE
+                    with torch.no_grad():
+                        latents = self.vae.encode(pixel_values).latent_dist.sample()
+                        # Z-Image specific scaling/shifting logic
+                        # Standard Diffusers VAE scaling is usually latents * config.scaling_factor
+                        # But Z-Image uses specific shift and scale factors
+                        # Source: Musubi-Tuner zimage_config.py
+                        zimage_shift = 0.1159
+                        zimage_scale = 0.3611
+                        latents = (latents - zimage_shift) * zimage_scale
+                        latents = latents.to(dtype=self.dtype)
+                    
+                    # Tokenize and encode text
+                    # Use "longest" padding so for batch=1 we have no padding tokens
+                    # This avoids the issue where the model doesn't support attention_mask
+                        tokens = self.tokenizer(
+                        [
+                            self.tokenizer.apply_chat_template(
+                                [{"role": "user", "content": c}],
+                                tokenize=False,
+                                add_generation_prompt=True,
+                                # Z-Image specific argument found in reference implementation
+                                **({"enable_thinking": True} if "enable_thinking" in inspect.signature(self.tokenizer.apply_chat_template).parameters or "kwargs" in inspect.signature(self.tokenizer.apply_chat_template).parameters else {})
+                            )
+                            if hasattr(self.tokenizer, "apply_chat_template")
+                            else c
+                            for c in captions
+                        ],
+                        padding="longest",
+                        truncation=True,
+                        max_length=self.tokenizer.model_max_length,
+                        return_tensors="pt",
+                    ).to(self.device)
+                    
+                    with torch.no_grad():
+                        # Use the base model to get hidden states (last layer outputs)
+                        base_text_encoder = getattr(self.text_encoder, "model", self.text_encoder)
+                        te_out = base_text_encoder(
+                            tokens.input_ids,
+                            attention_mask=tokens.attention_mask,
+                            output_hidden_states=True,
+                        )
+                        text_embeds = te_out.hidden_states[-2]
+                    
+                    # Sample noise
+                    noise = torch.randn_like(latents)
+                    
+                    # Optional noise/latent transforms (AI-Toolkit style)
+                    latent_multiplier = float(train_config.get("latent_multiplier", 1.0))
+                    if latent_multiplier != 1.0:
+                        latents = latents * latent_multiplier
+                    
+                    noise_multiplier = float(train_config.get("noise_multiplier", 1.0))
+                    if noise_multiplier != 1.0:
+                        noise = noise * noise_multiplier
+                    
+                    if train_config.get("dynamic_noise_offset", False):
+                        latents_channel_mean = latents.mean(dim=(2, 3), keepdim=True) / 2
+                        noise = noise + latents_channel_mean
+                    
+                    random_noise_multiplier = float(train_config.get("random_noise_multiplier", 0.0))
+                    if random_noise_multiplier > 0.0:
+                        s = (noise.shape[0], noise.shape[1], 1, 1)
+                        noise = noise * (1 + torch.randn(s, device=noise.device, dtype=noise.dtype) * random_noise_multiplier)
+                    
+                    random_noise_shift = float(train_config.get("random_noise_shift", 0.0))
+                    if random_noise_shift > 0.0:
+                        s = (noise.shape[0], noise.shape[1], 1, 1)
+                        noise = noise + torch.randn(s, device=noise.device, dtype=noise.dtype) * random_noise_shift
+                    
+                    # Sample timestep
+                    bsz = latents.shape[0]
+                    timesteps = torch.randint(0, num_train_timesteps, (bsz,), device=self.device)
+                    timesteps = timesteps.float() / num_train_timesteps
+                    
+                    # Add noise to latents (flow matching formulation)
+                    noisy_latents = (1 - timesteps[:, None, None, None]) * latents + timesteps[:, None, None, None] * noise
+                    noisy_latent_multiplier = float(train_config.get("noisy_latent_multiplier", 1.0))
+                    if noisy_latent_multiplier != 1.0:
+                        noisy_latents = noisy_latents * noisy_latent_multiplier
+                    
+                    # Predict velocity
+                    transformer_kwargs = {}
+                    forward_params = inspect.signature(self.transformer.forward).parameters
+                    if "cap_mask" in forward_params:
+                        transformer_kwargs["cap_mask"] = tokens.attention_mask.bool()
+                    
+                    # Ensure we pass all required arguments that might be missing
+                    # Z-Image expects cap_feats (which corresponds to text_embeds here)
+                    # We map text_embeds to cap_feats via positional args if needed, 
+                    # but here we pass text_embeds as the 3rd arg which matches cap_feats position in signature:
+                    # forward(x, t, cap_feats, cap_mask...)
+                    
+                    # NOTE: ZImage model expects t in range 0-1 and scales it internally by 1000.
+                    # It also seems to expect t=0 to be noise and t=1 to be clean (based on musubi code (1000-t)/1000)
+                    # Our 'timesteps' is 0 (clean) -> 1 (noise).
+                    # So we pass 1.0 - timesteps.
+                    output = self.lora_network(
+                        noisy_latents.unsqueeze(2),
+                        1.0 - timesteps,
+                        text_embeds,
+                        **transformer_kwargs,
+                    )
+                    
+                    # Handle different return types (BaseOutput, tuple, list)
+                    if hasattr(output, "sample"):
+                        model_pred = output.sample
+                    elif isinstance(output, (list, tuple)):
+                        model_pred = output[0]
+                    else:
+                        model_pred = output
+                        
+                    # If it's still a list (some models return [tensor]), take the first element
+                    if isinstance(model_pred, (list, tuple)):
+                        model_pred = model_pred[0]
+                    
+                    # Squeeze the frame dimension if it exists
+                    if len(model_pred.shape) == 5:
+                        model_pred = model_pred.squeeze(2)
+                    
+                    # Fix potential channel/batch swap to avoid broadcasting
+                    if (
+                        model_pred.ndim == 4
+                        and model_pred.shape[0] == latents.shape[1]
+                        and model_pred.shape[1] == latents.shape[0]
+                        and model_pred.shape[2:] == latents.shape[2:]
+                    ):
+                        model_pred = model_pred.permute(1, 0, 2, 3).contiguous()
+                    
+                    # Optional differential guidance (CFG-style)
+                    if train_config.get("do_differential_guidance", False):
+                        unconditional_prompt = train_config.get("unconditional_prompt", "")
+                        uncond_tokens = self.tokenizer(
+                            [
+                                self.tokenizer.apply_chat_template(
+                                    [{"role": "user", "content": unconditional_prompt}],
+                                    tokenize=False,
+                                    add_generation_prompt=True,
+                                )
+                                if hasattr(self.tokenizer, "apply_chat_template")
+                                else unconditional_prompt
+                                for _ in range(len(captions))
+                            ],
+                            padding="longest",
+                            max_length=self.tokenizer.model_max_length,
+                            truncation=True,
+                            return_tensors="pt",
+                        ).to(self.device)
+                        with torch.no_grad():
+                            uncond_out = base_text_encoder(
+                                uncond_tokens.input_ids,
+                                attention_mask=uncond_tokens.attention_mask,
+                                output_hidden_states=True,
+                            )
+                            uncond_embeds = uncond_out.hidden_states[-2]
+                        uncond_kwargs = {}
+                        if "cap_mask" in forward_params:
+                            uncond_kwargs["cap_mask"] = uncond_tokens.attention_mask.bool()
+                        uncond_output = self.lora_network(
+                            noisy_latents.unsqueeze(2),
+                            1.0 - timesteps,
+                            uncond_embeds,
+                            **uncond_kwargs,
+                        )
+                        if hasattr(uncond_output, "sample"):
+                            uncond_pred = uncond_output.sample
+                        elif isinstance(uncond_output, (list, tuple)):
+                            uncond_pred = uncond_output[0]
+                        else:
+                            uncond_pred = uncond_output
+                        if isinstance(uncond_pred, (list, tuple)):
+                            uncond_pred = uncond_pred[0]
+                        if len(uncond_pred.shape) == 5:
+                            uncond_pred = uncond_pred.squeeze(2)
+                        if (
+                            uncond_pred.ndim == 4
+                            and uncond_pred.shape[0] == latents.shape[1]
+                            and uncond_pred.shape[1] == latents.shape[0]
+                            and uncond_pred.shape[2:] == latents.shape[2:]
+                        ):
+                            uncond_pred = uncond_pred.permute(1, 0, 2, 3).contiguous()
+                        
+                        guidance_scale = float(train_config.get("differential_guidance_scale", 3.0))
+                        model_pred = uncond_pred + guidance_scale * (model_pred - uncond_pred)
+
+                    # Compute loss
+                    # Z-Image / Musubi uses target = latents - noise
+                    # Standard flow matching is noise - latents. We align with Musubi.
+                    target = latents - noise
+                    
+                    loss_map = torch.nn.functional.mse_loss(
+                        model_pred.float(),
+                        target.float(),
+                        reduction="none",
+                    )
+
+                    per_sample_loss = loss_map.mean(dim=(1, 2, 3))
+                    
+                    timestep_weighting = str(train_config.get("timestep_weighting", "none")).lower()
+                    if timestep_weighting == "linear":
+                        weights = 0.5 + timesteps
+                    elif timestep_weighting == "sqrt":
+                        weights = 0.5 + torch.sqrt(timesteps)
+                    elif timestep_weighting == "cosine":
+                        weights = 0.5 + torch.cos((1.0 - timesteps) * torch.pi * 0.5)
+                    elif timestep_weighting == "aitk":
+                        w = torch.tensor(aitk_weighting, device=timesteps.device, dtype=timesteps.dtype)
+                        idx = (timesteps * (w.numel() - 1)).long().clamp(0, w.numel() - 1)
+                        weights = w[idx]
+                    else:
+                        weights = None
+                    
+                    if weights is not None:
+                        loss = (per_sample_loss * weights).mean()
+                    else:
+                        loss = per_sample_loss.mean()
+                    
+                    # Backpropagate
+                    self.accelerator.backward(loss)
+                    
+                    if self.accelerator.sync_gradients:
+                        self.accelerator.clip_grad_norm_(self.lora_network.parameters(), train_config.get("max_grad_norm", 1.0))
+                    
+                    if self.accelerator.sync_gradients:
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+                
+                if self.accelerator.sync_gradients:
+                    global_step += 1
+                    progress_bar.update(1)
+                    
+                    # Log progress to file
+                    if global_step % 1 == 0:  # Log every step
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        self.progress_logger.info(f"Step: {global_step}/{total_steps} [{int(global_step/total_steps*100)}%], Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, LR: {current_lr:.2e}")
+                    
+                    # Save checkpoint
+                    if global_step % save_every == 0:
+                        self.save_checkpoint(global_step)
+                
+                # Update progress bar
+                progress_bar.set_postfix({
+                    "loss": loss.item(), 
+                    "step": global_step, 
+                    "epoch": f"{epoch + 1}/{num_epochs}"
+                })
+        
+        # Save final checkpoint
+        progress_bar.close()
+        self.save_checkpoint("final")
+        logger.info("Training completed!")
+        
+    def save_checkpoint(self, step):
+        """Save LoRA checkpoint."""
+        if not self.is_main_process:
+            return
+        
+        output_dir = Path(self.config["output"]["path"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        save_path = output_dir / f"zimage_lora_step_{step}.safetensors"
+        
+        # Get LoRA state dict
+        state_dict = self.lora_network.get_state_dict()
+        
+        # Add metadata
+        metadata = {
+            "step": str(step),
+            "rank": str(self.config.get("lora", {}).get("rank", 4)),
+            "alpha": str(self.config.get("lora", {}).get("alpha", 1.0)),
+        }
+        
+        save_file(state_dict, str(save_path), metadata=metadata)
+        logger.info(f"Saved checkpoint to {save_path}")
+        
+    def run(self):
+        """Run the complete training pipeline."""
+        try:
+            set_seed(self.config.get("seed", 42))
+            
+            self.load_model()
+            self.create_lora_network()
+            self.create_dataset()
+            self.setup_optimizer()
+            self.train()
+        except KeyboardInterrupt:
+            logger.info("Training interrupted by user. Exiting...")
+            # Attempt to clean up
+            torch.cuda.empty_cache()
+        except Exception as e:
+            logger.error(f"An error occurred: {e}", exc_info=True)
+            raise e
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train Z-Image LoRA")
+    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
+    args = parser.parse_args()
+    
+    # Load config
+    config = load_config(args.config)
+    
+    # Setup logging
+    setup_logging(config.get("logging", {}))
+    
+    # Save config to output directory
+    if config.get("output"):
+        save_config_to_output(config, config["output"]["path"])
+    
+    # Create trainer and run
+    trainer = ZImageLoRATrainer(config)
+    trainer.run()
+
+
+if __name__ == "__main__":
+    main()

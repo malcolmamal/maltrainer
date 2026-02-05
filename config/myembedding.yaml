@@ -1,0 +1,41 @@
+# Z-Image Textual Inversion Training Configuration
+# For Anya Taylor-Joy
+
+# Model configuration
+model:
+  name_or_path: "Tongyi-MAI/Z-Image" 
+
+# Embedding configuration
+embedding:
+  trigger: "anya" 
+  num_vectors: 1 
+  init_text: "woman" 
+
+# Dataset configuration
+dataset:
+  path: "C:/Development/trainers/maltrainer/datasets/anyataylorjoy"
+  resolution: 512
+  center_crop: true
+  random_flip: true
+  num_workers: 0 # Windows sometimes has issues with workers
+
+# Training configuration
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 4
+  num_epochs: 100 # Increased to 100 for testing
+  learning_rate: 5.0e-04  
+  save_every: 500
+
+# Output configuration
+output:
+  path: "C:/Development/trainers/maltrainer/output/zimage_embedding_anya"
+
+# Logging configuration
+logging:
+  level: "INFO"
+
+# Training settings
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42

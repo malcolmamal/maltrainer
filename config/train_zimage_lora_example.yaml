@@ -1,0 +1,68 @@
+# Z-Image LoRA Training Configuration Example
+
+# Model configuration
+model:
+  name_or_path: "Tongyi-MAI/Z-Image"  # or path to local model
+  
+# LoRA configuration
+lora:
+  rank: 32
+  alpha: 32
+  target_modules:
+    - "to_q"
+    - "to_k"
+    - "to_v"
+    - "to_out.0"
+    - "feed_forward.w1"
+    - "feed_forward.w2"
+    - "feed_forward.w3"
+    - "adaLN_modulation.0"
+
+# Dataset configuration
+dataset:
+  path: "C:/Development/trainers/maltrainer/datasets/anyataylorjoy"
+  trigger: "sks"
+  default_caption: "photo of a woman"
+  repeats: 1
+  resolution: 512
+  center_crop: true
+  random_flip: false
+  num_workers: 0
+
+# Training configuration
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 4
+  num_epochs: 100
+  optimizer: "adamw8bit"
+  learning_rate: 1e-4
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1e-8
+  weight_decay: 0.01
+  weight_decay_exclude_lora: true
+  timestep_weighting: "aitk"
+  do_differential_guidance: true
+  differential_guidance_scale: 3.0
+  unconditional_prompt: ""
+  dynamic_noise_offset: true
+  noise_multiplier: 1.0
+  random_noise_multiplier: 0.0
+  random_noise_shift: 0.0
+  latent_multiplier: 1.0
+  noisy_latent_multiplier: 1.0
+  max_grad_norm: 1.0
+  save_every: 500
+
+# Output configuration
+output:
+  path: "./output/zimage_lora"
+
+# Logging configuration
+logging:
+  level: "INFO"
+
+# Training settings
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42

@@ -1,0 +1,23 @@
+# Core dependencies
+# Note: For CUDA support on Windows, install PyTorch manually before installing other requirements:
+# For CUDA 13.0 (RTX 50-series): pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
+# For CUDA 12.4: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+# For CUDA 12.1: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+torch
+torchvision
+diffusers>=0.28.0
+transformers>=4.40.0
+accelerate>=0.27.0
+safetensors>=0.4.0
+bitsandbytes>=0.43.0
+
+# Data processing
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Configuration
+PyYAML>=6.0
+
+# Utilities
+tqdm>=4.65.0
