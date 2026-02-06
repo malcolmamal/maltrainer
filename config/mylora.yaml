@@ -21,7 +21,7 @@ lora:
 
 # Dataset configuration
 dataset:
-  path: "C:/Development/trainers/maltrainer/datasets/anyataylorjoy"
+  path: "C:/Development/projects/maltrainer/datasets/felicia"
   trigger: "sks woman"
   default_caption: "photo of a woman"
   repeats: 1

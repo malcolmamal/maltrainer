@@ -6,6 +6,7 @@ Trains LoRA adapters for Z-Image (base) models with YAML configuration support.
 
 import argparse
 import inspect
+import json
 import logging
 import math
 import os
@@ -38,8 +39,11 @@ logger = logging.getLogger(__name__)
 class ZImageLoRATrainer:
     """Trainer for Z-Image LoRA models."""
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
+        self.dry_run = dry_run
+        self.dry_run_step_time = dry_run_step_time
+        self.last_saved_path = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
         
@@ -194,6 +198,117 @@ class ZImageLoRATrainer:
             )
         
         logger.info(f"Dataset created with {len(self.train_dataset)} samples")
+
+    def _count_dataset_samples(self) -> int:
+        dataset_config = self.config.get("dataset", {})
+        data_root = Path(str(dataset_config.get("path", "")))
+        if not data_root.exists():
+            logger.warning("Dataset path does not exist: %s", data_root)
+            return 1
+        supported_exts = {".jpg", ".jpeg", ".png", ".webp"}
+        sample_count = 0
+        for root, _, files in os.walk(data_root):
+            for fname in files:
+                if Path(fname).suffix.lower() in supported_exts:
+                    sample_count += 1
+        repeats = int(dataset_config.get("repeats", 1) or 1)
+        sample_count = max(sample_count, 1) * max(repeats, 1)
+        return sample_count
+
+    def dry_run_training(self):
+        """Simulate training without loading or downloading models."""
+        train_config = self.config.get("train", {})
+        num_epochs = int(train_config.get("num_epochs", 10) or 1)
+        batch_size = int(train_config.get("batch_size", 1) or 1)
+        grad_accum = int(train_config.get("gradient_accumulation_steps", self.config.get("gradient_accumulation_steps", 1)) or 1)
+        num_samples = self._count_dataset_samples()
+        steps_per_epoch = math.ceil((num_samples / max(batch_size, 1)) / max(grad_accum, 1))
+        total_steps = max(num_epochs * steps_per_epoch, 1)
+        save_every = int(train_config.get("save_every", 500) or 0)
+        step_time = max(float(self.dry_run_step_time), 0.0)
+        output_dir = Path(self.config.get("output", {}).get("path", "./output"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Dry run enabled: skipping model download/loading and training compute.")
+        logger.info(
+            "Simulating %d steps (epochs=%d, steps/epoch=%d, batch_size=%d, grad_accum=%d, step_time=%.2fs).",
+            total_steps,
+            num_epochs,
+            steps_per_epoch,
+            batch_size,
+            grad_accum,
+            step_time,
+        )
+
+        start_time = time.time()
+        progress_bar = tqdm(
+            total=total_steps,
+            desc="Dry Run Steps",
+            disable=not self.is_main_process,
+        )
+        for step in range(1, total_steps + 1):
+            if step_time > 0:
+                time.sleep(step_time)
+            progress_bar.update(1)
+
+            if save_every > 0 and step % save_every == 0:
+                self._write_dry_run_checkpoint(
+                    output_dir=output_dir,
+                    step=step,
+                    total_steps=total_steps,
+                    steps_per_epoch=steps_per_epoch,
+                    num_epochs=num_epochs,
+                    start_time=start_time,
+                )
+        progress_bar.close()
+        self._write_dry_run_checkpoint(
+            output_dir=output_dir,
+            step="final",
+            total_steps=total_steps,
+            steps_per_epoch=steps_per_epoch,
+            num_epochs=num_epochs,
+            start_time=start_time,
+        )
+        logger.info("Dry run completed.")
+
+    def _write_dry_run_checkpoint(self, output_dir: Path, step, total_steps: int, steps_per_epoch: int, num_epochs: int, start_time: float):
+        dataset_config = self.config.get("dataset", {})
+        train_config = self.config.get("train", {})
+        elapsed = max(time.time() - start_time, 0.0)
+        completed_steps = total_steps if step == "final" else int(step)
+        progress = min(completed_steps / max(total_steps, 1), 1.0)
+        eta_seconds = max((total_steps - completed_steps) * float(self.dry_run_step_time), 0.0)
+
+        payload = {
+            "mode": "dry_run",
+            "kind": "lora",
+            "step": step,
+            "total_steps": total_steps,
+            "steps_per_epoch": steps_per_epoch,
+            "num_epochs": num_epochs,
+            "progress": {
+                "completed_steps": completed_steps,
+                "percent": round(progress * 100, 2),
+                "elapsed_seconds": round(elapsed, 4),
+                "eta_seconds": round(eta_seconds, 4),
+                "step_time_seconds": float(self.dry_run_step_time),
+            },
+            "config": self.config,
+            "derived": {
+                "dataset_path": str(dataset_config.get("path", "")),
+                "dataset_resolution": dataset_config.get("resolution", 512),
+                "batch_size": train_config.get("batch_size", 1),
+                "gradient_accumulation_steps": train_config.get("gradient_accumulation_steps", self.config.get("gradient_accumulation_steps", 1)),
+                "save_every": train_config.get("save_every", 500),
+                "dtype": str(self.config.get("dtype", "bfloat16")),
+                "mixed_precision": str(self.config.get("mixed_precision", "bf16")),
+                "output_path": str(output_dir),
+            },
+        }
+
+        save_path = output_dir / f"zimage_lora_step_{step}.safetensors"
+        save_path.write_text(json.dumps(payload, indent=2))
+        self.last_saved_path = str(save_path)
         
     def setup_optimizer(self):
         """Setup optimizer and scheduler."""
@@ -618,18 +733,31 @@ class ZImageLoRATrainer:
         }
         
         save_file(state_dict, str(save_path), metadata=metadata)
+        self.last_saved_path = str(save_path)
         logger.info(f"Saved checkpoint to {save_path}")
+
+    def _log_summary(self, start_time: float):
+        elapsed = max(time.time() - start_time, 0.0)
+        output_path = self.last_saved_path or self.config.get("output", {}).get("path", "")
+        logger.info("Summary: ran for %.2fs, last output saved to %s", elapsed, output_path)
         
     def run(self):
         """Run the complete training pipeline."""
         try:
             set_seed(self.config.get("seed", 42))
+            start_time = time.time()
+
+            if self.dry_run:
+                self.dry_run_training()
+                self._log_summary(start_time)
+                return
             
             self.load_model()
             self.create_lora_network()
             self.create_dataset()
             self.setup_optimizer()
             self.train()
+            self._log_summary(start_time)
         except KeyboardInterrupt:
             logger.info("Training interrupted by user. Exiting...")
             # Attempt to clean up
@@ -642,6 +770,8 @@ class ZImageLoRATrainer:
 def main():
     parser = argparse.ArgumentParser(description="Train Z-Image LoRA")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
+    parser.add_argument("--dry-run", action="store_true", help="Simulate training without downloading/loading models")
+    parser.add_argument("--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step during dry run")
     args = parser.parse_args()
     
     # Load config
@@ -655,7 +785,11 @@ def main():
         save_config_to_output(config, config["output"]["path"])
     
     # Create trainer and run
-    trainer = ZImageLoRATrainer(config)
+    trainer = ZImageLoRATrainer(
+        config,
+        dry_run=args.dry_run,
+        dry_run_step_time=args.dry_run_step_time,
+    )
     trainer.run()
 
 

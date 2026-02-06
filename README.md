@@ -59,6 +59,80 @@ pip install -r requirements.txt
    python train_zimage_embedding.py --config config/my_embedding.yaml
    ```
 
+## Training
+
+### Preparing Your Dataset
+
+Before training, organize your images in a directory structure like this:
+
+```
+my_dataset/
+├── image1.jpg
+├── image1.txt    # Optional caption file
+├── image2.png
+├── image2.txt
+└── ...
+```
+
+- **Images**: Supported formats include `.jpg`, `.jpeg`, `.png`, `.webp`
+- **Captions**: Text files with the same name as the image (optional)
+- **Resolution**: Images will be resized according to your config (default 512x512)
+
+### Configuring Training
+
+1. **Choose the right config template**:
+   - For LoRA training: `config/train_zimage_lora_example.yaml`
+   - For Textual Inversion: `config/train_zimage_embedding_example.yaml`
+
+2. **Edit the configuration**:
+   - Set `dataset.path` to your dataset directory
+   - Adjust `train.batch_size` and `gradient_accumulation_steps` based on your GPU VRAM
+   - Modify learning rates and epochs as needed
+   - Configure output paths and logging
+
+3. **Key parameters to customize**:
+   - `model.name_or_path`: Path to Z-Image model
+   - `dataset.resolution`: Training resolution
+   - `train.learning_rate`: Learning rate (higher for embeddings)
+   - `train.num_epochs`: Number of training epochs
+   - `output.path`: Where to save checkpoints
+
+### Running Training
+
+Execute the training script with your config:
+
+```bash
+# For LoRA training
+python train_zimage_lora.py --config config/my_lora.yaml
+
+# For Textual Inversion
+python train_zimage_embedding.py --config config/my_embedding.yaml
+```
+
+For testing, you can simulate training without downloading the model:
+
+```bash
+# Dry run (default 0.025s per step)
+python train_zimage_lora.py --config config/my_lora.yaml --dry-run
+
+# Dry run with custom step time
+python train_zimage_embedding.py --config config/my_embedding.yaml --dry-run --dry-run-step-time 0.1
+```
+
+### Monitoring Training
+
+- Training progress is logged to the console
+- Checkpoints are saved periodically (every 500 steps by default)
+- Monitor GPU usage and adjust batch size if needed
+- Training can be interrupted and resumed (checkpoints include optimizer state)
+
+### Output Files
+
+Training produces:
+- `zimage_lora_step_XXXX.safetensors` or `zimage_embedding_step_XXXX.safetensors`: Model checkpoints
+- `config.yaml`: Saved configuration for reference
+- Logs in the output directory
+
 ## Configuration
 
 All training parameters are configured via YAML files. See `config/` directory for examples.
