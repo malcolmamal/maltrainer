@@ -1,0 +1,136 @@
+<section class="trainer">
+  <div class="hero">
+    <div>
+      <p class="eyebrow">Maltrainer Studio</p>
+      <h1>Train a Z-Image LoRA with confidence.</h1>
+      <p class="subtitle">
+        Pick a dataset, configure a dry run if needed, and launch training with live progress.
+      </p>
+    </div>
+    <div class="envHint">
+      <p>Datasets root: <span>DATASETS_PATH</span> (defaults to <span>datasets/</span>)</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="cardHeader">
+        <h2>Datasets</h2>
+        <button class="ghost" (click)="loadDatasets()" [disabled]="loading()">
+          Refresh
+        </button>
+      </div>
+
+      @if (loading()) {
+        <div class="placeholder">Loading datasets…</div>
+      } @else {
+        @if (datasets().length === 0) {
+          <div class="placeholder">No datasets found.</div>
+        } @else {
+          <ul class="datasetList">
+            @for (dataset of datasets(); track dataset.name) {
+              <li
+                class="datasetItem"
+                [class.active]="dataset.name === selectedDataset()"
+                (click)="selectedDataset.set(dataset.name)"
+              >
+                <div>
+                  <h3>{{ dataset.name }}</h3>
+                  <p>{{ dataset.image_count }} images</p>
+                </div>
+                <span class="tag">ready</span>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </div>
+
+    <div class="card">
+      <h2>Training Setup</h2>
+
+      <label class="field">
+        <span>Selected dataset</span>
+        <select [ngModel]="selectedDataset()" (ngModelChange)="selectedDataset.set($event)">
+          <option value="" disabled>Select a dataset</option>
+          @for (dataset of datasets(); track dataset.name) {
+            <option [value]="dataset.name">{{ dataset.name }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="inlineInfo">
+        <div>
+          <p class="label">Output path</p>
+          <p class="value">{{ outputPath() || 'output/' }}</p>
+        </div>
+        <div>
+          <p class="label">Images</p>
+          <p class="value">{{ selectedInfo()?.image_count ?? 0 }}</p>
+        </div>
+      </div>
+
+      <label class="toggle">
+        <input type="checkbox" [ngModel]="dryRun()" (ngModelChange)="dryRun.set($event)" />
+        <span>Dry run (simulate training)</span>
+      </label>
+
+      <label class="field">
+        <span>Dry run step time (seconds)</span>
+        <input
+          type="number"
+          min="0"
+          step="0.005"
+          [ngModel]="dryRunStepTime()"
+          (ngModelChange)="dryRunStepTime.set($event)"
+        />
+      </label>
+
+      @if (error()) {
+        <div class="error">{{ error() }}</div>
+      }
+
+      <button class="primary" (click)="startTraining()" [disabled]="starting()">
+        {{ starting() ? 'Adding…' : 'Add to queue' }}
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="cardHeader">
+        <h2>Running jobs</h2>
+        <div class="cardActions">
+          <button class="ghost" (click)="loadJobs()">Refresh</button>
+          <button class="ghost" (click)="startNext()" [disabled]="startingQueue()">
+            {{ startingQueue() ? 'Starting…' : 'Start next' }}
+          </button>
+        </div>
+      </div>
+      @if (jobs().length === 0) {
+        <p class="placeholder">No active jobs yet.</p>
+      } @else {
+        <ul class="jobList">
+          @for (job of jobs(); track job.job_id) {
+            <li class="jobItem">
+              <div>
+                <h3>{{ job.dataset }}</h3>
+                <p>{{ job.progress.step }} / {{ job.progress.total }} · {{ job.status }}</p>
+              </div>
+              <div class="jobActions">
+                @if (job.status === 'queued') {
+                  <button
+                    class="ghost"
+                    (click)="startJob(job.job_id)"
+                    [disabled]="hasRunning()"
+                  >
+                    Start
+                  </button>
+                }
+                <a class="ghost" [routerLink]="['/jobs', job.job_id]">Open</a>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </div>
+</section>

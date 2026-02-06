@@ -33,6 +33,42 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install -r requirements.txt
 ```
 
+## Web UI (Trainer Frontend)
+
+The trainer UI is an Angular app that talks to a FastAPI backend over HTTP + WebSocket.
+
+### Backend setup
+
+1. Set datasets root (optional). Defaults to ./datasets when not set:
+   ```bash
+   # Windows (PowerShell)
+   $env:DATASETS_PATH = "C:\Development\projects\maltrainer\datasets"
+   # Linux/macOS
+   export DATASETS_PATH="/path/to/datasets"
+   ```
+
+2. Run the API server:
+   ```bash
+   python -m uvicorn backend.app:app --host 0.0.0.0 --port 8008
+   ```
+
+### Frontend setup
+
+1. Install UI dependencies:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. Run the UI:
+   ```bash
+   npm start
+   ```
+
+3. Open http://localhost:3003
+
+The UI will list datasets from DATASETS_PATH, let you start training or dry runs, and show live logs/progress.
+
 ## Quick Start
 
 ### LoRA Training

@@ -1,0 +1,62 @@
+<section class="job">
+  <div class="header">
+    <div>
+      <a routerLink="/trainer" class="back">← Back to trainer</a>
+      <h1>Training job</h1>
+      <p class="subtitle">Live output streamed from the training process.</p>
+    </div>
+    <div class="status" [class.failed]="status() === 'failed'" [class.exited]="status() === 'exited'">
+      {{ status() }}
+    </div>
+  </div>
+
+  @if (job()) {
+    <div class="summary">
+      <div>
+        <p class="label">Dataset</p>
+        <p class="value">{{ job()?.dataset }}</p>
+      </div>
+      <div>
+        <p class="label">Output</p>
+        <p class="value">{{ job()?.output_path }}</p>
+      </div>
+      <div>
+        <p class="label">Config</p>
+        <p class="value">{{ job()?.config_path }}</p>
+      </div>
+    </div>
+  }
+
+  <div class="progressCard">
+    <div class="progressInfo">
+      <span>Steps</span>
+      <span>{{ progressStep() }} / {{ progressTotal() || '—' }}</span>
+    </div>
+    <div class="progressBar">
+      <div class="progressFill" [style.width.%]="progressPercent()"></div>
+    </div>
+  </div>
+
+  @if (progressLine()) {
+    <div class="liveProgress" [class.err]="progressStream() === 'stderr'">
+      <span class="stream">{{ progressStream() }}</span>
+      <span class="text">{{ progressLine() }}</span>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="error">{{ error() }}</div>
+  }
+
+  <div class="logCard">
+    <div class="logHeader">Live output</div>
+    <div class="logBody">
+      @for (line of logs(); track $index) {
+        <div class="logLine" [class.err]="line.stream === 'stderr'">
+          <span class="stream">{{ line.stream }}</span>
+          <span class="text">{{ line.line }}</span>
+        </div>
+      }
+    </div>
+  </div>
+</section>

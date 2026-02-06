@@ -1,3 +1,5 @@
 venv/
 datasets/
 output/
+__pycache__/
+*.pyc
