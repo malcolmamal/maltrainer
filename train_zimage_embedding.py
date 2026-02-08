@@ -279,6 +279,29 @@ class ZImageEmbeddingTrainer:
                 return float(value)
             return float(str(value))
 
+        def _to_int(value, default: int) -> int:
+            if value is None:
+                return int(default)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float):
+                return int(value)
+            return int(str(value))
+
+        def _to_bool(value, default: bool) -> bool:
+            if value is None:
+                return bool(default)
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            value_str = str(value).strip().lower()
+            if value_str in {"true", "1", "yes", "y", "on"}:
+                return True
+            if value_str in {"false", "0", "no", "n", "off"}:
+                return False
+            return bool(default)
+
         lr = _to_float(train_config.get("learning_rate", 5e-4), 5e-4)
         beta1 = _to_float(train_config.get("adam_beta1", 0.9), 0.9)
         beta2 = _to_float(train_config.get("adam_beta2", 0.999), 0.999)
@@ -290,13 +313,59 @@ class ZImageEmbeddingTrainer:
         # Passing slices (non-leaf tensors) caused warnings and prevented updates
         params_to_optimize = [self.text_encoder.get_input_embeddings().weight]
 
-        self.optimizer = AdamW(
-            params_to_optimize,
-            lr=lr,
-            betas=(beta1, beta2),
-            weight_decay=weight_decay,
-            eps=eps,
-        )
+        optimizer_name = str(train_config.get("optimizer", "adamw")).lower()
+
+        if optimizer_name.startswith("prodigy"):
+            try:
+                from prodigyopt import Prodigy
+
+                beta3_raw = train_config.get("prodigy_beta3", None)
+                beta3 = None if beta3_raw is None else _to_float(beta3_raw, 0.0)
+                decouple = _to_bool(train_config.get("prodigy_decouple", True), True)
+                use_bias_correction = _to_bool(train_config.get("prodigy_use_bias_correction", False), False)
+                safeguard_warmup = _to_bool(train_config.get("prodigy_safeguard_warmup", False), False)
+                d0 = _to_float(train_config.get("prodigy_d0", 1e-6), 1e-6)
+                d_coef = _to_float(train_config.get("prodigy_d_coef", 1.0), 1.0)
+                growth_rate = _to_float(train_config.get("prodigy_growth_rate", float("inf")), float("inf"))
+                slice_p = _to_int(train_config.get("prodigy_slice_p", 1), 1)
+
+                self.optimizer = Prodigy(
+                    params_to_optimize,
+                    lr=lr,
+                    betas=(beta1, beta2),
+                    beta3=beta3,
+                    eps=eps,
+                    weight_decay=weight_decay,
+                    decouple=decouple,
+                    use_bias_correction=use_bias_correction,
+                    safeguard_warmup=safeguard_warmup,
+                    d0=d0,
+                    d_coef=d_coef,
+                    growth_rate=growth_rate,
+                    slice_p=slice_p,
+                )
+                logger.info("Using optimizer: %s", optimizer_name)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load prodigy optimizer (%s). Falling back to AdamW. Error: %s",
+                    optimizer_name,
+                    e,
+                )
+                self.optimizer = AdamW(
+                    params_to_optimize,
+                    lr=lr,
+                    betas=(beta1, beta2),
+                    weight_decay=weight_decay,
+                    eps=eps,
+                )
+        else:
+            self.optimizer = AdamW(
+                params_to_optimize,
+                lr=lr,
+                betas=(beta1, beta2),
+                weight_decay=weight_decay,
+                eps=eps,
+            )
         
         self.noise_scheduler = get_flow_match_scheduler()
         

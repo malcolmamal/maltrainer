@@ -17,11 +17,12 @@ from typing import Optional
 
 import torch
 import yaml
+from huggingface_hub import hf_hub_download
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from diffusers import AutoencoderKL, ZImagePipeline
 from diffusers.models.transformers import ZImageTransformer2DModel
-from safetensors.torch import save_file
+from safetensors.torch import load_file, save_file
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -37,13 +38,14 @@ logger = logging.getLogger(__name__)
 
 
 class ZImageLoRATrainer:
-    """Trainer for Z-Image LoRA models."""
+    """Trainer for Z-Image LoRA models (base or turbo)."""
     
     def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
         self.last_saved_path = None
+        self.lr_scheduler = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
         
@@ -77,12 +79,61 @@ class ZImageLoRATrainer:
         self.progress_logger.propagate = False
 
         
+    def _resolve_hf_path(self, path_value: str) -> str:
+        if os.path.exists(path_value):
+            return path_value
+        parts = path_value.split("/")
+        if len(parts) < 3:
+            raise ValueError(
+                f"Adapter path {path_value} is not a valid local path or hub path."
+            )
+        repo_id = "/".join(parts[:2])
+        filename = "/".join(parts[2:])
+        return hf_hub_download(repo_id=repo_id, filename=filename)
+
+    def _merge_lora_into_transformer(self, lora_state_dict: dict, merge_weight: float = 1.0) -> int:
+        module_map = dict(self.transformer.named_modules())
+        merged = 0
+        for key, lora_a in lora_state_dict.items():
+            if not key.endswith(".lora_A.weight"):
+                continue
+            base_key = key[:-len(".lora_A.weight")]
+            lora_b_key = f"{base_key}.lora_B.weight"
+            alpha_key = f"{base_key}.alpha"
+            if lora_b_key not in lora_state_dict:
+                continue
+
+            module_name = base_key
+            if module_name.startswith("diffusion_model."):
+                module_name = module_name[len("diffusion_model."):]
+            if module_name.startswith("transformer."):
+                module_name = module_name[len("transformer."):]
+
+            module = module_map.get(module_name)
+            if module is None or not isinstance(module, torch.nn.Linear):
+                continue
+
+            lora_b = lora_state_dict[lora_b_key]
+            rank = int(lora_a.shape[0])
+            alpha = float(lora_state_dict.get(alpha_key, rank))
+            scale = (alpha / rank) * float(merge_weight)
+
+            with torch.no_grad():
+                lora_a = lora_a.to(device=module.weight.device, dtype=module.weight.dtype)
+                lora_b = lora_b.to(device=module.weight.device, dtype=module.weight.dtype)
+                module.weight.add_(torch.matmul(lora_b, lora_a) * scale)
+            merged += 1
+        return merged
+
     def load_model(self):
         """Load Z-Image model components."""
         logger.info("Loading Z-Image model...")
-        
-        model_path = self.config["model"]["name_or_path"]
-        
+
+        model_config = self.config.get("model", {})
+        model_path = model_config["name_or_path"]
+        base_model_path = model_config.get("extras_name_or_path", model_path)
+        assistant_lora_path = model_config.get("assistant_lora_path", None)
+
         # Load transformer
         transformer = ZImageTransformer2DModel.from_pretrained(
             model_path,
@@ -90,23 +141,30 @@ class ZImageLoRATrainer:
             torch_dtype=self.dtype,
         )
         transformer.enable_gradient_checkpointing()
+
+        # Merge training adapter (for Z-Image Turbo) if provided
+        if assistant_lora_path:
+            resolved_path = self._resolve_hf_path(str(assistant_lora_path))
+            lora_state_dict = load_file(resolved_path)
+            merged = self._merge_lora_into_transformer(lora_state_dict, merge_weight=1.0)
+            logger.info("Merged %d adapter layers from %s", merged, assistant_lora_path)
         
         # Load text encoder
         text_encoder = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            base_model_path,
             subfolder="text_encoder",
             torch_dtype=self.dtype,
         )
         
         # Load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(
-            model_path,
+            base_model_path,
             subfolder="tokenizer",
         )
         
         # Load VAE
         vae = AutoencoderKL.from_pretrained(
-            model_path,
+            base_model_path,
             subfolder="vae",
             torch_dtype=torch.float32,  # VAE always float32
         )
@@ -215,6 +273,25 @@ class ZImageLoRATrainer:
         sample_count = max(sample_count, 1) * max(repeats, 1)
         return sample_count
 
+    def _sample_timesteps(self, batch_size: int, num_train_timesteps: int) -> torch.Tensor:
+        train_config = self.config.get("train", {})
+        distribution = str(train_config.get("timestep_distribution", "uniform")).lower()
+        if distribution in {"logit_normal", "logit-normal", "logitnormal"}:
+            mean = float(train_config.get("timestep_logit_mean", 0.0))
+            std = float(train_config.get("timestep_logit_std", 1.0))
+            z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * std + mean
+            timesteps = torch.sigmoid(z).clamp(0.0, 1.0)
+        else:
+            timesteps = torch.rand(batch_size, device=self.device, dtype=self.dtype)
+
+        shift = float(train_config.get("timestep_shift", 1.0))
+        if shift != 1.0:
+            timesteps = (timesteps * shift).clamp(0.0, 1.0)
+
+        if num_train_timesteps > 0:
+            timesteps = (timesteps * num_train_timesteps).floor() / num_train_timesteps
+        return timesteps
+
     def dry_run_training(self):
         """Simulate training without loading or downloading models."""
         train_config = self.config.get("train", {})
@@ -321,6 +398,29 @@ class ZImageLoRATrainer:
                 return float(value)
             return float(str(value))
 
+        def _to_int(value, default: int) -> int:
+            if value is None:
+                return int(default)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float):
+                return int(value)
+            return int(str(value))
+
+        def _to_bool(value, default: bool) -> bool:
+            if value is None:
+                return bool(default)
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            value_str = str(value).strip().lower()
+            if value_str in {"true", "1", "yes", "y", "on"}:
+                return True
+            if value_str in {"false", "0", "no", "n", "off"}:
+                return False
+            return bool(default)
+
         lr = _to_float(train_config.get("learning_rate", 1e-4), 1e-4)
         beta1 = _to_float(train_config.get("adam_beta1", 0.9), 0.9)
         beta2 = _to_float(train_config.get("adam_beta2", 0.999), 0.999)
@@ -330,7 +430,50 @@ class ZImageLoRATrainer:
         optimizer_name = str(train_config.get("optimizer", "adamw")).lower()
         use_weight_decay = 0.0 if train_config.get("weight_decay_exclude_lora", False) else weight_decay
 
-        if optimizer_name in {"adamw8bit", "adam8bit"}:
+        if optimizer_name.startswith("prodigy"):
+            try:
+                from prodigyopt import Prodigy
+
+                beta3_raw = train_config.get("prodigy_beta3", None)
+                beta3 = None if beta3_raw is None else _to_float(beta3_raw, 0.0)
+                decouple = _to_bool(train_config.get("prodigy_decouple", True), True)
+                use_bias_correction = _to_bool(train_config.get("prodigy_use_bias_correction", False), False)
+                safeguard_warmup = _to_bool(train_config.get("prodigy_safeguard_warmup", False), False)
+                d0 = _to_float(train_config.get("prodigy_d0", 1e-6), 1e-6)
+                d_coef = _to_float(train_config.get("prodigy_d_coef", 1.0), 1.0)
+                growth_rate = _to_float(train_config.get("prodigy_growth_rate", float("inf")), float("inf"))
+                slice_p = _to_int(train_config.get("prodigy_slice_p", 1), 1)
+
+                self.optimizer = Prodigy(
+                    self.lora_network.parameters(),
+                    lr=lr,
+                    betas=(beta1, beta2),
+                    beta3=beta3,
+                    eps=eps,
+                    weight_decay=use_weight_decay,
+                    decouple=decouple,
+                    use_bias_correction=use_bias_correction,
+                    safeguard_warmup=safeguard_warmup,
+                    d0=d0,
+                    d_coef=d_coef,
+                    growth_rate=growth_rate,
+                    slice_p=slice_p,
+                )
+                logger.info("Using optimizer: %s", optimizer_name)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load prodigy optimizer (%s). Falling back to AdamW. Error: %s",
+                    optimizer_name,
+                    e,
+                )
+                self.optimizer = AdamW(
+                    self.lora_network.parameters(),
+                    lr=lr,
+                    betas=(beta1, beta2),
+                    weight_decay=use_weight_decay,
+                    eps=eps,
+                )
+        elif optimizer_name in {"adamw8bit", "adam8bit"}:
             try:
                 import bitsandbytes as bnb
                 optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
@@ -365,6 +508,16 @@ class ZImageLoRATrainer:
             )
         
         self.noise_scheduler = get_flow_match_scheduler()
+
+        warmup_steps = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
+        if warmup_steps > 0:
+            def lr_lambda(step: int) -> float:
+                return min((step + 1) / warmup_steps, 1.0)
+
+            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+                self.optimizer,
+                lr_lambda=lr_lambda,
+            )
         
     def train(self):
         """Main training loop."""
@@ -532,8 +685,7 @@ class ZImageLoRATrainer:
                     
                     # Sample timestep
                     bsz = latents.shape[0]
-                    timesteps = torch.randint(0, num_train_timesteps, (bsz,), device=self.device)
-                    timesteps = timesteps.float() / num_train_timesteps
+                    timesteps = self._sample_timesteps(bsz, num_train_timesteps)
                     
                     # Add noise to latents (flow matching formulation)
                     noisy_latents = (1 - timesteps[:, None, None, None]) * latents + timesteps[:, None, None, None] * noise
@@ -676,6 +828,11 @@ class ZImageLoRATrainer:
                         loss = (per_sample_loss * weights).mean()
                     else:
                         loss = per_sample_loss.mean()
+
+                    loss_weight_fn = str(train_config.get("loss_weight_fn", "none")).lower()
+                    if loss_weight_fn == "constant":
+                        loss_weight_strength = float(train_config.get("loss_weight_strength", 1.0))
+                        loss = loss * loss_weight_strength
                     
                     # Backpropagate
                     self.accelerator.backward(loss)
@@ -685,6 +842,8 @@ class ZImageLoRATrainer:
                     
                     if self.accelerator.sync_gradients:
                         self.optimizer.step()
+                        if self.lr_scheduler is not None:
+                            self.lr_scheduler.step()
                         self.optimizer.zero_grad()
                 
                 if self.accelerator.sync_gradients:

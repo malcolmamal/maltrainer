@@ -133,6 +133,20 @@ my_dataset/
    - `train.num_epochs`: Number of training epochs
    - `output.path`: Where to save checkpoints
 
+### Z-Image Turbo Templates
+
+Two Turbo templates are included so you can compare the de-distilled model vs the training adapter approach:
+
+- De-distilled (OneTrainer-style): [config/zimage_turbo_template-onetrainer.yaml](config/zimage_turbo_template-onetrainer.yaml)
+- Training adapter (AI Toolkit-style): [config/zimage_turbo_template-adapter.yaml](config/zimage_turbo_template-adapter.yaml)
+
+Notes:
+- `model.extras_name_or_path` points the text encoder + VAE to the Turbo base while the transformer loads from the de-distilled model.
+- `model.assistant_lora_path` merges the Turbo training adapter into the transformer before training.
+- Both templates default to LoRA `rank: 16` and `alpha: 1` to match the OneTrainer config you provided; adjust if you prefer a different rank/alpha.
+- Maltrainer now supports logit-normal timestep sampling and LR warmup via `train.timestep_distribution` and `train.learning_rate_warmup_steps`.
+- Quantized transformer weights (INT_W8A8) and async offloading/compile are still not implemented, so results may differ from OneTrainer in those areas.
+
 ### Running Training
 
 Execute the training script with your config:
@@ -218,6 +232,8 @@ output/
 
 See `docs/` directory for detailed documentation:
 - [Textual Inversion and Z-Image Support](docs/textual-inversion-z-image.md)
+- [Training Options and OneTrainer Parity](docs/training-options-and-parity.md)
+- [OneTrainer Architecture and Multi-Model Plan](docs/onetrainer-architecture-and-multi-model-plan.md)
 
 ## License
 

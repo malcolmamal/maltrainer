@@ -11,6 +11,7 @@ transformers>=4.40.0
 accelerate>=0.27.0
 safetensors>=0.4.0
 bitsandbytes>=0.43.0
+prodigyopt>=1.1.2
 
 # Data processing
 Pillow>=10.0.0
