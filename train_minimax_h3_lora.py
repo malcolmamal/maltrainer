@@ -609,9 +609,22 @@ class MiniMaxH3LoRATrainer:
                     global_step += 1
                     progress_bar.update(1)
 
-                    current_lr = self.optimizer.param_groups[0]['lr']
-                    self.progress_logger.info("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e",
-                                                global_step, total_steps, int(global_step/total_steps*100), loss.item(), epoch + 1, num_epochs, current_lr)
+                    # For Prodigy, param_groups['lr'] is only the multiplier and sits at 1.0
+                    # once warmup ends; the step size it actually adapted is lr * d. Report
+                    # the effective rate so a stalled d (stuck near d0) is visible early
+                    # rather than after the whole run.
+                    group = self.optimizer.param_groups[0]
+                    current_lr = group["lr"]
+                    prodigy_d = group.get("d")
+                    if prodigy_d is not None:
+                        self.progress_logger.info(
+                            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (mult %.3f x d %.2e)",
+                            global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
+                            epoch + 1, num_epochs, current_lr * prodigy_d, current_lr, prodigy_d,
+                        )
+                    else:
+                        self.progress_logger.info("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e",
+                                                    global_step, total_steps, int(global_step/total_steps*100), loss.item(), epoch + 1, num_epochs, current_lr)
 
                     if global_step % save_every == 0:
                         self.save_checkpoint(global_step)
