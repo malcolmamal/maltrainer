@@ -451,7 +451,8 @@ class MiniMaxH3LoRATrainer:
                         text_indices=text_indices,
                     )
 
-                    v_pred_patches = model_output.video
+                    # Model predicts clean - noise; negate prediction to match noise - clean target (AI-Toolkit / ComfyUI convention)
+                    v_pred_patches = - model_output.video
 
                     # Optional Differential Guidance (CFG-style update)
                     if train_config.get("do_differential_guidance", False):
@@ -470,9 +471,9 @@ class MiniMaxH3LoRATrainer:
                             text_indices=text_indices,
                         )
                         guidance_scale = float(train_config.get("differential_guidance_scale", 3.0))
-                        v_pred_patches = uncond_output.video + guidance_scale * (model_output.video - uncond_output.video)
+                        v_pred_patches = - (uncond_output.video + guidance_scale * (model_output.video - uncond_output.video))
 
-                    target_velocity = latents - noise
+                    target_velocity = noise - latents
                     target_patches = patchify_video(target_velocity)
 
                     loss = torch.nn.functional.mse_loss(v_pred_patches.float(), target_patches.float())
