@@ -86,9 +86,33 @@ def _int_mm(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
     return torch._int_mm(padded.contiguous(), right)[:rows]
 
 
+# How the input gradient is computed through a frozen INT8 ConvRot layer. The forward pass
+# is always INT8 (it has to reproduce Comfy's kernel numerics); only the backward varies.
+#
+#   fp32  most accurate, slowest. ~1.2 s/step on a 5090 at 512px rank 64.
+#   bf16  matches musubi-tuner's reference trainer, roughly halves the backward cost.
+#   int8  fastest, uses INT8 tensor cores, but re-quantizes the gradient once per layer.
+#         H3 stacks 50 blocks plus a token refiner, so that error compounds and the LoRA
+#         partly fits quantization noise. Kept for A/B only; not recommended.
+GRAD_PRECISIONS = ("bf16", "fp32", "int8")
+DEFAULT_GRAD_PRECISION = "bf16"
+
+_GRAD_COMPUTE_DTYPE = {"fp32": torch.float32, "bf16": torch.bfloat16}
+
+
+def _resolve_grad_precision(value: str | None) -> str:
+    precision = str(value or DEFAULT_GRAD_PRECISION).lower()
+    aliases = {"float32": "fp32", "fp32": "fp32", "bfloat16": "bf16", "bf16": "bf16", "int8": "int8"}
+    if precision not in aliases:
+        raise ValueError(
+            f"Unknown INT8 ConvRot gradient precision {value!r}; expected one of {GRAD_PRECISIONS}"
+        )
+    return aliases[precision]
+
+
 class _Int8ConvRotFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, inputs, weight, scale, bias, group_size):
+    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision):
         group_size = int(group_size)
         rotated = rotate_activation(inputs, group_size)
         flat = rotated.reshape(-1, rotated.shape[-1])
@@ -101,31 +125,39 @@ class _Int8ConvRotFunction(torch.autograd.Function):
         ctx.input_dtype = inputs.dtype
         ctx.input_shape = inputs.shape
         ctx.group_size = group_size
+        ctx.grad_precision = grad_precision
         return output.to(inputs.dtype).reshape(*inputs.shape[:-1], weight.shape[0])
 
     @staticmethod
     def backward(ctx, grad_output):
-        # The gradient stays in float here on purpose. Quantizing it to INT8 per row costs
-        # ~1% relative error per layer, and H3 stacks 50 of them plus a token refiner, so
-        # the LoRA ends up fitting accumulated quantization noise. The forward pass is the
-        # only place INT8 is required (it has to reproduce Comfy's kernel numerics).
         weight, scale = ctx.saved_tensors
-        folded = grad_output.reshape(-1, grad_output.shape[-1]).float() * scale.reshape(1, -1)
-        grad_input = torch.zeros(
-            (folded.shape[0], weight.shape[1]), dtype=torch.float32, device=folded.device
-        )
-        # Dequantize bounded row chunks so the frozen weight never expands to float in full.
-        chunk = max(1, 2 ** 22 // max(weight.shape[1], 1))
-        for start in range(0, weight.shape[0], chunk):
-            stop = min(start + chunk, weight.shape[0])
-            grad_input.addmm_(folded[:, start:stop], weight[start:stop].to(torch.float32))
+        precision = ctx.grad_precision
+
+        if precision == "int8":
+            folded = grad_output.reshape(-1, grad_output.shape[-1]).float() * scale.reshape(1, -1)
+            quantized, grad_scale = _quantize_rows(folded)
+            grad_input = _int_mm(quantized, weight).float() * grad_scale
+        else:
+            compute_dtype = _GRAD_COMPUTE_DTYPE[precision]
+            folded = grad_output.reshape(-1, grad_output.shape[-1]).to(compute_dtype) * scale.reshape(1, -1).to(compute_dtype)
+            grad_input = torch.zeros(
+                (folded.shape[0], weight.shape[1]), dtype=compute_dtype, device=folded.device
+            )
+            # Dequantize bounded row chunks so the frozen weight never expands to float in full.
+            chunk = max(1, 2 ** 22 // max(weight.shape[1], 1))
+            for start in range(0, weight.shape[0], chunk):
+                stop = min(start + chunk, weight.shape[0])
+                grad_input.addmm_(folded[:, start:stop], weight[start:stop].to(compute_dtype))
+
         grad_input = rotate_activation(grad_input.to(ctx.input_dtype), ctx.group_size)
-        return grad_input.reshape(ctx.input_shape), None, None, None, None
+        return grad_input.reshape(ctx.input_shape), None, None, None, None, None
 
 
 class _TransientInt8ConvRotFunction(torch.autograd.Function):
+    """Eager fallback for CPU or builds without torch._int_mm. Always computes in float."""
+
     @staticmethod
-    def forward(ctx, inputs, weight, scale, bias, group_size):
+    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision=None):
         group_size = int(group_size)
         rotated = rotate_activation(inputs, group_size)
         dense_weight = (weight.float() * scale.float()).to(inputs.dtype)
@@ -142,13 +174,14 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
         dense_weight = weight.float() * scale.float()
         grad_input = grad_output.reshape(-1, grad_output.shape[-1]).float() @ dense_weight
         grad_input = rotate_activation(grad_input.to(ctx.input_dtype), ctx.group_size)
-        return grad_input.reshape(ctx.input_shape), None, None, None, None
+        return grad_input.reshape(ctx.input_shape), None, None, None, None, None
 
 
 def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tensor:
     group_size = int(module.int8_convrot_groupsize.item())
     operation = _Int8ConvRotFunction if inputs.is_cuda and hasattr(torch, "_int_mm") else _TransientInt8ConvRotFunction
-    return operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size)
+    grad_precision = getattr(module, "int8_convrot_grad_precision", DEFAULT_GRAD_PRECISION)
+    return operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size, grad_precision)
 
 
 def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.device) -> Tuple[Dict[str, torch.Tensor], int]:
@@ -219,7 +252,8 @@ def prepare_int8_convrot_modules(model: nn.Module, state_dict: Dict[str, torch.T
     return registered
 
 
-def enable_int8_convrot(model: nn.Module) -> int:
+def enable_int8_convrot(model: nn.Module, grad_precision: str | None = None) -> int:
+    precision = _resolve_grad_precision(grad_precision)
     patched = 0
     for module in model.modules():
         if not isinstance(module, nn.Linear) or not hasattr(module, "scale_weight"):
@@ -229,7 +263,18 @@ def enable_int8_convrot(model: nn.Module) -> int:
         group_size = int(module.int8_convrot_groupsize.item())
         if module.weight.shape[1] % group_size:
             raise ValueError(f"INT8 ConvRot group size {group_size} does not divide {module.weight.shape[1]} input features")
+        module.int8_convrot_grad_precision = precision
         module.forward = MethodType(_int8_linear_forward, module)
         patched += 1
-    logger.info("Enabled H3 INT8 ConvRot runtime on %d Linear layers", patched)
+    logger.info(
+        "Enabled H3 INT8 ConvRot runtime on %d Linear layers (backward precision: %s)",
+        patched,
+        precision,
+    )
+    if precision == "int8":
+        logger.warning(
+            "INT8 backward re-quantizes the gradient in every one of the %d layers; expect "
+            "the LoRA to partly fit quantization noise. Use bf16 unless benchmarking.",
+            patched,
+        )
     return patched

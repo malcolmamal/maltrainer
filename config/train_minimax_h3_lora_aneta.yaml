@@ -24,8 +24,12 @@ train:
   gradient_accumulation_steps: 2
   num_epochs: 130
   optimizer: "adamw8bit"
-  learning_rate: 1.0e-4
-  learning_rate_warmup_steps: 200
+  # 1e-4 left the subject undertrained at 1560 steps / 23 images. Doubled rather than
+  # pushed harder: past ~3e-4 at rank 64 with alpha scale 1.0 the LoRA starts trading
+  # likeness for texture damage, which looks like the artifacts we just removed.
+  learning_rate: 2.0e-4
+  # 200 warmup steps was 13% of the run (~17 epochs) spent below target LR.
+  learning_rate_warmup_steps: 100
   adam_beta1: 0.9
   adam_beta2: 0.999
   adam_epsilon: 1e-8
@@ -39,6 +43,10 @@ train:
   loss_weight_strength: 1.0
   do_differential_guidance: false
   max_grad_norm: 1.0
+  # Backward precision through the frozen INT8 ConvRot layers. bf16 matches musubi-tuner
+  # and is ~2x faster than fp32; fp32 is the most accurate; int8 is fastest but re-quantizes
+  # the gradient in all 50 blocks, which is what produced noisy LoRAs before.
+  int8_grad_precision: "bf16"
   save_every: 300
 
 dtype: "bfloat16"

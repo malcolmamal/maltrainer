@@ -266,7 +266,10 @@ class MiniMaxH3LoRATrainer:
                 f"Transformer checkpoint has {len(info.unexpected_keys)} tensor(s) the model does "
                 f"not expect; examples: {info.unexpected_keys[:5]}"
             )
-        enable_int8_convrot(transformer)
+        enable_int8_convrot(
+            transformer,
+            grad_precision=self.config.get("train", {}).get("int8_grad_precision"),
+        )
 
         transformer.enable_gradient_checkpointing()
         transformer.requires_grad_(False)

@@ -24,8 +24,11 @@ train:
   gradient_accumulation_steps: 2
   num_epochs: 130
   optimizer: "adamw8bit"
-  learning_rate: 1.0e-4
-  learning_rate_warmup_steps: 200
+  # 1e-4 undertrains the subject at ~1500 steps on a ~20 image set; 2e-4 is the tuned
+  # starting point. Past ~3e-4 at rank 64 / alpha scale 1.0 likeness degrades into texture
+  # damage, so prefer raising num_epochs over raising this further.
+  learning_rate: 2.0e-4
+  learning_rate_warmup_steps: 100
   adam_beta1: 0.9
   adam_beta2: 0.999
   adam_epsilon: 1e-8
@@ -37,6 +40,9 @@ train:
   loss_weight_strength: 1.0
   do_differential_guidance: false
   max_grad_norm: 1.0
+  # Backward precision through the frozen INT8 ConvRot layers: bf16 (default, matches
+  # musubi-tuner), fp32 (most accurate, ~2x slower), or int8 (fastest, noisy gradients).
+  int8_grad_precision: "bf16"
   save_every: 300
 
 dtype: "bfloat16"
