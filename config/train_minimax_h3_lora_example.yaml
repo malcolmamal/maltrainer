@@ -14,17 +14,17 @@ dataset:
   num_workers: 0
 
 lora:
-  rank: 32
-  alpha: 32
+  rank: 64
+  alpha: 1.0
   prefix: "diffusion_model."
   target_modules: ["token_refiner", "fc1", "fc2"]
 
 train:
   batch_size: 1
   gradient_accumulation_steps: 2
-  num_epochs: 120
+  num_epochs: 130
   optimizer: "adamw8bit"
-  learning_rate: 3e-4
+  learning_rate: 1.0e-4
   learning_rate_warmup_steps: 200
   adam_beta1: 0.9
   adam_beta2: 0.999
@@ -34,10 +34,8 @@ train:
   timestep_logit_mean: 0.0
   timestep_logit_std: 1.0
   timestep_shift: 12.0
-  loss_weight_strength: 5.0
+  loss_weight_strength: 1.0
   do_differential_guidance: false
-  differential_guidance_scale: 3.0
-  unconditional_prompt: ""
   max_grad_norm: 1.0
   save_every: 300
 
