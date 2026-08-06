@@ -62,6 +62,59 @@ def apply_flow_shift(t: torch.Tensor, shift: float = 12.0) -> torch.Tensor:
     return (shift * t) / (1.0 + (shift - 1.0) * t)
 
 
+# --- Packed-sequence RoPE geometry -------------------------------------------------
+# These mirror comfy/ldm/minimax/model.py (_axis_from_sqrt_area / _frame_grid /
+# _video_t_grid / PackedLayout) exactly. H3 does NOT index video tokens by raw patch
+# index: each axis is normalized by the frame's sqrt(area), centered, and scaled by 32,
+# and the video segment's temporal origin sits directly after the text segment. Training
+# on a plain arange() grid puts every token at the wrong RoPE frequency.
+
+FRAME_PER_TOKEN = (1, 4, 4, 4, 4)
+FRAME_RESCALE = 5.0 / 3.0
+
+
+def _axis_from_sqrt_area(dim: int, patch: int, sqrt_area: float) -> torch.Tensor:
+    ratio = dim / sqrt_area
+    n = dim // patch
+    return (torch.arange(n, dtype=torch.float64) * (ratio / n) + (1.0 - ratio) / 2.0) * 32.0
+
+
+def _frame_grid(latent_h: int, latent_w: int) -> torch.Tensor:
+    """Area-normalized (h, w) coordinates of one latent frame's 2x2-patch rows."""
+    area = math.sqrt(latent_h * latent_w)
+    hh, ww = torch.meshgrid(
+        _axis_from_sqrt_area(latent_h, 2, area),
+        _axis_from_sqrt_area(latent_w, 2, area),
+        indexing="ij",
+    )
+    return torch.stack([hh.reshape(-1), ww.reshape(-1)], dim=-1)
+
+
+def _video_t_grid(latent_t: int, origin: float) -> torch.Tensor:
+    spans = torch.tensor(
+        [FRAME_RESCALE * FRAME_PER_TOKEN[index % len(FRAME_PER_TOKEN)] for index in range(latent_t)],
+        dtype=torch.float64,
+    )
+    return float(origin) + torch.cat([torch.zeros(1, dtype=torch.float64), spans[:-1].cumsum(0)])
+
+
+def build_packed_position_ids(text_len: int, latent_t: int, latent_h: int, latent_w: int) -> torch.Tensor:
+    """Position ids for H3's [text | video] packed sequence (no audio rows), as [S, 3] float64.
+
+    Matches ComfyUI's PackedLayout for audio_t=0: text tokens advance along the temporal
+    axis, and the video block's temporal origin is text_len.
+    """
+    text_pos = torch.zeros(text_len, 3, dtype=torch.float64)
+    text_pos[:, 0] = torch.arange(text_len, dtype=torch.float64)
+
+    frame = _frame_grid(latent_h, latent_w)
+    video_pos = torch.empty(latent_t, frame.shape[0], 3, dtype=torch.float64)
+    video_pos[:, :, 0] = _video_t_grid(latent_t, float(text_len))[:, None]
+    video_pos[:, :, 1:] = frame[None]
+
+    return torch.cat([text_pos, video_pos.reshape(-1, 3)], dim=0)
+
+
 class MiniMaxH3LoRATrainer:
     """Trainer for MiniMax H3 LoRA models."""
 
@@ -143,7 +196,12 @@ class MiniMaxH3LoRATrainer:
 
         # 2. Load Text Encoder & Encode All Unique Captions
         print(f"Loading Text Encoder from {text_encoder_path} for pre-caching...", flush=True)
-        text_encoder = load_minimax_h3_text_encoder(text_encoder_path, device=self.device, dtype=self.dtype)
+        text_encoder = load_minimax_h3_text_encoder(
+            text_encoder_path,
+            tokenizer_path=model_config.get("tokenizer_path"),
+            device=self.device,
+            dtype=self.dtype,
+        )
 
         unique_captions = list(set(temp_dataset.captions))
         print(f"Caching text embeddings for {len(unique_captions)} unique prompts...", flush=True)
@@ -193,7 +251,21 @@ class MiniMaxH3LoRATrainer:
             transformer = MiniMaxH3Transformer(transformer_cfg)
 
         prepare_int8_convrot_modules(transformer, int8_state_dict)
-        transformer.load_state_dict(int8_state_dict, strict=False, assign=True)
+        info = transformer.load_state_dict(int8_state_dict, strict=False, assign=True)
+        # Everything is built under init_empty_weights, so an unloaded tensor stays on the
+        # meta device. rope.inv_freq and adaln_t_table in particular carry checkpoint values
+        # that cannot be recomputed -- silently keeping a placeholder would misplace every
+        # RoPE frequency, so fail loudly instead.
+        if info.missing_keys:
+            raise ValueError(
+                f"Transformer checkpoint is missing {len(info.missing_keys)} tensor(s); "
+                f"examples: {info.missing_keys[:5]}"
+            )
+        if info.unexpected_keys:
+            raise ValueError(
+                f"Transformer checkpoint has {len(info.unexpected_keys)} tensor(s) the model does "
+                f"not expect; examples: {info.unexpected_keys[:5]}"
+            )
         enable_int8_convrot(transformer)
 
         transformer.enable_gradient_checkpointing()
@@ -407,7 +479,8 @@ class MiniMaxH3LoRATrainer:
                     sigma_broadcast = shifted_sigmas.view(bsz, 1, 1, 1, 1)
                     noisy_latents = (1.0 - sigma_broadcast) * latents + sigma_broadcast * noise
 
-                    # In MiniMax H3, the transformer input timestep coordinate is 1.0 - sigma
+                    # H3's DiT is conditioned on t = 1 - sigma, not on sigma itself
+                    # (comfy/ldm/minimax/model.py: t_v = 1.0 - sigma_v).
                     model_timesteps = 1.0 - shifted_sigmas
 
                     # 5. Build sequence inputs for MiniMax H3 transformer
@@ -428,14 +501,9 @@ class MiniMaxH3LoRATrainer:
                     token_tags[text_indices] = MiniMaxH3TokenTag.TEXT
                     token_tags[video_indices] = MiniMaxH3TokenTag.VIDEO
 
-                    grid_h, grid_w = h_lat // 2, w_lat // 2
-                    pos_h = torch.arange(grid_h, device=self.device).repeat_interleave(grid_w)
-                    pos_w = torch.arange(grid_w, device=self.device).repeat(grid_h)
-                    pos_t = torch.zeros(num_video_tokens, device=self.device, dtype=torch.long)
-                    video_pos = torch.stack([pos_t, pos_h, pos_w], dim=1)
-
-                    text_pos = torch.zeros((num_text_tokens, 3), device=self.device, dtype=torch.long)
-                    position_ids = torch.cat([text_pos, video_pos], dim=0)
+                    position_ids = build_packed_position_ids(
+                        num_text_tokens, f_lat, h_lat, w_lat
+                    ).to(device=self.device)
 
                     # 6. Model forward pass
                     model_output = self.lora_network(
@@ -451,8 +519,9 @@ class MiniMaxH3LoRATrainer:
                         text_indices=text_indices,
                     )
 
-                    # Model predicts clean - noise; negate prediction to match noise - clean target (AI-Toolkit / ComfyUI convention)
-                    v_pred_patches = - model_output.video
+                    # The H3 checkpoint predicts (clean - noise); target it directly rather
+                    # than negating both sides, which is the same loss written twice over.
+                    v_pred_patches = model_output.video
 
                     # Optional Differential Guidance (CFG-style update)
                     if train_config.get("do_differential_guidance", False):
@@ -471,9 +540,9 @@ class MiniMaxH3LoRATrainer:
                             text_indices=text_indices,
                         )
                         guidance_scale = float(train_config.get("differential_guidance_scale", 3.0))
-                        v_pred_patches = - (uncond_output.video + guidance_scale * (model_output.video - uncond_output.video))
+                        v_pred_patches = uncond_output.video + guidance_scale * (model_output.video - uncond_output.video)
 
-                    target_velocity = noise - latents
+                    target_velocity = latents - noise
                     target_patches = patchify_video(target_velocity)
 
                     loss = torch.nn.functional.mse_loss(v_pred_patches.float(), target_patches.float())

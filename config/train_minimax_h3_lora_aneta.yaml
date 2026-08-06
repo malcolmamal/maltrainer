@@ -30,9 +30,11 @@ train:
   adam_beta2: 0.999
   adam_epsilon: 1e-8
   weight_decay: 0.01
-  timestep_distribution: "logit_normal"
-  timestep_logit_mean: 0.0
-  timestep_logit_std: 1.0
+  # H3's own schedule is already heavily high-noise weighted: uniform t through
+  # timestep_shift=12 puts ~92% of samples at sigma>0.5. Stacking logit_normal on top of
+  # that pushes it to ~99% and starves the low-noise/detail range. "uniform" here equals
+  # musubi-tuner's timestep_sampling="shift", which is the reference H3 recipe.
+  timestep_distribution: "uniform"
   timestep_shift: 12.0
   loss_weight_strength: 1.0
   do_differential_guidance: false

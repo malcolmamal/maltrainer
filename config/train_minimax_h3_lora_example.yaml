@@ -30,9 +30,9 @@ train:
   adam_beta2: 0.999
   adam_epsilon: 1e-8
   weight_decay: 0.01
-  timestep_distribution: "logit_normal"
-  timestep_logit_mean: 0.0
-  timestep_logit_std: 1.0
+  # uniform + timestep_shift=12 is H3's reference schedule (musubi-tuner
+  # timestep_sampling="shift"); stacking logit_normal on top over-weights high noise.
+  timestep_distribution: "uniform"
   timestep_shift: 12.0
   loss_weight_strength: 1.0
   do_differential_guidance: false

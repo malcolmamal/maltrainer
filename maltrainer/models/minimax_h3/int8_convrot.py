@@ -105,10 +105,20 @@ class _Int8ConvRotFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+        # The gradient stays in float here on purpose. Quantizing it to INT8 per row costs
+        # ~1% relative error per layer, and H3 stacks 50 of them plus a token refiner, so
+        # the LoRA ends up fitting accumulated quantization noise. The forward pass is the
+        # only place INT8 is required (it has to reproduce Comfy's kernel numerics).
         weight, scale = ctx.saved_tensors
         folded = grad_output.reshape(-1, grad_output.shape[-1]).float() * scale.reshape(1, -1)
-        quantized, grad_scale = _quantize_rows(folded)
-        grad_input = _int_mm(quantized, weight).float() * grad_scale
+        grad_input = torch.zeros(
+            (folded.shape[0], weight.shape[1]), dtype=torch.float32, device=folded.device
+        )
+        # Dequantize bounded row chunks so the frozen weight never expands to float in full.
+        chunk = max(1, 2 ** 22 // max(weight.shape[1], 1))
+        for start in range(0, weight.shape[0], chunk):
+            stop = min(start + chunk, weight.shape[0])
+            grad_input.addmm_(folded[:, start:stop], weight[start:stop].to(torch.float32))
         grad_input = rotate_activation(grad_input.to(ctx.input_dtype), ctx.group_size)
         return grad_input.reshape(ctx.input_shape), None, None, None, None
 

@@ -58,14 +58,21 @@ class MiniMaxH3LoRANetwork(nn.Module):
         self._inject_lora()
 
     def _inject_lora(self):
-        """Inject LoRA layers into target linear modules of MiniMaxH3TransformerBlock."""
+        """Inject LoRA layers into target linear modules of MiniMaxH3TransformerBlock.
+
+        Targets are matched against the final component of the module path, not as a
+        substring of the whole path, so a name like ``video_patch_proj`` can never be
+        caught by a ``proj`` style target. With the default target list this selects the
+        208 layers of musubi-tuner's ``attn_mlp`` preset: 50 blocks x
+        (attn.qkv_proj, attn.out_proj, mlp.fc1, mlp.fc2) plus the 2 token_refiner blocks.
+        """
         injected = 0
         for name, module in self.transformer.named_modules():
             # Skip AdaLN, modulation, or norm projections
             if "adaln_proj" in name or "modulation" in name or "norm" in name:
                 continue
 
-            if any(target in name for target in self.target_modules):
+            if name.rsplit(".", 1)[-1] in self.target_modules:
                 if isinstance(module, nn.Linear):
                     lora_layer = MiniMaxH3LoRALayer(module, self.rank, self.alpha)
                     safe_name = name.replace(".", "_")
