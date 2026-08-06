@@ -343,15 +343,18 @@ class MiniMaxH3LoRATrainer:
                     # 2. Fetch pre-cached text embeddings [B, S, 5120]
                     text_embeds = torch.cat([self.text_cache[c] for c in captions], dim=0).to(device=self.device, dtype=self.dtype)
 
-                    # 3. Sample timesteps & apply discrete flow shift
+                    # 3. Sample timesteps & apply discrete flow shift (sigma)
                     bsz = latents.shape[0]
                     raw_timesteps = torch.rand(bsz, device=self.device, dtype=self.dtype)
-                    shifted_timesteps = apply_flow_shift(raw_timesteps, shift=flow_shift)
+                    shifted_sigmas = apply_flow_shift(raw_timesteps, shift=flow_shift)
 
-                    # 4. Sample noise and create noisy latents
+                    # 4. Sample noise and create noisy latents: x_t = (1 - sigma)*x0 + sigma*noise
                     noise = torch.randn_like(latents)
-                    t_broadcast = shifted_timesteps.view(bsz, 1, 1, 1, 1)
-                    noisy_latents = (1.0 - t_broadcast) * latents + t_broadcast * noise
+                    sigma_broadcast = shifted_sigmas.view(bsz, 1, 1, 1, 1)
+                    noisy_latents = (1.0 - sigma_broadcast) * latents + sigma_broadcast * noise
+
+                    # In MiniMax H3, the transformer input timestep coordinate is 1.0 - sigma
+                    model_timesteps = 1.0 - shifted_sigmas
 
                     # 5. Build sequence inputs for MiniMax H3 transformer
                     _, c_lat, f_lat, h_lat, w_lat = latents.shape
@@ -385,7 +388,7 @@ class MiniMaxH3LoRATrainer:
                         video_hidden_states=video_patches,
                         audio_hidden_states=dummy_audio,
                         encoder_hidden_states=text_embeds,
-                        timestep=shifted_timesteps,
+                        timestep=model_timesteps,
                         timestep_indices=timestep_indices,
                         token_tags=token_tags,
                         position_ids=position_ids,
