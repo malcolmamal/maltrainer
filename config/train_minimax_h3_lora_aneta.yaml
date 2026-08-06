@@ -26,10 +26,15 @@ lora:
 train:
   batch_size: 1
   gradient_accumulation_steps: 2
-  num_epochs: 130
-  # "prodigy" adapts the step size itself, which suits a small subject set where the right
-  # rate is unknown. Switch to "adamw8bit" to fall back to the hand-tuned rate below.
-  optimizer: "prodigy"
+  # 23 images / batch 1 / accum 2 = 12 optimizer steps per epoch.
+  #   130 epochs = 1560 steps = ~68 per image -> undertrained on both runs so far.
+  #   200 epochs = 2400 steps = ~104 per image, in the usual range for a subject LoRA.
+  # Deliberately past the expected sweet spot: save_every below writes a checkpoint every
+  # 300 steps, so pick the best one by testing rather than guessing the count up front.
+  num_epochs: 200
+  # "adamw8bit" with the hand-tuned learning_rate below. Switch to "prodigy" to let it adapt
+  # the step size instead (then learning_rate is unused -- see the note further down).
+  optimizer: "adamw8bit"
   # Prodigy knobs (ignored by adamw8bit). lr is a multiplier on Prodigy's own step-size
   # estimate and belongs at 1.0; d_coef scales how aggressively it adapts.
   prodigy_lr: 1.0
