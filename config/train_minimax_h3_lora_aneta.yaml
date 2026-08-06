@@ -15,9 +15,9 @@ dataset:
 
 lora:
   rank: 64
-  alpha: 1.0
+  alpha: 64
   prefix: "diffusion_model."
-  target_modules: ["token_refiner", "fc1", "fc2"]
+  target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
 
 train:
   batch_size: 1
