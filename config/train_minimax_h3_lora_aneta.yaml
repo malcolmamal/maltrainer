@@ -14,22 +14,32 @@ dataset:
   num_workers: 0
 
 lora:
-  rank: 64
-  alpha: 64
+  rank: 32
+  alpha: 32
   prefix: "diffusion_model."
-  target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
+  target_modules: ["token_refiner", "fc1", "fc2"]
 
 train:
   batch_size: 1
-  gradient_accumulation_steps: 1
-  learning_rate: 1.0e-4
+  gradient_accumulation_steps: 2
+  num_epochs: 120
   optimizer: "adamw8bit"
+  learning_rate: 3e-4
+  learning_rate_warmup_steps: 200
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1e-8
   weight_decay: 0.01
+  timestep_distribution: "logit_normal"
+  timestep_logit_mean: 0.0
+  timestep_logit_std: 1.0
   timestep_shift: 12.0
-  timestep_distribution: "uniform"
-  num_epochs: 130
-  save_every: 300
+  loss_weight_strength: 5.0
+  do_differential_guidance: true
+  differential_guidance_scale: 3.0
+  unconditional_prompt: ""
   max_grad_norm: 1.0
+  save_every: 300
 
 dtype: "bfloat16"
 mixed_precision: "bf16"

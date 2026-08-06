@@ -153,6 +153,15 @@ class MiniMaxH3LoRATrainer:
                     text_embeds = text_encoder.encode_prompts([caption], device=self.device, dtype=self.dtype).detach().cpu()
                 self.text_cache[caption] = text_embeds
 
+        # Also cache unconditional prompt if differential guidance is enabled
+        train_config = self.config.get("train", {})
+        if train_config.get("do_differential_guidance", False):
+            uncond_prompt = str(train_config.get("unconditional_prompt", ""))
+            if uncond_prompt not in self.text_cache:
+                with torch.no_grad():
+                    uncond_embeds = text_encoder.encode_prompts([uncond_prompt], device=self.device, dtype=self.dtype).detach().cpu()
+                self.text_cache[uncond_prompt] = uncond_embeds
+
         del text_encoder
         gc.collect()
         torch.cuda.empty_cache()
@@ -293,6 +302,18 @@ class MiniMaxH3LoRATrainer:
         save_path.write_text(json.dumps(payload, indent=2))
         self.last_saved_path = str(save_path)
 
+    def _sample_timesteps(self, batch_size: int) -> torch.Tensor:
+        train_config = self.config.get("train", {})
+        distribution = str(train_config.get("timestep_distribution", "uniform")).lower()
+        if distribution in {"logit_normal", "logit-normal", "logitnormal"}:
+            mean = float(train_config.get("timestep_logit_mean", 0.0))
+            std = float(train_config.get("timestep_logit_std", 1.0))
+            z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * std + mean
+            timesteps = torch.sigmoid(z).clamp(0.001, 0.999)
+        else:
+            timesteps = torch.rand(batch_size, device=self.device, dtype=self.dtype)
+        return timesteps
+
     def setup_optimizer(self):
         """Setup optimizer."""
         train_config = self.config["train"]
@@ -331,6 +352,17 @@ class MiniMaxH3LoRATrainer:
         else:
             self.optimizer = AdamW(self.lora_network.parameters(), lr=lr)
 
+        warmup_steps = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
+        if warmup_steps > 0:
+            def lr_lambda(step: int) -> float:
+                return min((step + 1) / warmup_steps, 1.0)
+
+            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+                self.optimizer,
+                lr_lambda=lr_lambda,
+            )
+            logger.info("Configured learning rate warmup for %d steps.", warmup_steps)
+
     def train(self):
         """Main MiniMax H3 LoRA training loop (~0.8s/step)."""
         train_config = self.config["train"]
@@ -367,7 +399,7 @@ class MiniMaxH3LoRATrainer:
 
                     # 3. Sample timesteps & apply discrete flow shift (sigma)
                     bsz = latents.shape[0]
-                    raw_timesteps = torch.rand(bsz, device=self.device, dtype=self.dtype)
+                    raw_timesteps = self._sample_timesteps(bsz)
                     shifted_sigmas = apply_flow_shift(raw_timesteps, shift=flow_shift)
 
                     # 4. Sample noise and create noisy latents: x_t = (1 - sigma)*x0 + sigma*noise
@@ -421,16 +453,41 @@ class MiniMaxH3LoRATrainer:
 
                     v_pred_patches = model_output.video
 
+                    # Optional Differential Guidance (CFG-style update)
+                    if train_config.get("do_differential_guidance", False):
+                        uncond_prompt = str(train_config.get("unconditional_prompt", ""))
+                        uncond_embeds = self.text_cache[uncond_prompt].to(device=self.device, dtype=self.dtype).expand(bsz, -1, -1)
+                        uncond_output = self.lora_network(
+                            video_hidden_states=video_patches,
+                            audio_hidden_states=dummy_audio,
+                            encoder_hidden_states=uncond_embeds,
+                            timestep=model_timesteps,
+                            timestep_indices=timestep_indices,
+                            token_tags=token_tags,
+                            position_ids=position_ids,
+                            video_indices=video_indices,
+                            audio_indices=audio_indices,
+                            text_indices=text_indices,
+                        )
+                        guidance_scale = float(train_config.get("differential_guidance_scale", 3.0))
+                        v_pred_patches = uncond_output.video + guidance_scale * (model_output.video - uncond_output.video)
+
                     target_velocity = latents - noise
                     target_patches = patchify_video(target_velocity)
 
                     loss = torch.nn.functional.mse_loss(v_pred_patches.float(), target_patches.float())
+
+                    loss_weight_strength = float(train_config.get("loss_weight_strength", 1.0))
+                    if loss_weight_strength != 1.0:
+                        loss = loss * loss_weight_strength
 
                     self.accelerator.backward(loss)
 
                     if self.accelerator.sync_gradients:
                         self.accelerator.clip_grad_norm_(self.lora_network.parameters(), train_config.get("max_grad_norm", 1.0))
                         self.optimizer.step()
+                        if self.lr_scheduler is not None:
+                            self.lr_scheduler.step()
                         self.optimizer.zero_grad()
 
                 if self.accelerator.sync_gradients:
