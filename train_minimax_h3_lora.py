@@ -285,7 +285,19 @@ class MiniMaxH3LoRATrainer:
             prefix=lora_config.get("prefix", "diffusion_model."),
             target_modules=lora_config.get("target_modules", ["qkv_proj", "out_proj", "fc1", "fc2"]),
         )
-        self.lora_network.to(self.device, dtype=self.dtype)
+        # Adapters train in fp32 by default. bf16 carries ~8 mantissa bits (~0.4% relative
+        # precision), and a LoRA update is small next to the weight it lands on, so in bf16 a
+        # large share of every step rounds away -- the subject trains "a bit" and then stops
+        # sharpening. Cast only the adapters: the base keeps its checkpoint dtypes, including
+        # the tensors H3 holds in fp32.
+        self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
+        self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
+        trainable = sum(p.numel() for p in self.lora_network.trainable_parameters())
+        logger.info(
+            "LoRA adapters: %.1fM trainable parameters in %s (base left at checkpoint dtypes)",
+            trainable / 1e6,
+            self.lora_dtype,
+        )
         print("Transformer and LoRA network ready on GPU!", flush=True)
 
     def create_dataset(self):
@@ -390,42 +402,67 @@ class MiniMaxH3LoRATrainer:
         return timesteps
 
     def setup_optimizer(self):
-        """Setup optimizer."""
+        """Setup optimizer over the LoRA adapters only."""
         train_config = self.config["train"]
         lr = float(train_config.get("learning_rate", 1e-4))
         optimizer_name = str(train_config.get("optimizer", "adamw8bit")).lower()
+        weight_decay = float(train_config.get("weight_decay", 0.01))
+        params = list(self.lora_network.trainable_parameters())
 
         if optimizer_name in {"adamw8bit", "adam8bit"}:
             try:
                 import bitsandbytes as bnb
                 optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
-                self.optimizer = optimizer_cls(self.lora_network.parameters(), lr=lr)
-                logger.info("Using 8-bit optimizer: %s", optimizer_name)
+                self.optimizer = optimizer_cls(params, lr=lr)
+                logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
             except Exception as e:
                 logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
-                self.optimizer = AdamW(self.lora_network.parameters(), lr=lr)
+                self.optimizer = AdamW(params, lr=lr)
         elif optimizer_name.startswith("prodigy"):
             try:
                 from prodigyopt import Prodigy
-                prodigy_lr = float(train_config.get("learning_rate", 1.0))
-                if prodigy_lr < 0.01:
-                    prodigy_lr = 1.0
-                weight_decay = float(train_config.get("weight_decay", 0.01))
-                self.optimizer = Prodigy(
-                    self.lora_network.parameters(),
-                    lr=prodigy_lr,
-                    weight_decay=weight_decay,
-                    d0=1e-6,
-                    d_coef=1.0,
-                    use_bias_correction=True,
-                    safeguard_warmup=True,
+
+                # Prodigy estimates the step size itself; its `lr` is a multiplier on that
+                # estimate and belongs at 1.0. Read it from its own key so the AdamW-scale
+                # learning_rate in the config is not silently reinterpreted.
+                prodigy_lr = float(train_config.get("prodigy_lr", 1.0))
+                if "prodigy_lr" not in train_config and lr < 0.01:
+                    logger.info(
+                        "Ignoring learning_rate=%.2e for Prodigy and using lr=1.0; set "
+                        "train.prodigy_lr to override the multiplier.", lr
+                    )
+                # d_coef scales the adapted rate. 2.0 converges noticeably faster than the
+                # 1.0 default on small subject datasets, which is the usual LoRA recommendation.
+                d_coef = float(train_config.get("prodigy_d_coef", 2.0))
+                betas = (
+                    float(train_config.get("adam_beta1", 0.9)),
+                    float(train_config.get("prodigy_beta2", 0.99)),
                 )
-                logger.info("Using Prodigy adaptive optimizer (lr=%.1f, weight_decay=%.3f)", prodigy_lr, weight_decay)
+                self.optimizer = Prodigy(
+                    params,
+                    lr=prodigy_lr,
+                    betas=betas,
+                    weight_decay=weight_decay,
+                    d0=float(train_config.get("prodigy_d0", 1e-6)),
+                    d_coef=d_coef,
+                    use_bias_correction=True,
+                    safeguard_warmup=bool(train_config.get("learning_rate_warmup_steps", 0)),
+                )
+                logger.info(
+                    "Using Prodigy (lr=%.2f, d_coef=%.2f, betas=%s, weight_decay=%.3f)",
+                    prodigy_lr, d_coef, betas, weight_decay,
+                )
+                if self.lora_dtype is not torch.float32:
+                    logger.warning(
+                        "Prodigy adapts on dot products of gradients and parameter deltas; in "
+                        "%s those are too coarse to steer it. Set lora.dtype: float32.",
+                        self.lora_dtype,
+                    )
             except Exception as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
-                self.optimizer = AdamW(self.lora_network.parameters(), lr=lr)
+                self.optimizer = AdamW(params, lr=lr)
         else:
-            self.optimizer = AdamW(self.lora_network.parameters(), lr=lr)
+            self.optimizer = AdamW(params, lr=lr)
 
         warmup_steps = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
         if warmup_steps > 0:
@@ -557,7 +594,9 @@ class MiniMaxH3LoRATrainer:
                     self.accelerator.backward(loss)
 
                     if self.accelerator.sync_gradients:
-                        self.accelerator.clip_grad_norm_(self.lora_network.parameters(), train_config.get("max_grad_norm", 1.0))
+                        self.accelerator.clip_grad_norm_(
+                            self.lora_network.trainable_parameters(), train_config.get("max_grad_norm", 1.0)
+                        )
                         self.optimizer.step()
                         if self.lr_scheduler is not None:
                             self.lr_scheduler.step()
@@ -589,7 +628,8 @@ class MiniMaxH3LoRATrainer:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         save_path = output_dir / f"minimax_h3_lora_step_{step}.safetensors"
-        state_dict = self.lora_network.get_state_dict()
+        save_dtype = getattr(torch, str(self.config.get("output", {}).get("dtype", "bfloat16")))
+        state_dict = self.lora_network.get_state_dict(save_dtype=save_dtype)
 
         metadata = {
             "step": str(step),

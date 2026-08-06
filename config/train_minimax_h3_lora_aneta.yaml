@@ -18,15 +18,26 @@ lora:
   alpha: 64
   prefix: "diffusion_model."
   target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
+  # Adapters must train in fp32. In bf16 (~0.4% relative precision) much of each update
+  # rounds away before it lands, which caps how sharp the subject can get regardless of
+  # learning rate. The frozen base keeps its own checkpoint dtypes either way.
+  dtype: "float32"
 
 train:
   batch_size: 1
   gradient_accumulation_steps: 2
   num_epochs: 130
-  optimizer: "adamw8bit"
-  # 1e-4 left the subject undertrained at 1560 steps / 23 images. Doubled rather than
-  # pushed harder: past ~3e-4 at rank 64 with alpha scale 1.0 the LoRA starts trading
-  # likeness for texture damage, which looks like the artifacts we just removed.
+  # "prodigy" adapts the step size itself, which suits a small subject set where the right
+  # rate is unknown. Switch to "adamw8bit" to fall back to the hand-tuned rate below.
+  optimizer: "prodigy"
+  # Prodigy knobs (ignored by adamw8bit). lr is a multiplier on Prodigy's own estimate and
+  # belongs at 1.0; d_coef scales how aggressively it adapts.
+  prodigy_lr: 1.0
+  prodigy_d_coef: 2.0
+  prodigy_beta2: 0.99
+  # Used when optimizer is adamw8bit/adamw. 1e-4 left the subject undertrained at 1560
+  # steps / 23 images; past ~3e-4 at rank 64 with alpha scale 1.0 the LoRA starts trading
+  # likeness for texture damage, so prefer more epochs over a hotter rate.
   learning_rate: 2.0e-4
   # 200 warmup steps was 13% of the run (~17 epochs) spent below target LR.
   learning_rate_warmup_steps: 100

@@ -32,6 +32,13 @@ class MiniMaxH3LoRALayer(nn.Module):
         nn.init.zeros_(self.lora_up.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Adapters are held in higher precision than the frozen base (fp32 on a bf16/INT8
+        # base) so that optimizer updates accumulate; the matmuls themselves do not need it.
+        # Under autocast the linear would recast to bf16 anyway, so upcasting the activation
+        # there would only materialize a large fp32 tensor for nothing.
+        target_dtype = self.lora_down.weight.dtype
+        if x.is_floating_point() and x.dtype != target_dtype and not torch.is_autocast_enabled():
+            x = x.to(target_dtype)
         return self.lora_up(self.lora_down(x)) * self.scale
 
 
@@ -83,7 +90,13 @@ class MiniMaxH3LoRANetwork(nn.Module):
 
                     def make_forward(orig_fwd, lora):
                         def forward(x):
-                            return orig_fwd(x) + lora(x)
+                            base = orig_fwd(x)
+                            delta = lora(x)
+                            if delta.dtype == base.dtype:
+                                return base + delta
+                            # Sum in the delta's (higher) precision, then round once, so a
+                            # small fp32 update is not truncated before it is even added.
+                            return (base + delta).to(base.dtype)
                         return forward
 
                     module.forward = make_forward(original_forward, lora_layer)
@@ -91,15 +104,44 @@ class MiniMaxH3LoRANetwork(nn.Module):
 
         logger.info("Injected %d LoRA layers into MiniMax H3 transformer (rank=%d, alpha=%s)", injected, self.rank, self.alpha)
 
-    def get_state_dict(self) -> Dict[str, torch.Tensor]:
-        """Get LoRA state dict for saving in Kohya/AI-Toolkit safetensors format."""
+    def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
+        """Move/cast only the adapters, leaving the frozen base untouched.
+
+        ``self.transformer`` is a submodule, so ``network.to(dtype=...)`` would also
+        downcast the base -- including the tensors H3 deliberately keeps in fp32 (the AdaLN
+        curve table and projections, the patch projection, the final video/audio heads).
+        """
+        self.lora_layers.to(device=device, dtype=dtype)
+
+    def trainable_parameters(self):
+        """Only the adapter parameters, for the optimizer and gradient clipping.
+
+        ``parameters()`` also yields the frozen transformer's tensors. They carry no grads so
+        a step skips them, but handing them to an adaptive optimizer means its bookkeeping
+        walks tens of billions of frozen elements for nothing.
+        """
+        return self.lora_layers.parameters()
+
+    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+        """Get LoRA state dict for saving in Kohya/AI-Toolkit safetensors format.
+
+        Adapters train in fp32 so small updates survive accumulation, but the finished delta
+        is stored in ``save_dtype`` (bf16 by default). At rank 64 across H3's dimensions the
+        adapters are ~310M parameters, so fp32 files would be ~1.2 GB each. Pass None to
+        keep the training dtype.
+        """
         state_dict = {}
         for safe_name, lora_layer in self.lora_layers.items():
             name = self.name_map[safe_name]
             full_name = f"{self.prefix}{name}"
-            state_dict[f"{full_name}.lora_A.weight"] = lora_layer.lora_down.weight
-            state_dict[f"{full_name}.lora_B.weight"] = lora_layer.lora_up.weight
-            state_dict[f"{full_name}.alpha"] = torch.tensor(lora_layer.alpha)
+
+            def _store(tensor: torch.Tensor) -> torch.Tensor:
+                tensor = tensor.detach().cpu()
+                return tensor if save_dtype is None else tensor.to(save_dtype)
+
+            state_dict[f"{full_name}.lora_A.weight"] = _store(lora_layer.lora_down.weight)
+            state_dict[f"{full_name}.lora_B.weight"] = _store(lora_layer.lora_up.weight)
+            state_dict[f"{full_name}.alpha"] = torch.tensor(lora_layer.alpha, dtype=torch.float32)
         return state_dict
 
     def forward(self, *args, **kwargs):
