@@ -391,8 +391,13 @@ class MiniMaxH3LoRATrainer:
 
     def _sample_timesteps(self, batch_size: int) -> torch.Tensor:
         train_config = self.config.get("train", {})
-        distribution = str(train_config.get("timestep_distribution", "uniform")).lower()
-        if distribution in {"logit_normal", "logit-normal", "logitnormal"}:
+        distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
+        if distribution in {"krea2_shift", "krea2"}:
+            # Logit-normal base, as musubi-tuner's krea2_shift does before shifting.
+            scale = float(train_config.get("sigmoid_scale", 1.0))
+            z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * scale
+            timesteps = torch.sigmoid(z).clamp(0.001, 0.999)
+        elif distribution in {"logit_normal", "logit-normal", "logitnormal"}:
             mean = float(train_config.get("timestep_logit_mean", 0.0))
             std = float(train_config.get("timestep_logit_std", 1.0))
             z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * std + mean
@@ -400,6 +405,28 @@ class MiniMaxH3LoRATrainer:
         else:
             timesteps = torch.rand(batch_size, device=self.device, dtype=self.dtype)
         return timesteps
+
+    def _resolve_flow_shift(self, latent_h: int, latent_w: int) -> float:
+        """Sigma shift for this latent size.
+
+        H3's 12.0 is its *video* flow shift. Applied to still images it pushes ~57% of
+        samples above sigma 0.9 and leaves only ~8% below 0.5, so almost all training
+        happens in the high-noise range that sets composition rather than the low-noise
+        range where facial identity and fine detail are resolved.
+
+        krea2_shift instead derives the shift from the packed token count, matching
+        musubi-tuner (x1=256 -> mu 0.5, x2=6400 -> mu 1.15, shift = exp(mu)). At 512px that
+        is ~1.65, which puts ~31% of samples below sigma 0.5.
+        """
+        train_config = self.config.get("train", {})
+        distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
+        if distribution not in {"krea2_shift", "krea2"}:
+            return float(train_config.get("timestep_shift", 12.0))
+
+        packed_tokens = (latent_h // 2) * (latent_w // 2)
+        slope = (1.15 - 0.5) / (6400 - 256)
+        mu = 0.5 + slope * (packed_tokens - 256)
+        return math.exp(mu)
 
     def setup_optimizer(self):
         """Setup optimizer over the LoRA adapters only."""
@@ -483,7 +510,7 @@ class MiniMaxH3LoRATrainer:
         train_config = self.config["train"]
         num_epochs = train_config.get("num_epochs", 10)
         save_every = train_config.get("save_every", 500)
-        flow_shift = float(train_config.get("timestep_shift", 12.0))
+        flow_shift = None  # resolved from the first batch's latent size, then logged once
 
         self.lora_network, self.optimizer, self.train_dataloader = self.accelerator.prepare(
             self.lora_network, self.optimizer, self.train_dataloader
@@ -514,6 +541,15 @@ class MiniMaxH3LoRATrainer:
 
                     # 3. Sample timesteps & apply discrete flow shift (sigma)
                     bsz = latents.shape[0]
+                    if flow_shift is None:
+                        flow_shift = self._resolve_flow_shift(latents.shape[-2], latents.shape[-1])
+                        logger.info(
+                            "Timestep schedule: %s, sigma shift %.3f (latent %dx%d)",
+                            train_config.get("timestep_distribution", "krea2_shift"),
+                            flow_shift,
+                            latents.shape[-2],
+                            latents.shape[-1],
+                        )
                     raw_timesteps = self._sample_timesteps(bsz)
                     shifted_sigmas = apply_flow_shift(raw_timesteps, shift=flow_shift)
 

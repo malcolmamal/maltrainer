@@ -26,7 +26,17 @@ train:
   optimizer: "adamw8bit"
   learning_rate: 1.0e-4
   weight_decay: 0.0001
-  timestep_distribution: "uniform"
+  # timestep_shift 12.0 is H3's VIDEO flow shift. On stills it put ~57% of samples above
+  # sigma 0.9 and only ~8% below 0.5, so nearly all training landed in the high-noise range
+  # that sets composition rather than the low-noise range where facial identity resolves.
+  # That is the likeness ceiling we kept hitting.
+  #
+  # krea2_shift derives the shift from the packed token count instead, matching
+  # musubi-tuner's image-only H3 recipe (~1.65 at 512px, ~1.79 at 1024px) over a
+  # logit-normal base. ~31% of samples then fall below sigma 0.5 -- about 4x more
+  # low-noise training. timestep_shift is used only by "uniform" / "logit_normal".
+  timestep_distribution: "krea2_shift"
+  sigmoid_scale: 1.0
   timestep_shift: 12.0
   loss_weight_strength: 1.0
   do_differential_guidance: false
