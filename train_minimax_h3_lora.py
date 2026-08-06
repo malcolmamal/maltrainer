@@ -45,6 +45,16 @@ from maltrainer.utils.logging_utils import setup_logging
 logger = logging.getLogger(__name__)
 
 
+def patchify_video(latent: torch.Tensor, patch_size=(1, 2, 2)) -> torch.Tensor:
+    """Patchify video/image latents matching ComfyUI / MiniMax H3 layout [B, C, T, H, W] -> [B, N_tokens, C*1*2*2]."""
+    b, c, t_full, h_full, w_full = latent.shape
+    pt, ph, pw = patch_size
+    t, h, w = t_full // pt, h_full // ph, w_full // pw
+    x = latent.reshape(b, c, t, pt, h, ph, w, pw)
+    x = torch.einsum("nctrhpwq->nthwcrpq", x)
+    return x.reshape(b, t * h * w, c * pt * ph * pw)
+
+
 def apply_flow_shift(t: torch.Tensor, shift: float = 12.0) -> torch.Tensor:
     """Apply discrete flow shift mapping: t_shifted = (shift * t) / (1 + (shift - 1) * t)."""
     if shift == 1.0:
@@ -362,7 +372,7 @@ class MiniMaxH3LoRATrainer:
                     num_text_tokens = text_embeds.shape[1]
                     seq_len = num_text_tokens + num_video_tokens
 
-                    video_patches = noisy_latents.permute(0, 2, 3, 4, 1).reshape(bsz, f_lat, h_lat // 2, 2, w_lat // 2, 2, c_lat).permute(0, 1, 2, 4, 3, 5, 6).reshape(bsz, num_video_tokens, -1)
+                    video_patches = patchify_video(noisy_latents)
                     dummy_audio = torch.zeros((bsz, 0, 32), device=self.device, dtype=self.dtype)
 
                     text_indices = torch.arange(0, num_text_tokens, device=self.device)
@@ -400,7 +410,7 @@ class MiniMaxH3LoRATrainer:
                     v_pred_patches = model_output.video
 
                     target_velocity = latents - noise
-                    target_patches = target_velocity.permute(0, 2, 3, 4, 1).reshape(bsz, f_lat, h_lat // 2, 2, w_lat // 2, 2, c_lat).permute(0, 1, 2, 4, 3, 5, 6).reshape(bsz, num_video_tokens, -1)
+                    target_patches = patchify_video(target_velocity)
 
                     loss = torch.nn.functional.mse_loss(v_pred_patches.float(), target_patches.float())
 
