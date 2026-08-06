@@ -20,35 +20,23 @@ logger = logging.getLogger(__name__)
 
 QWEN3VL_BOS_TOKEN_ID = 151643
 
-# The Qwen3-VL tokenizer + config assets for H3's text encoder ship inside the
-# musubi-tuner MiniMax forks. Checkouts get arranged differently per machine
-# (.../trainers/<fork>, .../trainers/akane/<fork>, .../sandbox/trainers/<fork>), so rather
-# than enumerate layouts we glob a couple of levels up from this repo for the known
-# asset subpath. model.tokenizer_path in the training config always wins.
-_ASSET_SUBPATH = Path("src") / "musubi_tuner" / "minimax_h3" / "assets" / "text_encoder"
-_REPO_ROOT = Path(__file__).resolve().parents[3]  # .../maltrainer
-_ASSET_GLOBS = (
-    str(Path("*") / _ASSET_SUBPATH),           # <root>/<fork>/src/...
-    str(Path("*") / "*" / _ASSET_SUBPATH),     # <root>/<group>/<fork>/src/...
-)
+# Qwen3-VL tokenizer + config metadata, vendored in-tree. maltrainer must not depend on a
+# sibling trainer checkout being present: see assets/text_encoder/ASSET_PROVENANCE.md for
+# the upstream source and pinned revision. model.tokenizer_path overrides this.
+BUNDLED_TOKENIZER_ASSETS = Path(__file__).resolve().parent / "assets" / "text_encoder"
 
 
-def _resolve_tokenizer_assets(explicit: Union[str, Path, None]) -> Path | None:
-    """Return a directory containing the Qwen3-VL tokenizer assets, or None."""
-    if explicit is not None:
-        candidate = Path(explicit)
-        if (candidate / "tokenizer.json").exists():
-            return candidate
-        raise FileNotFoundError(f"model.tokenizer_path has no tokenizer.json: {candidate}")
-
-    search_roots = [_REPO_ROOT.parent, _REPO_ROOT.parent.parent]
-    for root in search_roots:
-        for pattern in _ASSET_GLOBS:
-            # sorted() keeps the pick deterministic when several forks are checked out
-            for candidate in sorted(root.glob(pattern)):
-                if (candidate / "tokenizer.json").exists():
-                    return candidate
-    return None
+def _resolve_tokenizer_assets(explicit: Union[str, Path, None]) -> Path:
+    """Return the directory holding the Qwen3-VL tokenizer assets."""
+    candidate = Path(explicit) if explicit is not None else BUNDLED_TOKENIZER_ASSETS
+    if not (candidate / "tokenizer.json").exists():
+        source = "model.tokenizer_path" if explicit is not None else "the bundled assets directory"
+        raise FileNotFoundError(
+            f"No tokenizer.json in {candidate} (from {source}). The H3 Qwen3-VL tokenizer "
+            "metadata ships in maltrainer/models/minimax_h3/assets/text_encoder; if it is "
+            "missing, restore it from git or point model.tokenizer_path at a copy."
+        )
+    return candidate
 
 
 def _minimax_h3_text_config():
@@ -179,30 +167,18 @@ def load_minimax_h3_text_encoder(
     text_encoder_path = Path(text_encoder_path)
     device = torch.device(device)
 
-    # Qwen3-VL tokenizer assets. Falling back to a Qwen2-VL tokenizer would change token
-    # ids outright, so a miss is fatal rather than silently substituted.
+    # Qwen3-VL tokenizer assets. Substituting a different tokenizer would change token ids
+    # outright, so a miss raises instead of silently falling back to something plausible.
     asset_dir = _resolve_tokenizer_assets(tokenizer_path)
-    if asset_dir is None:
-        searched = ", ".join(str(root) for root in (_REPO_ROOT.parent, _REPO_ROOT.parent.parent))
-        raise FileNotFoundError(
-            "Could not find the Qwen3-VL tokenizer assets for MiniMax H3. Looked for "
-            f"*/{_ASSET_SUBPATH} and */*/{_ASSET_SUBPATH} under: {searched}. "
-            "These assets ship with the musubi-tuner MiniMax forks (e.g. "
-            "musubi-tuner-akane-minimax). Set model.tokenizer_path in the training config to "
-            "the directory containing tokenizer.json."
-        )
     logger.info("Using MiniMax H3 tokenizer assets from %s", asset_dir)
     tokenizer = AutoTokenizer.from_pretrained(str(asset_dir), trust_remote_code=True)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token_id = QWEN3VL_BOS_TOKEN_ID
 
-    # Build Qwen3-VL config for the 50-layer 32B text tower, pinning the text side.
-    try:
-        config = Qwen3VLConfig.from_pretrained(str(asset_dir))
-    except Exception as error:
-        logger.warning("Could not read Qwen3-VL config from %s (%s); using defaults.", asset_dir, error)
-        config = Qwen3VLConfig()
+    # Vision tower config comes from the vendored config.json; the text side is pinned in
+    # code below because config.json declares the full 64 layers, not H3's 50.
+    config = Qwen3VLConfig.from_pretrained(str(asset_dir))
 
     config.text_config = _minimax_h3_text_config()
     logger.info(
