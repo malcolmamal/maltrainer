@@ -311,8 +311,20 @@ class MiniMaxH3LoRATrainer:
         elif optimizer_name.startswith("prodigy"):
             try:
                 from prodigyopt import Prodigy
-                self.optimizer = Prodigy(self.lora_network.parameters(), lr=lr)
-                logger.info("Using Prodigy optimizer.")
+                prodigy_lr = float(train_config.get("learning_rate", 1.0))
+                if prodigy_lr < 0.01:
+                    prodigy_lr = 1.0
+                weight_decay = float(train_config.get("weight_decay", 0.01))
+                self.optimizer = Prodigy(
+                    self.lora_network.parameters(),
+                    lr=prodigy_lr,
+                    weight_decay=weight_decay,
+                    d0=1e-6,
+                    d_coef=1.0,
+                    use_bias_correction=True,
+                    safeguard_warmup=True,
+                )
+                logger.info("Using Prodigy adaptive optimizer (lr=%.1f, weight_decay=%.3f)", prodigy_lr, weight_decay)
             except Exception as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(self.lora_network.parameters(), lr=lr)
