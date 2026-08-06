@@ -1,4 +1,4 @@
-# MiniMax H3 LoRA Training Configuration Example
+# MiniMax H3 LoRA Training Configuration (Borrowed from AI-Toolkit Wan Template)
 
 model:
   transformer_path: "C:\\Development\\ComfyUI\\models\\diffusion_models\\MinimaxH3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors"
@@ -14,36 +14,24 @@ dataset:
   num_workers: 0
 
 lora:
-  rank: 64
-  alpha: 64
+  rank: 32
+  alpha: 32
   prefix: "diffusion_model."
   target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
 
 train:
   batch_size: 1
-  gradient_accumulation_steps: 2
-  num_epochs: 130
+  gradient_accumulation_steps: 1
+  num_epochs: 110
   optimizer: "adamw8bit"
-  # 1e-4 undertrains the subject at ~1500 steps on a ~20 image set; 2e-4 is the tuned
-  # starting point. Past ~3e-4 at rank 64 / alpha scale 1.0 likeness degrades into texture
-  # damage, so prefer raising num_epochs over raising this further.
-  learning_rate: 2.0e-4
-  learning_rate_warmup_steps: 100
-  adam_beta1: 0.9
-  adam_beta2: 0.999
-  adam_epsilon: 1e-8
-  weight_decay: 0.01
-  # uniform + timestep_shift=12 is H3's reference schedule (musubi-tuner
-  # timestep_sampling="shift"); stacking logit_normal on top over-weights high noise.
+  learning_rate: 1.0e-4
+  weight_decay: 0.0001
   timestep_distribution: "uniform"
   timestep_shift: 12.0
   loss_weight_strength: 1.0
   do_differential_guidance: false
   max_grad_norm: 1.0
-  # Backward precision through the frozen INT8 ConvRot layers: bf16 (default, matches
-  # musubi-tuner), fp32 (most accurate, ~2x slower), or int8 (fastest, noisy gradients).
-  int8_grad_precision: "bf16"
-  save_every: 300
+  save_every: 250
 
 dtype: "bfloat16"
 mixed_precision: "bf16"

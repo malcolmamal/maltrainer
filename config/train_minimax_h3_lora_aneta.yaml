@@ -1,4 +1,4 @@
-# MiniMax H3 LoRA Training Configuration Example
+# MiniMax H3 LoRA Training Configuration (Borrowed from AI-Toolkit Wan Template)
 
 model:
   transformer_path: "C:\\Development\\ComfyUI\\models\\diffusion_models\\MinimaxH3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors"
@@ -14,62 +14,24 @@ dataset:
   num_workers: 0
 
 lora:
-  rank: 64
-  alpha: 64
+  rank: 32
+  alpha: 32
   prefix: "diffusion_model."
   target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
-  # Adapters must train in fp32. In bf16 (~0.4% relative precision) much of each update
-  # rounds away before it lands, which caps how sharp the subject can get regardless of
-  # learning rate. The frozen base keeps its own checkpoint dtypes either way.
-  dtype: "float32"
 
 train:
   batch_size: 1
-  gradient_accumulation_steps: 2
-  # 23 images / batch 1 / accum 2 = 12 optimizer steps per epoch.
-  #   130 epochs = 1560 steps = ~68 per image -> undertrained on both runs so far.
-  #   200 epochs = 2400 steps = ~104 per image, in the usual range for a subject LoRA.
-  # Deliberately past the expected sweet spot: save_every below writes a checkpoint every
-  # 300 steps, so pick the best one by testing rather than guessing the count up front.
-  num_epochs: 200
-  # "adamw8bit" with the hand-tuned learning_rate below. Switch to "prodigy" to let it adapt
-  # the step size instead (then learning_rate is unused -- see the note further down).
+  gradient_accumulation_steps: 1
+  num_epochs: 110
   optimizer: "adamw8bit"
-  # Prodigy knobs (ignored by adamw8bit). lr is a multiplier on Prodigy's own step-size
-  # estimate and belongs at 1.0; d_coef scales how aggressively it adapts.
-  prodigy_lr: 1.0
-  prodigy_d_coef: 2.0
-  prodigy_beta2: 0.99
-  # NOTE: with optimizer "prodigy", learning_rate / adam_beta2 / adam_epsilon are NOT used.
-  # Still in effect for both optimizers: adam_beta1, weight_decay, max_grad_norm, and
-  # learning_rate_warmup_steps (for Prodigy it ramps the multiplier above, which is why
-  # safeguard_warmup is enabled whenever warmup is non-zero).
-  #
-  # Used when optimizer is adamw8bit/adamw. 1e-4 left the subject undertrained at 1560
-  # steps / 23 images; past ~3e-4 at rank 64 with alpha scale 1.0 the LoRA starts trading
-  # likeness for texture damage, so prefer more epochs over a hotter rate.
-  learning_rate: 2.0e-4
-  # 200 warmup steps was 13% of the run (~17 epochs) spent below target LR. Prodigy already
-  # ramps up from d0 on its own, so 0 is also reasonable when using it.
-  learning_rate_warmup_steps: 100
-  adam_beta1: 0.9
-  adam_beta2: 0.999
-  adam_epsilon: 1e-8
-  weight_decay: 0.01
-  # H3's own schedule is already heavily high-noise weighted: uniform t through
-  # timestep_shift=12 puts ~92% of samples at sigma>0.5. Stacking logit_normal on top of
-  # that pushes it to ~99% and starves the low-noise/detail range. "uniform" here equals
-  # musubi-tuner's timestep_sampling="shift", which is the reference H3 recipe.
+  learning_rate: 1.0e-4
+  weight_decay: 0.0001
   timestep_distribution: "uniform"
   timestep_shift: 12.0
   loss_weight_strength: 1.0
   do_differential_guidance: false
   max_grad_norm: 1.0
-  # Backward precision through the frozen INT8 ConvRot layers. bf16 matches musubi-tuner
-  # and is ~2x faster than fp32; fp32 is the most accurate; int8 is fastest but re-quantizes
-  # the gradient in all 50 blocks, which is what produced noisy LoRAs before.
-  int8_grad_precision: "bf16"
-  save_every: 300
+  save_every: 250
 
 dtype: "bfloat16"
 mixed_precision: "bf16"
