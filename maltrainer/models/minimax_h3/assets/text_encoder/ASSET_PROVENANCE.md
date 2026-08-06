@@ -19,9 +19,13 @@ slow-tokenizer vocabulary files are intentionally excluded.
 - `tokenizer.json` / `tokenizer_config.json` back `AutoTokenizer`. H3 tokenizes raw
   prompt text with `add_special_tokens=False` and no chat template, so the tokenizer's
   own template is irrelevant here.
-- `config.json` supplies the vision-tower config. The **text** side is not read from it:
-  `text_encoder.py::_minimax_h3_text_config` pins those values in code and truncates to
-  the 50 layers H3 uses (this file declares the full 64).
+- `config.json` is the single source of truth for the model config, loaded through
+  `Qwen3VLConfig.from_pretrained` so transformers migrates it to the installed version's
+  schema. The only value overridden in code is `text_config.num_hidden_layers`, truncated
+  to the 50 layers H3 conditions on (this file declares the model's full 64). Do not
+  re-transcribe these values into Python: field names move between transformers releases
+  (`rope_theta`/`rope_scaling` became a merged `rope_parameters`), and `from_pretrained`
+  handles that translation while hand-written kwargs silently do not.
 - `preprocessor_config.json` / `video_preprocessor_config.json` are unused by training
   (prompts are text-only) and kept only so the vendored set stays a faithful subset.
 

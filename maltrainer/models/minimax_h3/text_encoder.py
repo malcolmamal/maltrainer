@@ -39,35 +39,26 @@ def _resolve_tokenizer_assets(explicit: Union[str, Path, None]) -> Path:
     return candidate
 
 
-def _minimax_h3_text_config():
-    """Qwen3-VL-32B text config truncated to the 50 layers H3 conditions on.
+# H3 conditions on the unnormalized hidden state after Qwen3-VL layer 50; the upstream
+# config declares the model's full depth.
+MINIMAX_H3_TEXT_LAYERS = 50
 
-    Pinned explicitly rather than read from a checkpoint sibling: these values decide the
-    attention head layout and the mRoPE schedule, and a config fallback that silently
-    disagreed with the checkpoint would yield valid-looking but wrong text embeddings.
-    Mirrors musubi-tuner's minimax_h3/text_encoder.py::_text_config.
+
+def _describe_text_config(text_config) -> str:
+    """Compact summary of the resolved text tower, for a startup sanity check.
+
+    Read defensively: transformers has reshuffled where RoPE settings live between
+    versions (rope_theta/rope_scaling vs. a merged rope_parameters dict), and a log line
+    must never be the thing that fails a training run.
     """
-    from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
-
-    return Qwen3VLTextConfig(
-        vocab_size=151936,
-        hidden_size=5120,
-        intermediate_size=25600,
-        num_hidden_layers=50,
-        num_attention_heads=64,
-        num_key_value_heads=8,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=262144,
-        rms_norm_eps=1e-6,
-        rope_theta=5_000_000,
-        rope_scaling={"rope_type": "default", "mrope_interleaved": True, "mrope_section": [24, 20, 20]},
-        attention_bias=False,
-        attention_dropout=0.0,
-        use_cache=False,
-        bos_token_id=151643,
-        eos_token_id=151645,
-    )
+    fields = ["num_hidden_layers", "hidden_size", "num_attention_heads", "num_key_value_heads", "head_dim"]
+    parts = [f"{name}={getattr(text_config, name, '?')}" for name in fields]
+    rope = getattr(text_config, "rope_parameters", None)
+    if rope is None:
+        theta = getattr(text_config, "rope_theta", "?")
+        rope = {"rope_theta": theta, "rope_scaling": getattr(text_config, "rope_scaling", None)}
+    parts.append(f"rope={rope}")
+    return " ".join(parts)
 
 
 def _text_encoder_key(source_prefix: str) -> str:
@@ -176,20 +167,14 @@ def load_minimax_h3_text_encoder(
     if tokenizer.pad_token is None:
         tokenizer.pad_token_id = QWEN3VL_BOS_TOKEN_ID
 
-    # Vision tower config comes from the vendored config.json; the text side is pinned in
-    # code below because config.json declares the full 64 layers, not H3's 50.
+    # Take the whole config from the vendored upstream config.json rather than
+    # hand-transcribing it: from_pretrained also migrates the JSON to whatever schema the
+    # installed transformers expects, which hand-written kwargs do not. The only H3-specific
+    # change is truncating the text tower to the layer it conditions on.
     config = Qwen3VLConfig.from_pretrained(str(asset_dir))
-
-    config.text_config = _minimax_h3_text_config()
-    logger.info(
-        "H3 text tower: layers=%d hidden=%d heads=%d kv_heads=%d head_dim=%d rope_theta=%s",
-        config.text_config.num_hidden_layers,
-        config.text_config.hidden_size,
-        config.text_config.num_attention_heads,
-        config.text_config.num_key_value_heads,
-        config.text_config.head_dim,
-        config.text_config.rope_theta,
-    )
+    config.text_config.num_hidden_layers = MINIMAX_H3_TEXT_LAYERS
+    config.text_config.use_cache = False
+    logger.info("H3 text tower: %s", _describe_text_config(config.text_config))
 
     with init_empty_weights(include_buffers=True):
         model = Qwen3VLModel(config)
