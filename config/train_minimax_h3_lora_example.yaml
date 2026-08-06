@@ -14,8 +14,8 @@ dataset:
   num_workers: 0
 
 lora:
-  rank: 16
-  alpha: 16
+  rank: 32
+  alpha: 32
   prefix: "diffusion_model."
   target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
 
@@ -27,8 +27,8 @@ train:
   weight_decay: 0.01
   timestep_shift: 12.0
   timestep_distribution: "uniform"
-  num_epochs: 100
-  save_every: 250
+  num_epochs: 150
+  save_every: 300
   max_grad_norm: 1.0
 
 dtype: "bfloat16"
