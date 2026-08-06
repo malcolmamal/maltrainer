@@ -426,10 +426,13 @@ class MiniMaxH3LoRATrainer:
                 # estimate and belongs at 1.0. Read it from its own key so the AdamW-scale
                 # learning_rate in the config is not silently reinterpreted.
                 prodigy_lr = float(train_config.get("prodigy_lr", 1.0))
-                if "prodigy_lr" not in train_config and lr < 0.01:
+                if "learning_rate" in train_config:
                     logger.info(
-                        "Ignoring learning_rate=%.2e for Prodigy and using lr=1.0; set "
-                        "train.prodigy_lr to override the multiplier.", lr
+                        "Prodigy adapts its own step size: train.learning_rate (%.2e) is unused, "
+                        "as are adam_beta2/adam_epsilon. In effect: prodigy_lr, prodigy_d_coef, "
+                        "prodigy_beta2, adam_beta1, weight_decay, max_grad_norm, and "
+                        "learning_rate_warmup_steps (which scales Prodigy's multiplier).",
+                        lr,
                     )
                 # d_coef scales the adapted rate. 2.0 converges noticeably faster than the
                 # 1.0 default on small subject datasets, which is the usual LoRA recommendation.

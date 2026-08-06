@@ -30,16 +30,22 @@ train:
   # "prodigy" adapts the step size itself, which suits a small subject set where the right
   # rate is unknown. Switch to "adamw8bit" to fall back to the hand-tuned rate below.
   optimizer: "prodigy"
-  # Prodigy knobs (ignored by adamw8bit). lr is a multiplier on Prodigy's own estimate and
-  # belongs at 1.0; d_coef scales how aggressively it adapts.
+  # Prodigy knobs (ignored by adamw8bit). lr is a multiplier on Prodigy's own step-size
+  # estimate and belongs at 1.0; d_coef scales how aggressively it adapts.
   prodigy_lr: 1.0
   prodigy_d_coef: 2.0
   prodigy_beta2: 0.99
+  # NOTE: with optimizer "prodigy", learning_rate / adam_beta2 / adam_epsilon are NOT used.
+  # Still in effect for both optimizers: adam_beta1, weight_decay, max_grad_norm, and
+  # learning_rate_warmup_steps (for Prodigy it ramps the multiplier above, which is why
+  # safeguard_warmup is enabled whenever warmup is non-zero).
+  #
   # Used when optimizer is adamw8bit/adamw. 1e-4 left the subject undertrained at 1560
   # steps / 23 images; past ~3e-4 at rank 64 with alpha scale 1.0 the LoRA starts trading
   # likeness for texture damage, so prefer more epochs over a hotter rate.
   learning_rate: 2.0e-4
-  # 200 warmup steps was 13% of the run (~17 epochs) spent below target LR.
+  # 200 warmup steps was 13% of the run (~17 epochs) spent below target LR. Prodigy already
+  # ramps up from d0 on its own, so 0 is also reasonable when using it.
   learning_rate_warmup_steps: 100
   adam_beta1: 0.9
   adam_beta2: 0.999
