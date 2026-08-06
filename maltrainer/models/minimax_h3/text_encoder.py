@@ -20,28 +20,34 @@ logger = logging.getLogger(__name__)
 
 QWEN3VL_BOS_TOKEN_ID = 151643
 
-# Candidate directories holding the Qwen3-VL tokenizer + config assets for H3's text
-# encoder. The first one that contains tokenizer.json wins; override with
-# model.tokenizer_path in the training config.
+# The Qwen3-VL tokenizer + config assets for H3's text encoder ship inside the
+# musubi-tuner MiniMax forks. Checkouts get arranged differently per machine
+# (.../trainers/<fork>, .../trainers/akane/<fork>, .../sandbox/trainers/<fork>), so rather
+# than enumerate layouts we glob a couple of levels up from this repo for the known
+# asset subpath. model.tokenizer_path in the training config always wins.
 _ASSET_SUBPATH = Path("src") / "musubi_tuner" / "minimax_h3" / "assets" / "text_encoder"
 _REPO_ROOT = Path(__file__).resolve().parents[3]  # .../maltrainer
-TOKENIZER_ASSET_CANDIDATES = (
-    # sibling trainer checkouts: .../sandbox/trainers/{maltrainer,musubi-tuner-akane-minimax}
-    _REPO_ROOT.parent / "musubi-tuner-akane-minimax" / _ASSET_SUBPATH,
-    _REPO_ROOT.parent / "musubi-tuner-pyros-minimax" / _ASSET_SUBPATH,
-    _REPO_ROOT.parent / "trainers" / "musubi-tuner-akane-minimax" / _ASSET_SUBPATH,
+_ASSET_GLOBS = (
+    str(Path("*") / _ASSET_SUBPATH),           # <root>/<fork>/src/...
+    str(Path("*") / "*" / _ASSET_SUBPATH),     # <root>/<group>/<fork>/src/...
 )
 
 
 def _resolve_tokenizer_assets(explicit: Union[str, Path, None]) -> Path | None:
     """Return a directory containing the Qwen3-VL tokenizer assets, or None."""
-    candidates = []
     if explicit is not None:
-        candidates.append(Path(explicit))
-    candidates.extend(TOKENIZER_ASSET_CANDIDATES)
-    for candidate in candidates:
+        candidate = Path(explicit)
         if (candidate / "tokenizer.json").exists():
             return candidate
+        raise FileNotFoundError(f"model.tokenizer_path has no tokenizer.json: {candidate}")
+
+    search_roots = [_REPO_ROOT.parent, _REPO_ROOT.parent.parent]
+    for root in search_roots:
+        for pattern in _ASSET_GLOBS:
+            # sorted() keeps the pick deterministic when several forks are checked out
+            for candidate in sorted(root.glob(pattern)):
+                if (candidate / "tokenizer.json").exists():
+                    return candidate
     return None
 
 
@@ -177,10 +183,13 @@ def load_minimax_h3_text_encoder(
     # ids outright, so a miss is fatal rather than silently substituted.
     asset_dir = _resolve_tokenizer_assets(tokenizer_path)
     if asset_dir is None:
+        searched = ", ".join(str(root) for root in (_REPO_ROOT.parent, _REPO_ROOT.parent.parent))
         raise FileNotFoundError(
-            "Could not find the Qwen3-VL tokenizer assets for MiniMax H3. Expected a directory "
-            "containing tokenizer.json, e.g. musubi-tuner-akane-minimax/src/musubi_tuner/"
-            "minimax_h3/assets/text_encoder. Set model.tokenizer_path in the training config."
+            "Could not find the Qwen3-VL tokenizer assets for MiniMax H3. Looked for "
+            f"*/{_ASSET_SUBPATH} and */*/{_ASSET_SUBPATH} under: {searched}. "
+            "These assets ship with the musubi-tuner MiniMax forks (e.g. "
+            "musubi-tuner-akane-minimax). Set model.tokenizer_path in the training config to "
+            "the directory containing tokenizer.json."
         )
     logger.info("Using MiniMax H3 tokenizer assets from %s", asset_dir)
     tokenizer = AutoTokenizer.from_pretrained(str(asset_dir), trust_remote_code=True)
