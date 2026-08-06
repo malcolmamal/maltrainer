@@ -15,19 +15,19 @@ dataset:
 
 lora:
   rank: 16
-  alpha: 1
+  alpha: 16
   prefix: "diffusion_model."
   target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
 
 train:
   batch_size: 1
   gradient_accumulation_steps: 1
-  learning_rate: 5e-5
+  learning_rate: 1e-4
   optimizer: "adamw8bit"
   timestep_shift: 12.0
   timestep_distribution: "uniform"
   num_epochs: 100
-  save_every: 200
+  save_every: 250
   max_grad_norm: 1.0
 
 dtype: "bfloat16"
