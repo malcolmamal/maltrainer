@@ -106,6 +106,21 @@ python scripts/inspect_lora_metadata.py MODEL.safetensors --json
 
 `--help` documents all of the above.
 
+### It is not maltrainer-specific
+
+The inspector reads the whole safetensors metadata header, whatever wrote it, so it also
+works on LoRAs from kohya, musubi-tuner, ai-toolkit or ComfyUI, and on non-LoRA safetensors.
+
+- `--all` / `--json` dump every key/value present, with no filtering.
+- The default summary shows keys it has a label for under *recognised training settings*
+  (many `ss_*` names are shared with kohya, so foreign files often populate several), then
+  lists **everything else with its value** under *other metadata*. Known-bulky blobs
+  (`ss_datasets`, `ss_tag_frequency`, `maltrainer_config`) are described by length instead of
+  dumped, but only when they are actually long.
+- `--diff` compares all keys, so it works across trainers too.
+- `--config` is the one maltrainer-specific mode: it looks for the `maltrainer_config` key
+  and reports cleanly if the file has none.
+
 ## Disabling
 
 ```yaml

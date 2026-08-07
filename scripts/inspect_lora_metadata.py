@@ -92,24 +92,55 @@ def _fmt(value: str) -> str:
     return value
 
 
+#: Long blobs are worth summarizing by size rather than dumping into a summary view. Use
+#: --all or --json to see them in full. modelspec.* is the SAI convention; ss_datasets and
+#: ss_tag_frequency are kohya's, and both can run to many kilobytes.
+_BULKY_KEYS = (CONFIG_KEY, "ss_datasets", "ss_tag_frequency", "ss_bucket_info")
+_VALUE_TRUNCATE = 96
+
+
+def _abbreviate(value: str) -> str:
+    formatted = _fmt(value)
+    if len(formatted) > _VALUE_TRUNCATE:
+        return f"{formatted[:_VALUE_TRUNCATE]}... ({len(value)} chars)"
+    return formatted
+
+
 def print_summary(path: Path, metadata: Dict[str, str]) -> None:
     print(f"{path.name}")
     size_gb = path.stat().st_size / 1e9
     print(f"  file size: {size_gb:.2f} GB, {len(metadata)} metadata keys")
     if not metadata:
-        print("  (no metadata -- not written by maltrainer, or written before embedding existed)")
+        print("  (no metadata at all -- written before embedding existed, or by a tool")
+        print("   that stores none. The tensors themselves are unaffected.)")
         return
-    print()
-    width = max(len(label) for _, label in SUMMARY_ORDER)
-    for key, label in SUMMARY_ORDER:
-        if key in metadata and metadata[key] != "":
+
+    known = [(k, label) for k, label in SUMMARY_ORDER if metadata.get(k, "") != ""]
+    if known:
+        print("\n  -- recognised training settings --")
+        width = max(len(label) for _, label in known)
+        for key, label in known:
             print(f"  {label:<{width}}  {_fmt(metadata[key])}")
 
-    shown = {key for key, _ in SUMMARY_ORDER} | {CONFIG_KEY}
-    extra = sorted(k for k in metadata if k not in shown)
-    if extra:
-        print(f"\n  {len(extra)} further key(s): {', '.join(extra)}")
-    print(f"\n  embedded config: {'yes' if CONFIG_KEY in metadata else 'no'} (--config to recover)")
+    # Everything else, values included: this file may well come from kohya, musubi,
+    # ai-toolkit or Comfy, whose keys this script has no table for but can still show.
+    other = sorted(k for k in metadata if k not in {key for key, _ in SUMMARY_ORDER})
+    if other:
+        print(f"\n  -- other metadata ({len(other)} key(s)) --")
+        width = min(max(len(k) for k in other), 40)
+        for key in other:
+            value = metadata[key]
+            # Only elide a known-bulky key when it is genuinely bulky; a short ss_datasets
+            # is more useful shown than described.
+            if key in _BULKY_KEYS and len(value) > _VALUE_TRUNCATE:
+                print(f"  {key:<{width}}  <{len(value)} chars, use --all or --json>")
+            else:
+                print(f"  {key:<{width}}  {_abbreviate(value)}")
+
+    if not known:
+        print("\n  No keys this script recognises -- probably not a maltrainer checkpoint.")
+        print("  Everything the file does store is listed above.")
+    print(f"\n  embedded maltrainer config: {'yes (--config to recover)' if CONFIG_KEY in metadata else 'no'}")
 
 
 def dump_config(metadata: Dict[str, str], out: Optional[Path]) -> int:
