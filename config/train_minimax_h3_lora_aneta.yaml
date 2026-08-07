@@ -24,10 +24,30 @@ train:
   gradient_accumulation_steps: 1
   num_epochs: 140
   optimizer: "prodigy"
-  learning_rate: 1.0
+  learning_rate: 1.0        # Prodigy multiplier (>=0.01 is taken at face value)
   weight_decay: 0.01
-  timestep_distribution: "uniform"
-  timestep_shift: 12.0
+  # --- Prodigy knobs. Only d_coef is set; the rest are shown at their defaults so they can
+  # --- be swept one at a time. Unsupported keys are dropped with a warning, not a crash.
+  # d_coef: multiplies the adapted rate. THE knob to try first. 1.0 = library default,
+  #   2.0 = usual LoRA recommendation, 3.0-4.0 trains harder and eventually trades likeness
+  #   for texture damage. Watch the "d" value in training.log.
+  prodigy_d_coef: 2.0
+  # prodigy_d0: 1.0e-6          # initial step-size guess; 1e-5/1e-4 shortens the ramp
+  # prodigy_beta2: 0.99         # 0.999 is smoother/slower to react
+  # prodigy_beta3: null         # EMA horizon for d; null -> sqrt(beta2)
+  # prodigy_growth_rate: .inf   # cap d growth per step; 1.02 tames a spiking d
+  # prodigy_eps: 1.0e-8
+  # prodigy_decouple: true
+  # prodigy_use_bias_correction: true
+  # prodigy_safeguard_warmup: false   # auto-on when learning_rate_warmup_steps > 0
+  #
+  # krea2_shift vs uniform+12.0 is still an open question here: the best-likeness run so far
+  # (see _best preset) paired adamw8bit with krea2_shift, while the preferred Prodigy run
+  # used uniform+12.0 -- so optimizer and schedule were never varied independently. This
+  # config changes only the schedule relative to that Prodigy run, isolating it.
+  timestep_distribution: "krea2_shift"
+  sigmoid_scale: 1.0
+  timestep_shift: 12.0      # used only by "uniform" / "logit_normal"
   loss_weight_strength: 1.0
   do_differential_guidance: false
   max_grad_norm: 1.0
