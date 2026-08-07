@@ -40,6 +40,7 @@ from maltrainer.models.minimax_h3.text_encoder import load_minimax_h3_text_encod
 from maltrainer.models.minimax_h3.lora import MiniMaxH3LoRANetwork
 from maltrainer.data.minimax_dataset import MiniMaxH3ImageDataset
 from maltrainer.utils.config import load_config, save_config_to_output
+from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,13 @@ class MiniMaxH3LoRATrainer:
         self.dry_run_step_time = dry_run_step_time
         self.last_saved_path = None
         self.lr_scheduler = None
+        # Resolved facts about this run, embedded into every checkpoint's metadata. Populated
+        # as they become known, since several are only decided at load/first-step time.
+        self.run_metadata: Dict[str, object] = {
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "git_commit": git_commit(),
+            "torch_version": torch.__version__,
+        }
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
@@ -266,10 +274,9 @@ class MiniMaxH3LoRATrainer:
                 f"Transformer checkpoint has {len(info.unexpected_keys)} tensor(s) the model does "
                 f"not expect; examples: {info.unexpected_keys[:5]}"
             )
-        enable_int8_convrot(
-            transformer,
-            grad_precision=self.config.get("train", {}).get("int8_grad_precision"),
-        )
+        grad_precision = self.config.get("train", {}).get("int8_grad_precision")
+        enable_int8_convrot(transformer, grad_precision=grad_precision)
+        self.run_metadata["int8_grad_precision"] = grad_precision or "bf16"
 
         transformer.enable_gradient_checkpointing()
         transformer.requires_grad_(False)
@@ -293,6 +300,9 @@ class MiniMaxH3LoRATrainer:
         self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
         trainable = sum(p.numel() for p in self.lora_network.trainable_parameters())
+        self.run_metadata["lora_dtype"] = str(self.lora_dtype).replace("torch.", "")
+        self.run_metadata["trainable_parameters"] = trainable
+        self.run_metadata["lora_layers"] = len(self.lora_network.lora_layers)
         logger.info(
             "LoRA adapters: %.1fM trainable parameters in %s (base left at checkpoint dtypes)",
             trainable / 1e6,
@@ -442,6 +452,7 @@ class MiniMaxH3LoRATrainer:
                 optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
                 self.optimizer = optimizer_cls(params, lr=lr)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
+                self.run_metadata["optimizer_resolved"] = {"name": optimizer_name, "lr": lr}
             except Exception as e:
                 logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr)
@@ -506,6 +517,7 @@ class MiniMaxH3LoRATrainer:
                     "Using Prodigy: %s",
                     ", ".join(f"{k}={v}" for k, v in sorted(kwargs.items())),
                 )
+                self.run_metadata["optimizer_resolved"] = {"name": "prodigy", **kwargs}
                 if configured_lr < 0.01 and "prodigy_lr" not in train_config:
                     logger.info(
                         "train.learning_rate (%.2e) is AdamW-scale, so Prodigy's multiplier is "
@@ -549,6 +561,9 @@ class MiniMaxH3LoRATrainer:
         grad_accum = self.accelerator.gradient_accumulation_steps
         steps_per_epoch = math.ceil(len(self.train_dataloader) / max(grad_accum, 1))
         total_steps = num_epochs * steps_per_epoch
+        self.run_metadata["steps_per_epoch"] = steps_per_epoch
+        self.run_metadata["planned_total_steps"] = total_steps
+        self.run_metadata["dataset_samples"] = len(self.train_dataset)
 
         logger.info("Starting accelerated MiniMax H3 LoRA training for %d epochs (%d total steps)...", num_epochs, total_steps)
 
@@ -572,6 +587,8 @@ class MiniMaxH3LoRATrainer:
                     bsz = latents.shape[0]
                     if flow_shift is None:
                         flow_shift = self._resolve_flow_shift(latents.shape[-2], latents.shape[-1])
+                        self.run_metadata["resolved_sigma_shift"] = round(flow_shift, 6)
+                        self.run_metadata["latent_size"] = f"{latents.shape[-2]}x{latents.shape[-1]}"
                         logger.info(
                             "Timestep schedule: %s, sigma shift %.3f (latent %dx%d)",
                             train_config.get("timestep_distribution", "krea2_shift"),
@@ -712,12 +729,15 @@ class MiniMaxH3LoRATrainer:
         save_dtype = getattr(torch, str(self.config.get("output", {}).get("dtype", "bfloat16")))
         state_dict = self.lora_network.get_state_dict(save_dtype=save_dtype)
 
-        metadata = {
-            "step": str(step),
-            "rank": str(self.config.get("lora", {}).get("rank", 16)),
-            "alpha": str(self.config.get("lora", {}).get("alpha", 16.0)),
-            "architecture": "minimax_h3",
-        }
+        runtime = dict(self.run_metadata)
+        runtime["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        runtime["save_dtype"] = str(save_dtype).replace("torch.", "")
+        metadata = build_metadata(
+            self.config,
+            step=step,
+            runtime=runtime,
+            embed_config=bool(self.config.get("output", {}).get("embed_config", True)),
+        )
 
         save_file(state_dict, str(save_path), metadata=metadata)
         self.last_saved_path = str(save_path)
