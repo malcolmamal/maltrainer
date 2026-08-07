@@ -1,4 +1,4 @@
-# MiniMax H3 LoRA Training Configuration (Borrowed from AI-Toolkit Wan Template)
+# MiniMax H3 LoRA Training Configuration Example (Prodigy Optimizer, Rank 32)
 
 model:
   transformer_path: "C:\\Development\\ComfyUI\\models\\diffusion_models\\MinimaxH3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors"
@@ -23,9 +23,9 @@ train:
   batch_size: 1
   gradient_accumulation_steps: 1
   num_epochs: 110
-  optimizer: "adamw8bit"
-  learning_rate: 1.0e-4
-  weight_decay: 0.0001
+  optimizer: "prodigy"
+  learning_rate: 1.0
+  weight_decay: 0.01
   timestep_distribution: "uniform"
   timestep_shift: 12.0
   loss_weight_strength: 1.0
