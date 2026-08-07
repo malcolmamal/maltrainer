@@ -4,20 +4,27 @@
 Reads only the file's metadata header, so it is instant even on a multi-gigabyte
 checkpoint and never allocates the tensors.
 
-    # human-readable summary
-    python scripts/inspect_lora_metadata.py output/minimax_h3_lora/minimax_h3_lora_step_2250.safetensors
+Usage:
 
-    # every metadata key, verbatim
-    python scripts/inspect_lora_metadata.py MODEL.safetensors --all
+  Summary of how a checkpoint was trained (default):
+    python scripts/inspect_lora_metadata.py output/minimax_h3_lora/..._step_2250.safetensors
 
-    # recover the training config as runnable YAML
+  Recover the training config as runnable YAML, to reproduce or fork a run:
+    python scripts/inspect_lora_metadata.py MODEL.safetensors --config
     python scripts/inspect_lora_metadata.py MODEL.safetensors --config -o recovered.yaml
+    python train_minimax_h3_lora.py --config recovered.yaml
 
-    # raw JSON, for scripting
+  Compare two checkpoints -- what ACTUALLY differed between two runs:
+    python scripts/inspect_lora_metadata.py A.safetensors --diff B.safetensors
+
+  Every key, for grepping or scripting:
+    python scripts/inspect_lora_metadata.py MODEL.safetensors --all
     python scripts/inspect_lora_metadata.py MODEL.safetensors --json
 
-    # what changed between two runs
-    python scripts/inspect_lora_metadata.py A.safetensors --diff B.safetensors
+Key naming: ss_* are flat scalars in the kohya/musubi convention; maltrainer_* are this
+trainer's own record, including values resolved at runtime that the config cannot state
+(the sigma shift chosen for the latent size, the dtype adapters trained in, the optimizer
+arguments the installed library accepted). See docs/lora-metadata.md.
 """
 
 from __future__ import annotations
@@ -142,13 +149,42 @@ def diff(left: Dict[str, str], right: Dict[str, str], left_name: str, right_name
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("model", type=Path, help="path to a .safetensors LoRA")
-    parser.add_argument("--all", action="store_true", help="print every metadata key verbatim")
-    parser.add_argument("--json", action="store_true", help="print all metadata as JSON")
-    parser.add_argument("--config", action="store_true", help="recover the embedded training config")
-    parser.add_argument("-o", "--output", type=Path, help="write --config to this file instead of stdout")
-    parser.add_argument("--diff", type=Path, metavar="OTHER", help="compare against another checkpoint")
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Notes:\n"
+            "  * Checkpoints written before metadata embedding existed report 'no metadata'\n"
+            "    rather than failing. Only runs started after that change carry it.\n"
+            "  * The embedded config contains absolute local paths (dataset, base models).\n"
+            "    Set output.embed_config: false in the training config to omit it.\n"
+            "  * --diff ignores the config blob and timestamps, so it reports only settings\n"
+            "    that genuinely differ.\n"
+        ),
+    )
+    parser.add_argument("model", type=Path, help="path to a .safetensors LoRA checkpoint")
+    parser.add_argument(
+        "--all", action="store_true", help="print every metadata key as key=value, sorted"
+    )
+    parser.add_argument("--json", action="store_true", help="print all metadata as a JSON object")
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="recover the embedded training config as YAML (runnable with --config)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help="with --config, write the YAML to FILE instead of stdout",
+    )
+    parser.add_argument(
+        "--diff",
+        type=Path,
+        metavar="OTHER",
+        help="compare this checkpoint's settings against OTHER and list the differences",
+    )
     args = parser.parse_args()
 
     if not args.model.exists():
