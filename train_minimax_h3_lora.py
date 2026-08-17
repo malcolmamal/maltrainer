@@ -221,7 +221,7 @@ class MiniMaxH3LoRATrainer:
 
         # Also cache unconditional prompt if differential guidance is enabled
         train_config = self.config.get("train", {})
-        if train_config.get("do_differential_guidance", False):
+        if train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)):
             uncond_prompt = str(train_config.get("unconditional_prompt", ""))
             if uncond_prompt not in self.text_cache:
                 with torch.no_grad():
@@ -291,6 +291,7 @@ class MiniMaxH3LoRATrainer:
             alpha=lora_config.get("alpha", 16.0),
             prefix=lora_config.get("prefix", "diffusion_model."),
             target_modules=lora_config.get("target_modules", ["qkv_proj", "out_proj", "fc1", "fc2"]),
+            include_adaln=bool(lora_config.get("include_adaln", False)),
         )
         # Adapters train in fp32 by default. bf16 carries ~8 mantissa bits (~0.4% relative
         # precision), and a LoRA update is small next to the weight it lands on, so in bf16 a
@@ -648,27 +649,62 @@ class MiniMaxH3LoRATrainer:
                     # than negating both sides, which is the same loss written twice over.
                     v_pred_patches = model_output.video
 
-                    # Optional Differential Guidance (CFG-style update)
-                    if train_config.get("do_differential_guidance", False):
-                        uncond_prompt = str(train_config.get("unconditional_prompt", ""))
-                        uncond_embeds = self.text_cache[uncond_prompt].to(device=self.device, dtype=self.dtype).expand(bsz, -1, -1)
-                        uncond_output = self.lora_network(
-                            video_hidden_states=video_patches,
-                            audio_hidden_states=dummy_audio,
-                            encoder_hidden_states=uncond_embeds,
-                            timestep=model_timesteps,
-                            timestep_indices=timestep_indices,
-                            token_tags=token_tags,
-                            position_ids=position_ids,
-                            video_indices=video_indices,
-                            audio_indices=audio_indices,
-                            text_indices=text_indices,
-                        )
-                        guidance_scale = float(train_config.get("differential_guidance_scale", 3.0))
-                        v_pred_patches = uncond_output.video + guidance_scale * (model_output.video - uncond_output.video)
-
                     target_velocity = latents - noise
                     target_patches = patchify_video(target_velocity)
+
+                    # Contrastive guidance loss (ai-toolkit's do_guidance_loss).
+                    #
+                    # H3 is guidance-distilled: CFG is baked into the weights, so a plain
+                    # flow-matching target trains the conditional direction too weakly and the
+                    # distillation degrades as the LoRA takes hold. The fix extrapolates the
+                    # TARGET away from the model's own unconditional prediction, rather than
+                    # applying CFG to the prediction:
+                    #
+                    #   target' = uncond + scale * (target - uncond)
+                    #
+                    # The unconditional pass runs under no_grad and is detached: it shapes what
+                    # the conditional pass aims at, and must not itself be trained through.
+                    if train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)):
+                        uncond_prompt = str(train_config.get("unconditional_prompt", ""))
+                        uncond_embeds = self.text_cache[uncond_prompt].to(device=self.device, dtype=self.dtype).expand(bsz, -1, -1)
+                        with torch.no_grad():
+                            uncond_output = self.lora_network(
+                                video_hidden_states=video_patches,
+                                audio_hidden_states=dummy_audio,
+                                encoder_hidden_states=uncond_embeds,
+                                timestep=model_timesteps,
+                                timestep_indices=timestep_indices,
+                                token_tags=token_tags,
+                                position_ids=position_ids,
+                                video_indices=video_indices,
+                                audio_indices=audio_indices,
+                                text_indices=text_indices,
+                            )
+                        uncond_patches = uncond_output.video.detach().float()
+                        guided = target_patches.float()
+
+                        if train_config.get("guidance_loss_cfg_zero", False):
+                            # CFG-Zero*: rescale the unconditional direction onto the
+                            # conditional one before extrapolating, so a poorly-aligned
+                            # uncond prediction does not drag the target sideways.
+                            flat_cond = guided.reshape(bsz, -1)
+                            flat_uncond = uncond_patches.reshape(bsz, -1)
+                            dot = (flat_cond * flat_uncond).sum(dim=1, keepdim=True)
+                            squared_norm = (flat_uncond ** 2).sum(dim=1, keepdim=True) + 1e-8
+                            uncond_patches = uncond_patches * (dot / squared_norm).view(bsz, 1, 1)
+
+                        scale = float(train_config.get("guidance_loss_target", 3.5))
+                        if str(train_config.get("guidance_loss_schedule", "sigma")).lower() == "sigma":
+                            # (target - uncond) carries sigma * fresh_noise, which nothing can
+                            # predict at low sigma, so decay toward a plain flow target there.
+                            sigma_col = shifted_sigmas.detach().float().view(bsz, 1, 1)
+                            scale_eff = 1.0 + (scale - 1.0) * sigma_col
+                        else:
+                            scale_eff = scale
+
+                        target_patches = (
+                            uncond_patches + scale_eff * (guided - uncond_patches)
+                        ).detach().to(target_patches.dtype)
 
                     loss = torch.nn.functional.mse_loss(v_pred_patches.float(), target_patches.float())
 

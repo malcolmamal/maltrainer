@@ -18,6 +18,14 @@ lora:
   alpha: 32
   prefix: "diffusion_model."
   target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
+  # Per-block adaln_proj (NOT final_layer). false = 208 layers, true = 258, which matches the
+  # module count Fizgig reports the reference trainer using on this checkpoint.
+  # On the PRUNED build adaln_proj is [96768, 8]: small, kept by ComfyUI's inference build, and
+  # the timestep-conditioned modulation -- Fizgig found that excluding it presents from outside
+  # as "the mid/low-noise range never trains". (On the FULL bf16 model it is [96768, 2688] and
+  # should stay excluded: it would soak up most of the capacity for weights inference discards.)
+  # We use the pruned checkpoint, so true is worth an A/B.
+  include_adaln: false
 
 train:
   batch_size: 1
@@ -49,7 +57,19 @@ train:
   sigmoid_scale: 1.0
   timestep_shift: 12.0      # used only by "uniform" / "logit_normal"
   loss_weight_strength: 1.0
-  do_differential_guidance: false
+  # --- Contrastive guidance (ai-toolkit's do_guidance_loss; their H3 default) ---
+  # H3 is guidance-distilled: CFG is baked in, so a plain flow target trains the conditional
+  # direction too weakly and the distillation degrades as the LoRA takes hold. This runs a
+  # second, gradient-free pass on the empty prompt and extrapolates the TARGET away from it:
+  #   target' = uncond + scale * (target - uncond)
+  # Costs roughly a second forward pass per step. ai-toolkit calls this the slower but more
+  # durable of the two fixes; the training-adapter route is faster but degrades over long runs.
+  do_guidance_loss: true
+  guidance_loss_target: 3.5          # ai-toolkit's H3 default
+  guidance_loss_schedule: "sigma"    # decay toward a plain target as sigma falls
+  unconditional_prompt: ""
+  # guidance_loss_cfg_zero: false    # CFG-Zero*: project uncond onto the conditional direction
+  do_differential_guidance: false    # legacy alias for do_guidance_loss
   max_grad_norm: 1.0
   save_every: 250
 

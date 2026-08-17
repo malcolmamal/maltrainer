@@ -52,6 +52,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         alpha: float = 16.0,
         target_modules: Optional[List[str]] = None,
         prefix: str = "diffusion_model.",
+        include_adaln: bool = False,
     ):
         super().__init__()
         self.transformer = transformer
@@ -59,6 +60,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         self.alpha = alpha
         self.target_modules = target_modules or ["qkv_proj", "out_proj", "fc1", "fc2"]
         self.prefix = prefix
+        self.include_adaln = include_adaln
 
         self.lora_layers = nn.ModuleDict()
         self.name_map: Dict[str, str] = {}
@@ -74,35 +76,58 @@ class MiniMaxH3LoRANetwork(nn.Module):
         (attn.qkv_proj, attn.out_proj, mlp.fc1, mlp.fc2) plus the 2 token_refiner blocks.
         """
         injected = 0
+        adaln = 0
         for name, module in self.transformer.named_modules():
-            # Skip AdaLN, modulation, or norm projections
-            if "adaln_proj" in name or "modulation" in name or "norm" in name:
+            if "modulation" in name or "norm" in name:
+                continue
+
+            # adaln_proj is checkpoint-dependent, which is why it is a switch rather than a
+            # blanket skip. On the FULL bf16 model its up-matrices are [96768, 2688] and soak
+            # up most of the LoRA's capacity for weights ComfyUI's pruned inference build then
+            # discards. On the PRUNED build it is [96768, 8] -- small, deploy-consistent, and
+            # the timestep-conditioned modulation, so excluding it presents from the outside as
+            # "the mid/low-noise range never trains" (Fizgig's finding on this checkpoint).
+            # Per-block AdaLN only: final_layer.adaln_proj stays out.
+            if "adaln_proj" in name:
+                if not (self.include_adaln and name.startswith("blocks.")):
+                    continue
+                if isinstance(module, nn.Linear):
+                    self._add_lora_layer(name, module)
+                    adaln += 1
+                    injected += 1
                 continue
 
             if name.rsplit(".", 1)[-1] in self.target_modules:
                 if isinstance(module, nn.Linear):
-                    lora_layer = MiniMaxH3LoRALayer(module, self.rank, self.alpha)
-                    safe_name = name.replace(".", "_")
-                    self.lora_layers[safe_name] = lora_layer
-                    self.name_map[safe_name] = name
-
-                    original_forward = module.forward
-
-                    def make_forward(orig_fwd, lora):
-                        def forward(x):
-                            base = orig_fwd(x)
-                            delta = lora(x)
-                            if delta.dtype == base.dtype:
-                                return base + delta
-                            # Sum in the delta's (higher) precision, then round once, so a
-                            # small fp32 update is not truncated before it is even added.
-                            return (base + delta).to(base.dtype)
-                        return forward
-
-                    module.forward = make_forward(original_forward, lora_layer)
+                    self._add_lora_layer(name, module)
                     injected += 1
 
-        logger.info("Injected %d LoRA layers into MiniMax H3 transformer (rank=%d, alpha=%s)", injected, self.rank, self.alpha)
+        logger.info(
+            "Injected %d LoRA layers into MiniMax H3 transformer (rank=%d, alpha=%s%s)",
+            injected, self.rank, self.alpha,
+            f", including {adaln} per-block adaln_proj" if adaln else ", adaln_proj excluded",
+        )
+
+    def _add_lora_layer(self, name: str, module: nn.Linear) -> None:
+        lora_layer = MiniMaxH3LoRALayer(module, self.rank, self.alpha)
+        safe_name = name.replace(".", "_")
+        self.lora_layers[safe_name] = lora_layer
+        self.name_map[safe_name] = name
+
+        original_forward = module.forward
+
+        def make_forward(orig_fwd, lora):
+            def forward(x):
+                base = orig_fwd(x)
+                delta = lora(x)
+                if delta.dtype == base.dtype:
+                    return base + delta
+                # Sum in the delta's (higher) precision, then round once, so a small fp32
+                # update is not truncated before it is even added.
+                return (base + delta).to(base.dtype)
+            return forward
+
+        module.forward = make_forward(original_forward, lora_layer)
 
     def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
         """Move/cast only the adapters, leaving the frozen base untouched.
