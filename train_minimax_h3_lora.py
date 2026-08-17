@@ -136,6 +136,7 @@ class MiniMaxH3LoRATrainer:
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
         self.latent_cache: Dict[str, torch.Tensor] = {}
+        self._layout_cache: Dict[tuple, Dict[str, torch.Tensor]] = {}
         self.text_cache: Dict[str, torch.Tensor] = {}
 
         # Initialize accelerator
@@ -411,6 +412,42 @@ class MiniMaxH3LoRATrainer:
         save_path.write_text(json.dumps(payload, indent=2))
         self.last_saved_path = str(save_path)
 
+    def _build_packed_layout(self, num_text_tokens: int, latent_t: int, latent_h: int, latent_w: int) -> Dict[str, torch.Tensor]:
+        """Index/tag/position tensors for one [text | video] packed sequence.
+
+        Everything here is a function of the text length and the latent size, so the
+        conditional and unconditional passes need SEPARATE layouts whenever their prompts
+        tokenize to different lengths -- which they always do when the unconditional prompt
+        is empty (a single BOS token). Cached per shape signature; there are only ever a
+        couple of distinct ones in a run.
+        """
+        key = (num_text_tokens, latent_t, latent_h, latent_w)
+        cached = self._layout_cache.get(key)
+        if cached is not None:
+            return cached
+
+        num_video_tokens = latent_t * (latent_h // 2) * (latent_w // 2)
+        seq_len = num_text_tokens + num_video_tokens
+
+        text_indices = torch.arange(0, num_text_tokens, device=self.device)
+        video_indices = torch.arange(num_text_tokens, seq_len, device=self.device)
+        token_tags = torch.zeros((seq_len,), device=self.device, dtype=torch.long)
+        token_tags[text_indices] = MiniMaxH3TokenTag.TEXT
+        token_tags[video_indices] = MiniMaxH3TokenTag.VIDEO
+
+        layout = {
+            "text_indices": text_indices,
+            "video_indices": video_indices,
+            "audio_indices": torch.zeros((0,), device=self.device, dtype=torch.long),
+            "timestep_indices": torch.zeros((seq_len,), device=self.device, dtype=torch.long),
+            "token_tags": token_tags,
+            "position_ids": build_packed_position_ids(
+                num_text_tokens, latent_t, latent_h, latent_w
+            ).to(device=self.device),
+        }
+        self._layout_cache[key] = layout
+        return layout
+
     def _sample_timesteps(self, batch_size: int) -> torch.Tensor:
         train_config = self.config.get("train", {})
         distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
@@ -628,25 +665,16 @@ class MiniMaxH3LoRATrainer:
 
                     # 5. Build sequence inputs for MiniMax H3 transformer
                     _, c_lat, f_lat, h_lat, w_lat = latents.shape
-                    num_video_tokens = f_lat * (h_lat // 2) * (w_lat // 2)
-                    num_text_tokens = text_embeds.shape[1]
-                    seq_len = num_text_tokens + num_video_tokens
-
                     video_patches = patchify_video(noisy_latents)
                     dummy_audio = torch.zeros((bsz, 0, 32), device=self.device, dtype=self.dtype)
+                    layout = self._build_packed_layout(text_embeds.shape[1], f_lat, h_lat, w_lat)
+                    text_indices = layout["text_indices"]
+                    video_indices = layout["video_indices"]
+                    audio_indices = layout["audio_indices"]
+                    timestep_indices = layout["timestep_indices"]
+                    token_tags = layout["token_tags"]
 
-                    text_indices = torch.arange(0, num_text_tokens, device=self.device)
-                    video_indices = torch.arange(num_text_tokens, seq_len, device=self.device)
-                    audio_indices = torch.zeros((0,), device=self.device, dtype=torch.long)
-
-                    timestep_indices = torch.zeros((seq_len,), device=self.device, dtype=torch.long)
-                    token_tags = torch.zeros((seq_len,), device=self.device, dtype=torch.long)
-                    token_tags[text_indices] = MiniMaxH3TokenTag.TEXT
-                    token_tags[video_indices] = MiniMaxH3TokenTag.VIDEO
-
-                    position_ids = build_packed_position_ids(
-                        num_text_tokens, f_lat, h_lat, w_lat
-                    ).to(device=self.device)
+                    position_ids = layout["position_ids"]
 
                     # 6. Model forward pass
                     model_output = self.lora_network(
@@ -684,18 +712,24 @@ class MiniMaxH3LoRATrainer:
                     if train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)):
                         uncond_prompt = str(train_config.get("unconditional_prompt", ""))
                         uncond_embeds = self.text_cache[uncond_prompt].to(device=self.device, dtype=self.dtype).expand(bsz, -1, -1)
+                        # The empty prompt is one BOS token where the caption is several, and
+                        # the packed layout is sized from the text length -- indices, tags and
+                        # the video block's RoPE origin all shift with it. Build its own.
+                        uncond_layout = self._build_packed_layout(
+                            uncond_embeds.shape[1], f_lat, h_lat, w_lat
+                        )
                         with torch.no_grad():
                             uncond_output = self.lora_network(
                                 video_hidden_states=video_patches,
                                 audio_hidden_states=dummy_audio,
                                 encoder_hidden_states=uncond_embeds,
                                 timestep=model_timesteps,
-                                timestep_indices=timestep_indices,
-                                token_tags=token_tags,
-                                position_ids=position_ids,
-                                video_indices=video_indices,
-                                audio_indices=audio_indices,
-                                text_indices=text_indices,
+                                timestep_indices=uncond_layout["timestep_indices"],
+                                token_tags=uncond_layout["token_tags"],
+                                position_ids=uncond_layout["position_ids"],
+                                video_indices=uncond_layout["video_indices"],
+                                audio_indices=uncond_layout["audio_indices"],
+                                text_indices=uncond_layout["text_indices"],
                             )
                         uncond_patches = uncond_output.video.detach().float()
                         guided = target_patches.float()
