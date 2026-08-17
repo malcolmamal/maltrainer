@@ -19,8 +19,11 @@ dataset:
   num_workers: 0
 
 lora:
-  rank: 32
-  alpha: 32
+  # 16 is what everyone reporting good H3 results uses: ai-toolkit's H3 default, Cynix85's
+  # working recipe, and the rank of the Ostris training adapter itself. alpha == rank keeps
+  # the scale at 1.0. On a distilled model, less capacity to overwrite seems to help.
+  rank: 16
+  alpha: 16
   prefix: "diffusion_model."
   target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
   # Per-block adaln_proj (NOT final_layer). false = 208 layers, true = 258, which matches the
@@ -29,8 +32,10 @@ lora:
   # the timestep-conditioned modulation -- Fizgig found that excluding it presents from outside
   # as "the mid/low-noise range never trains". (On the FULL bf16 model it is [96768, 2688] and
   # should stay excluded: it would soak up most of the capacity for weights inference discards.)
-  # We use the pruned checkpoint, so true is worth an A/B.
-  include_adaln: false
+  # We use the pruned checkpoint, so this is on. Note rank 16 exceeds adaln_proj's input
+  # width of 8: the product is still rank <= 8, but Fizgig found that capping the rank to
+  # min(in, out) cost 73% of its learning, so the requested rank is used as-is.
+  include_adaln: true
 
 train:
   batch_size: 1
