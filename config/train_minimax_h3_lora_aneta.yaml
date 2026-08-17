@@ -4,6 +4,11 @@ model:
   transformer_path: "C:\\Development\\ComfyUI\\models\\diffusion_models\\MinimaxH3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors"
   vae_path: "C:\\Development\\ComfyUI\\models\\vae\\minimax_h3_video_vae_fp16.safetensors"
   text_encoder_path: "C:\\Development\\ComfyUI\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+  # Ostris de-distillation ("training") adapter: a frozen rank-16 LoRA kept live during
+  # training and absent at inference, so the trainable LoRA learns under deployment-like
+  # conditions. Its keys already match this trainer's naming exactly (416 tensors = the same
+  # 208 modules). Reported to stack well with contrastive guidance. Remove to disable.
+  training_adapter_path: "C:\\Development\\trainers\\minimax_h3_training_adapter_v1.safetensors"
 
 dataset:
   path: "C:\\Development\\trainers\\maltrainer\\datasets\\aneta"
@@ -53,7 +58,12 @@ train:
   # (see _best preset) paired adamw8bit with krea2_shift, while the preferred Prodigy run
   # used uniform+12.0 -- so optimizer and schedule were never varied independently. This
   # config changes only the schedule relative to that Prodigy run, isolating it.
-  timestep_distribution: "krea2_shift"
+  # "sigmoid" = UNSHIFTED logit-normal (sigma = sigmoid(N(0,1)), median 0.5), which the
+  # r/StableDiffusion H3 thread flags as important for character LoRAs and which VrFrog and
+  # Different_Fix_2217 both report working paired with contrastive guidance. Note Fizgig saw
+  # unshifted densities overdrive adapters at 1e-4 -- but ran them WITHOUT contrastive
+  # guidance, which changes the dynamics. Alternatives: "krea2_shift", "uniform", "logit_normal".
+  timestep_distribution: "sigmoid"
   sigmoid_scale: 1.0
   timestep_shift: 12.0      # used only by "uniform" / "logit_normal"
   loss_weight_strength: 1.0

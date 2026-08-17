@@ -5,6 +5,7 @@ LoRA network injection for MiniMax H3 Transformer blocks.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import torch
@@ -113,21 +114,105 @@ class MiniMaxH3LoRANetwork(nn.Module):
         safe_name = name.replace(".", "_")
         self.lora_layers[safe_name] = lora_layer
         self.name_map[safe_name] = name
+        self._wrap_forward(module, lora_layer)
 
+    @staticmethod
+    def _wrap_forward(module: nn.Linear, lora: nn.Module) -> None:
+        """Add ``lora(x)`` to a module's output, chaining over any existing wrapper.
+
+        Wrapping composes, so a frozen assistant adapter and the trainable adapter can both
+        sit on the same Linear: each adds its own delta to the same input, and the order
+        they were attached in does not change the sum.
+        """
         original_forward = module.forward
 
-        def make_forward(orig_fwd, lora):
-            def forward(x):
-                base = orig_fwd(x)
-                delta = lora(x)
-                if delta.dtype == base.dtype:
-                    return base + delta
-                # Sum in the delta's (higher) precision, then round once, so a small fp32
-                # update is not truncated before it is even added.
-                return (base + delta).to(base.dtype)
-            return forward
+        def forward(x, _orig=original_forward, _lora=lora):
+            base = _orig(x)
+            delta = _lora(x)
+            if delta.dtype == base.dtype:
+                return base + delta
+            # Sum in the delta's (higher) precision, then round once, so a small fp32
+            # update is not truncated before it is even added.
+            return (base + delta).to(base.dtype)
 
-        module.forward = make_forward(original_forward, lora_layer)
+        module.forward = forward
+
+    def load_assistant_adapter(
+        self,
+        path: str,
+        *,
+        multiplier: float = 1.0,
+        device=None,
+        dtype: Optional[torch.dtype] = None,
+    ) -> int:
+        """Attach a frozen de-distillation ("training") adapter alongside the trainable LoRA.
+
+        H3 is guidance-distilled, and training against it directly degrades that
+        distillation. ai-toolkit's mitigation is to run a pre-trained adapter LIVE during
+        training -- never merged (the base is quantized, so a merge would resample every
+        INT8 scale) and never trained. It shapes the distribution the trainable LoRA sees,
+        and is absent at inference, so the LoRA learns under deployment-like conditions.
+
+        Kept in a separate ModuleDict from the trainable adapters, so it is excluded from
+        ``trainable_parameters()`` and from the saved checkpoint automatically.
+        """
+        from safetensors.torch import load_file
+
+        state = load_file(str(path))
+        pairs: Dict[str, Dict[str, torch.Tensor]] = {}
+        for key, value in state.items():
+            for suffix, slot in (
+                (".lora_A.weight", "down"), (".lora_down.weight", "down"),
+                (".lora_B.weight", "up"), (".lora_up.weight", "up"),
+                (".alpha", "alpha"),
+            ):
+                if key.endswith(suffix):
+                    pairs.setdefault(key[: -len(suffix)], {})[slot] = value
+                    break
+
+        if not hasattr(self, "assistant_layers"):
+            self.assistant_layers = nn.ModuleDict()
+
+        attached, skipped = 0, []
+        for name, parts in sorted(pairs.items()):
+            if "down" not in parts or "up" not in parts:
+                continue
+            module_path = name[len(self.prefix):] if name.startswith(self.prefix) else name
+            try:
+                module = self.transformer.get_submodule(module_path)
+            except AttributeError:
+                skipped.append(module_path)
+                continue
+            if not isinstance(module, nn.Linear):
+                skipped.append(module_path)
+                continue
+
+            down, up = parts["down"], parts["up"]
+            rank = down.shape[0]
+            alpha = float(parts["alpha"].item()) if "alpha" in parts else float(rank)
+            layer = MiniMaxH3LoRALayer(module, rank, alpha)
+            layer.lora_down.weight.data.copy_(down.to(layer.lora_down.weight.dtype))
+            layer.lora_up.weight.data.copy_(up.to(layer.lora_up.weight.dtype))
+            layer.scale = (alpha / rank) * multiplier
+            layer.requires_grad_(False)
+            layer.eval()
+            if dtype is not None or device is not None:
+                layer.to(device=device, dtype=dtype)
+
+            self.assistant_layers[module_path.replace(".", "_")] = layer
+            self._wrap_forward(module, layer)
+            attached += 1
+
+        if skipped:
+            raise ValueError(
+                f"Training adapter targets {len(skipped)} module(s) this transformer does not "
+                f"expose; examples: {skipped[:5]}. Is it built for a different H3 checkpoint?"
+            )
+        logger.info(
+            "Attached frozen training adapter: %d modules, rank %d, multiplier %.2f (from %s)",
+            attached, rank, multiplier, Path(path).name,
+        )
+        return attached
 
     def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
         """Move/cast only the adapters, leaving the frozen base untouched.

@@ -300,6 +300,17 @@ class MiniMaxH3LoRATrainer:
         # the tensors H3 holds in fp32.
         self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
+        adapter_path = model_config.get("training_adapter_path") or lora_config.get("training_adapter_path")
+        if adapter_path:
+            attached = self.lora_network.load_assistant_adapter(
+                adapter_path,
+                multiplier=float(lora_config.get("training_adapter_multiplier", 1.0)),
+                device=self.device,
+                dtype=self.dtype,
+            )
+            self.run_metadata["training_adapter"] = Path(str(adapter_path)).name
+            self.run_metadata["training_adapter_modules"] = attached
+
         trainable = sum(p.numel() for p in self.lora_network.trainable_parameters())
         self.run_metadata["lora_dtype"] = str(self.lora_dtype).replace("torch.", "")
         self.run_metadata["trainable_parameters"] = trainable
@@ -403,7 +414,7 @@ class MiniMaxH3LoRATrainer:
     def _sample_timesteps(self, batch_size: int) -> torch.Tensor:
         train_config = self.config.get("train", {})
         distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
-        if distribution in {"krea2_shift", "krea2"}:
+        if distribution in {"sigmoid", "krea2_shift", "krea2"}:
             # Logit-normal base, as musubi-tuner's krea2_shift does before shifting.
             scale = float(train_config.get("sigmoid_scale", 1.0))
             z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * scale
@@ -431,6 +442,12 @@ class MiniMaxH3LoRATrainer:
         """
         train_config = self.config.get("train", {})
         distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
+        if distribution == "sigmoid":
+            # No shift at all: sigma = sigmoid(N(0,1)), median 0.5. Community reports on
+            # H3 character LoRAs single this out as important, paired with contrastive
+            # guidance -- which changes the dynamics that made unshifted densities
+            # overdrive adapters in trainers that ran them without it.
+            return 1.0
         if distribution not in {"krea2_shift", "krea2"}:
             return float(train_config.get("timestep_shift", 12.0))
 
