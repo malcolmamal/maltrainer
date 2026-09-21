@@ -587,6 +587,29 @@ class MiniMaxH3LoRATrainer:
             except Exception as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr)
+        elif optimizer_name in {"automagic3", "automagic", "automagic_v3"}:
+            from maltrainer.optimizers import Automagic3
+
+            configured_lr = float(train_config.get("learning_rate", 1e-6))
+            automagic_params = {
+                "lr": configured_lr,
+                "min_lr": float(train_config.get("automagic_min_lr", train_config.get("min_lr", 1e-8))),
+                "max_lr": float(train_config.get("automagic_max_lr", train_config.get("max_lr", 1e3))),
+                "beta2": float(train_config.get("automagic_beta2", train_config.get("beta2", 0.999))),
+                "eps": float(train_config.get("automagic_eps", train_config.get("eps", 1e-30))),
+                "clip_threshold": float(train_config.get("automagic_clip_threshold", train_config.get("clip_threshold", 1.0))),
+                "weight_decay": weight_decay,
+                "polarity_history": int(train_config.get("automagic_polarity_history", train_config.get("polarity_history", 8))),
+                "fused": bool(train_config.get("automagic_fused", False)),
+            }
+            self.optimizer = Automagic3(params, **automagic_params)
+            logger.info(
+                "Using Automagic3 optimizer: start_lr=%.2e, history=%d, clip_threshold=%.2f",
+                automagic_params["lr"],
+                automagic_params["polarity_history"],
+                automagic_params["clip_threshold"],
+            )
+            self.run_metadata["optimizer_resolved"] = {"name": "automagic3", **automagic_params}
         else:
             self.optimizer = AdamW(params, lr=lr)
 
@@ -785,7 +808,16 @@ class MiniMaxH3LoRATrainer:
                     group = self.optimizer.param_groups[0]
                     current_lr = group["lr"]
                     prodigy_d = group.get("d")
-                    if prodigy_d is not None:
+                    # accelerate's AcceleratedOptimizer does not forward custom methods
+                    inner_optimizer = getattr(self.optimizer, "optimizer", self.optimizer)
+                    if hasattr(inner_optimizer, "get_avg_learning_rate"):
+                        adapted_lr = inner_optimizer.get_avg_learning_rate()
+                        self.progress_logger.info(
+                            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (automagic3)",
+                            global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
+                            epoch + 1, num_epochs, adapted_lr,
+                        )
+                    elif prodigy_d is not None:
                         self.progress_logger.info(
                             "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (mult %.3f x d %.2e)",
                             global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
