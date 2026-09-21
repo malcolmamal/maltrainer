@@ -1,0 +1,11 @@
+[
+  {
+    "id": "knight_woman",
+    "prompt": "feliciaday, a woman, as a medieval knight in silver plate armor, castle courtyard, cinematic photo",
+    "checks": [
+      "Is the person a woman?",
+      "Is the person wearing metal plate armor?",
+      "Is the setting a castle or castle courtyard?"
+    ]
+  }
+]

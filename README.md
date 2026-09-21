@@ -1,11 +1,19 @@
 # Maltrainer
 
-Modern AI model training toolkit focused on Z-Image and modern diffusion architectures.
+Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern diffusion architectures.
 
 ## Features
 
+- **Qwen-Image 2.1 LoRA Training**: Trains directly on the ComfyUI single-file checkpoints (INT8 ConvRot
+  transformer and text encoder), with no diffusers conversion. Benchmarked recommended setting: Automagic3,
+  ~1500 steps, ≈ 13–16 min on an RTX 5090. Training is currently **square 512×512**; more resolutions and
+  aspect-ratio bucketing are planned. See the [Qwen-Image 2.1 training guide](docs/qwen-image-2.1-lora-training.md).
 - **Z-Image LoRA Training**: Train LoRA adapters for Z-Image (base) models
 - **Z-Image Textual Inversion**: Train textual inversion embeddings for Z-Image
+- **MiniMax H3 LoRA Training**: CLI trainer in `train_minimax_h3_lora.py`
+- **Optimizers**: AdamW 8-bit, Prodigy, and Automagic3 (self-tuning learning rate)
+- **Web UI**: Pick a dataset, model and optimizer, train for a number of epochs or an exact number of steps, and
+  follow live progress from a job queue
 - **YAML Configuration**: Simple YAML-based configuration system
 - **Modern Architecture**: Clean, modular codebase built on PyTorch and Diffusers
 
@@ -37,15 +45,32 @@ pip install -r requirements.txt
 
 The trainer UI is an Angular app that talks to a FastAPI backend over HTTP + WebSocket.
 
+### Quick launch
+
+One command starts both the backend (port 8008) and the UI (port 3003) and opens http://localhost:3003:
+
+```bash
+run_webui.bat      # Windows: each server gets its own window
+./run_webui.sh     # Linux / macOS / Git Bash: Ctrl-C stops both
+```
+
+Set your paths once: copy `webui.local.example.bat` to `webui.local.bat` (or `webui.local.example.sh` to
+`webui.local.sh`) and edit `DATASETS_PATH` and `COMFYUI_MODELS_PATH`. Both files are git-ignored. A server that is
+already running on its port is reused, and the first run installs the frontend dependencies (needs Node.js).
+Set `WEBUI_NO_BROWSER=1` to skip opening the browser. The manual steps below do the same thing in two terminals.
+
 ### Backend setup
 
-1. Set datasets root (optional). Defaults to ./datasets when not set:
+1. Set the datasets root (optional; defaults to `./datasets`) and, for Qwen-Image 2.1, your ComfyUI models folder:
    ```bash
    # Windows (PowerShell)
    $env:DATASETS_PATH = "C:\Development\projects\maltrainer\datasets"
+   $env:COMFYUI_MODELS_PATH = "C:\ComfyUI\models"
    # Linux/macOS
    export DATASETS_PATH="/path/to/datasets"
+   export COMFYUI_MODELS_PATH="/path/to/ComfyUI/models"
    ```
+   The backend finds the three Qwen-Image 2.1 files anywhere under `diffusion_models/`, `text_encoders/` and `vae/`.
 
 2. Run the API server:
    ```bash
@@ -67,9 +92,42 @@ The trainer UI is an Angular app that talks to a FastAPI backend over HTTP + Web
 
 3. Open http://localhost:3003
 
-The UI will list datasets from DATASETS_PATH, let you start training or dry runs, and show live logs/progress.
+The UI lists datasets from `DATASETS_PATH`. For each run you pick:
+
+- **Model**: Qwen-Image 2.1 (default) or Z-Image. Missing Qwen model files are reported up front.
+- **Optimizer** and **learning rate**: Automagic3 (recommended for Qwen), AdamW 8-bit, or Prodigy. Picking an
+  optimizer fills in its default learning rate.
+- **Train for**: **Max steps** (stops exactly at N) or **Epochs** (N full passes). For Qwen, leave Max steps empty
+  and the UI picks a step count from your dataset size (~70 epochs, kept within 1000–2500 steps). Z-Image only runs
+  whole epochs, so a step budget there is rounded up to the next epoch.
+- **Save every**, and the **trigger word** (defaults to the dataset folder name).
+
+A plan preview shows total steps, epochs, an estimated time, and the output folder before you start, plus notes
+and warnings: how the automatic step count was chosen, a run that is too short or too long, and non-square images
+(Qwen training is currently square 512×512, so they get squashed; crop them first). Jobs start
+right away when the trainer is idle and queue otherwise. Dry runs walk through the planned steps without loading
+models. Qwen runs each get their own folder: `output/qwen_image_2_1/<dataset>-<optimizer>-<duration>/`.
+
+Click **Open** on a job for its live page, with a progress bar, speed and time remaining, and the full log:
+
+[![A Qwen-Image 2.1 training run in the web UI](docs/images/qwen21-web-ui/training-job.webp)](docs/images/qwen21-web-ui/training-job.webp)
+
+See [Watching a run](docs/qwen-image-2.1-lora-training.md#watching-a-run) for what each part shows.
 
 ## Quick Start
+
+### Qwen-Image 2.1 LoRA Training
+
+1. Put the three Comfy-Org Qwen-Image 2.1 files in your ComfyUI models folder (see the
+   [guide](docs/qwen-image-2.1-lora-training.md#requirements)).
+2. Prepare a dataset folder: **square images** (training is square 512×512 for now, with no cropping or bucketing
+   yet, so crop first) and optional `.txt` captions.
+3. Copy the template, replace `[comfyui_models]` and `[person_to_train]`, and train:
+   ```bash
+   cp config/qwen_image_2_1_template.yaml config/my_qwen_lora.yaml
+   python train_qwen_image_2_1_lora.py --config config/my_qwen_lora.yaml
+   ```
+   Or use the web UI, which fills the template in for you.
 
 ### LoRA Training
 
@@ -227,10 +285,14 @@ output/
 - PyTorch 2.10+ (for CUDA 13.0 support)
 - CUDA 11.8 - 13.0 (for GPU training)
 - 24GB+ VRAM recommended for Z-Image
+- ≈ 11 GB VRAM for Qwen-Image 2.1 at 512px (INT8 base model)
+- `transformers` 4.57+ for the Qwen3-VL text encoder (Qwen-Image 2.1, MiniMax H3)
 
 ## Documentation
 
 See `docs/` directory for detailed documentation:
+- [Qwen-Image 2.1 LoRA Training](docs/qwen-image-2.1-lora-training.md)
+- [Qwen-Image 2.1 Optimizer Benchmark: AdamW vs Prodigy vs Automagic3](docs/qwen-image-2.1-optimizer-benchmark.md)
 - [Textual Inversion and Z-Image Support](docs/textual-inversion-z-image.md)
 - [Training Options and OneTrainer Parity](docs/training-options-and-parity.md)
 - [OneTrainer Architecture and Multi-Model Plan](docs/onetrainer-architecture-and-multi-model-plan.md)

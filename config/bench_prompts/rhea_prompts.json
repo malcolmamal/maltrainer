@@ -1,0 +1,8 @@
+[
+  {"id": "portrait", "prompt": "rheaseehorn a photo of rheaseehorn, studio portrait, dark background",
+   "checks": ["Is this a portrait photograph of a woman?", "Is the background dark?"]},
+  {"id": "knight_woman", "prompt": "rheaseehorn, a woman, as a medieval knight in silver plate armor, castle courtyard, cinematic photo",
+   "checks": ["Is the person a woman?", "Is the person wearing metal plate armor?", "Is the setting a castle or castle courtyard?"]},
+  {"id": "cafe", "prompt": "rheaseehorn laughing at a table in a busy coffee shop, candid photo, warm window light, medium shot",
+   "checks": ["Is the person laughing or smiling broadly?", "Is the setting the inside of a coffee shop or cafe?"]}
+]
