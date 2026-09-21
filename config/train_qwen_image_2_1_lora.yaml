@@ -6,10 +6,10 @@ model:
   text_encoder_path: "C:\\Development\\ComfyUI\\models\\text_encoders\\qwen3vl_8b_int8_convrot.safetensors"
 
 dataset:
-  path: "C:\\Development\\trainers\\maltrainer\\datasets\\aneta"
+  path: "datasets/my_subject"
   resolution: 512
-  trigger: "aneta"
-  default_caption: "a photo of aneta"
+  trigger: "my_subject"
+  default_caption: "a photo of my_subject"
   repeats: 1
   num_workers: 0
 

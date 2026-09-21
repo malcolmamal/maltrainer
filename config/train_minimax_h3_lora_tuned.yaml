@@ -11,10 +11,10 @@ model:
   training_adapter_path: "C:\\Development\\trainers\\minimax_h3_training_adapter_v1.safetensors"
 
 dataset:
-  path: "C:\\Development\\trainers\\maltrainer\\datasets\\aneta"
+  path: "datasets/my_subject"
   resolution: 512
-  trigger: "aneta"
-  default_caption: "a photo of aneta"
+  trigger: "my_subject"
+  default_caption: "a photo of my_subject"
   repeats: 1
   num_workers: 0
 
