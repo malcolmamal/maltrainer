@@ -5,7 +5,11 @@
       <h1>Training job</h1>
       <p class="subtitle">Live output streamed from the training process.</p>
     </div>
-    <div class="status" [class.failed]="status() === 'failed'" [class.exited]="status() === 'exited'">
+    <div
+      class="status"
+      [class.failed]="status() === 'failed'"
+      [class.exited]="status() === 'exited'"
+    >
       {{ status() }}
     </div>
   </div>
@@ -15,6 +19,14 @@
       <div>
         <p class="label">Dataset</p>
         <p class="value">{{ job()?.dataset }}</p>
+      </div>
+      <div>
+        <p class="label">Model · optimizer</p>
+        <p class="value">{{ job()?.model }} · {{ job()?.optimizer }}</p>
+      </div>
+      <div>
+        <p class="label">Duration</p>
+        <p class="value">{{ job()?.duration }}</p>
       </div>
       <div>
         <p class="label">Output</p>

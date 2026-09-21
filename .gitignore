@@ -4,3 +4,12 @@ datasets/
 output/
 __pycache__/
 *.pyc
+# generated images from sampling / benchmarks
+samples/
+
+# local Claude Code / editor launch configs
+.claude/
+
+# per-machine web UI launcher settings (copy the .example files)
+webui.local.bat
+webui.local.sh
