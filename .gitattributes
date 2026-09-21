@@ -1,0 +1,5 @@
+# Launchers: batch files must be CRLF and shell scripts LF, whatever the checkout's autocrlf setting
+run_webui.bat text eol=crlf
+webui.local.example.bat text eol=crlf
+run_webui.sh text eol=lf
+webui.local.example.sh text eol=lf

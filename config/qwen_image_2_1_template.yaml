@@ -1,0 +1,59 @@
+# Qwen-Image 2.1 LoRA template - the benchmarked recommended setting (see docs/qwen-image-2.1-lora-training.md).
+#
+# Used by the web UI, which fills in the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    COMFYUI_MODELS_PATH; the UI finds each file anywhere under the matching subfolder
+# For the CLI, copy this file and replace the placeholders yourself.
+
+model:
+  transformer_path: "[comfyui_models]/diffusion_models/qwen_image_2.1_int8_convrot.safetensors"
+  vae_path: "[comfyui_models]/vae/qwen_image_2.1_vae_bf16.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3vl_8b_int8_convrot.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+  num_workers: 0
+
+lora:
+  rank: 16
+  alpha: 16
+  prefix: "diffusion_model."
+  target_modules: ["to_q", "to_k", "to_v", "to_out.0", "gate_up", "img_mlp.out"]
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  # Duration: max_steps (> 0) wins; otherwise num_epochs full epochs.
+  # ~1500 steps (60-80 epochs for ~20 images) is the benchmarked sweet spot for Automagic3.
+  max_steps: 1500
+  num_epochs: 70
+  save_every: 250
+  timestep_distribution: "shift"
+  sigmoid_scale: 1.0
+  max_grad_norm: 1.0
+  optimizer: "automagic3"
+  learning_rate: 1.0e-6           # Automagic3 launch point; use 1.0e-4 for adamw8bit, 1.0 for prodigy
+  weight_decay: 0.01
+  automagic_polarity_history: 8
+  automagic_clip_threshold: 1.0
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/qwen_image_2_1/[person_to_train]"
+  name: "qwen21_[person_to_train]"
+  format: "diffusers"             # lora_A / lora_B with the diffusion_model. prefix - loads in ComfyUI
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

@@ -2,9 +2,10 @@
   <div class="hero">
     <div>
       <p class="eyebrow">Maltrainer Studio</p>
-      <h1>Train a Z-Image LoRA with confidence.</h1>
+      <h1>Train a LoRA with confidence.</h1>
       <p class="subtitle">
-        Pick a dataset, configure a dry run if needed, and launch training with live progress.
+        Pick a dataset and a model (Qwen-Image 2.1 or Z-Image), choose how long to train, and launch
+        with live progress.
       </p>
     </div>
     <div class="envHint">
@@ -16,9 +17,7 @@
     <div class="card">
       <div class="cardHeader">
         <h2>Datasets</h2>
-        <button class="ghost" (click)="loadDatasets()" [disabled]="loading()">
-          Refresh
-        </button>
+        <button class="ghost" (click)="loadDatasets()" [disabled]="loading()">Refresh</button>
       </div>
 
       @if (loading()) {
@@ -59,16 +58,184 @@
         </select>
       </label>
 
-      <div class="inlineInfo">
-        <div>
-          <p class="label">Output path</p>
-          <p class="value">{{ outputPath() || 'output/' }}</p>
+      <label class="field">
+        <span>Model</span>
+        <select [ngModel]="selectedModelId()" (ngModelChange)="selectModel($event)">
+          @for (model of models(); track model.id) {
+            <option [value]="model.id">{{ model.label }}</option>
+          }
+        </select>
+      </label>
+
+      @if (selectedModel()?.resolution_note) {
+        <p class="hint">{{ selectedModel()?.resolution_note }}</p>
+      }
+
+      @if (modelsMissing().length > 0) {
+        <div class="error">
+          Model files not found{{
+            selectedModel()?.models_root ? ' under ' + selectedModel()?.models_root : ''
+          }}: {{ modelsMissing().join(', ') }}. Set <code>COMFYUI_MODELS_PATH</code> to your ComfyUI
+          <code>models</code> folder and restart the backend. Dry runs still work.
         </div>
-        <div>
-          <p class="label">Images</p>
-          <p class="value">{{ selectedInfo()?.image_count ?? 0 }}</p>
+      }
+
+      <div class="row">
+        <label class="field">
+          <span>Optimizer</span>
+          <select [ngModel]="optimizer()" (ngModelChange)="selectOptimizer($event)">
+            @for (opt of selectedModel()?.optimizers ?? []; track opt.name) {
+              <option [value]="opt.name">{{ opt.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Learning rate</span>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            [ngModel]="learningRate()"
+            (ngModelChange)="learningRate.set($event)"
+          />
+        </label>
+      </div>
+      @if (selectedOptimizer()?.note) {
+        <p class="hint">{{ selectedOptimizer()?.note }}</p>
+      }
+
+      <div class="field">
+        <span>Train for</span>
+        <div class="segmented" role="radiogroup" aria-label="Duration mode">
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="durationMode() === 'steps'"
+            [class.on]="durationMode() === 'steps'"
+            (click)="durationMode.set('steps')"
+          >
+            Max steps
+          </button>
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="durationMode() === 'epochs'"
+            [class.on]="durationMode() === 'epochs'"
+            (click)="durationMode.set('epochs')"
+          >
+            Epochs
+          </button>
         </div>
       </div>
+
+      <div class="row">
+        @if (durationMode() === 'steps') {
+          <label class="field">
+            <span>Max steps</span>
+            <input
+              type="number"
+              min="1"
+              step="50"
+              [placeholder]="selectedModel()?.auto_steps ? 'auto' : ''"
+              [ngModel]="maxSteps()"
+              (ngModelChange)="maxSteps.set($event)"
+            />
+          </label>
+        } @else {
+          <label class="field">
+            <span>Epochs</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              [ngModel]="epochs()"
+              (ngModelChange)="epochs.set($event)"
+            />
+          </label>
+        }
+        <label class="field">
+          <span>Save every (steps)</span>
+          <input
+            type="number"
+            min="1"
+            step="50"
+            placeholder="template default"
+            [ngModel]="saveEvery()"
+            (ngModelChange)="saveEvery.set($event)"
+          />
+        </label>
+      </div>
+      @if (durationMode() === 'steps' && selectedModel()?.auto_steps) {
+        <p class="hint">
+          Leave empty for auto: about {{ selectedModel()?.target_epochs }} epochs of your dataset,
+          kept within {{ selectedModel()?.min_auto_steps }}–{{ selectedModel()?.max_auto_steps }}
+          steps. Type a number to set it yourself.
+        </p>
+      }
+      @if (durationMode() === 'steps' && selectedModel() && !selectedModel()?.native_max_steps) {
+        <p class="hint">
+          {{ selectedModel()?.label }} trains whole epochs, so a step budget is rounded up to the
+          next epoch.
+        </p>
+      }
+
+      <label class="field">
+        <span>Trigger word</span>
+        <input
+          type="text"
+          [placeholder]="
+            selectedModelId() === 'qwen_image_2_1'
+              ? selectedDataset() + ' (dataset name)'
+              : 'template default'
+          "
+          [ngModel]="trigger()"
+          (ngModelChange)="trigger.set($event)"
+        />
+      </label>
+      @if (selectedModelId() === 'qwen_image_2_1') {
+        <p class="hint">
+          Prompt with the class word too, e.g.
+          <code>{{ trigger() || selectedDataset() }}, a woman, …</code> — captions that only say "a
+          woman" don't teach the trigger gender.
+        </p>
+      }
+
+      @if (plan(); as p) {
+        <div class="planCard">
+          <div class="inlineInfo">
+            <div>
+              <p class="label">Total steps</p>
+              <p class="value">{{ p.total_steps }}</p>
+            </div>
+            <div>
+              <p class="label">Epochs</p>
+              <p class="value">
+                {{ p.epochs }} <small>× {{ p.steps_per_epoch }} steps</small>
+              </p>
+            </div>
+            <div>
+              <p class="label">Images</p>
+              <p class="value">{{ p.image_count }}</p>
+            </div>
+            <div>
+              <p class="label">Est. time</p>
+              <p class="value">
+                {{ p.estimated_minutes !== null ? '≈ ' + p.estimated_minutes + ' min' : '—' }}
+              </p>
+            </div>
+          </div>
+          <p class="label">Output folder · checkpoint every {{ p.save_every }} steps</p>
+          <p class="value path">{{ p.output_path }}</p>
+          @for (n of p.notes; track n) {
+            <p class="note">{{ n }}</p>
+          }
+          @for (w of p.warnings; track w) {
+            <p class="warning">{{ w }}</p>
+          }
+        </div>
+      } @else if (planError()) {
+        <div class="error">{{ planError() }}</div>
+      }
 
       <label class="toggle">
         <input type="checkbox" [ngModel]="dryRun()" (ngModelChange)="dryRun.set($event)" />
@@ -113,15 +280,14 @@
             <li class="jobItem">
               <div>
                 <h3>{{ job.dataset }}</h3>
+                <p class="jobMeta">
+                  {{ modelLabel(job.model) }} · {{ job.optimizer }} · {{ job.duration }}
+                </p>
                 <p>{{ job.progress.step }} / {{ job.progress.total }} · {{ job.status }}</p>
               </div>
               <div class="jobActions">
                 @if (job.status === 'queued') {
-                  <button
-                    class="ghost"
-                    (click)="startJob(job.job_id)"
-                    [disabled]="hasRunning()"
-                  >
+                  <button class="ghost" (click)="startJob(job.job_id)" [disabled]="hasRunning()">
                     Start
                   </button>
                 }

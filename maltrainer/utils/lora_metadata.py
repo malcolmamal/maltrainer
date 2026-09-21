@@ -95,13 +95,22 @@ def build_metadata(
     dataset = config.get("dataset", {}) or {}
     model = config.get("model", {}) or {}
 
+    arch = runtime.get("model_type") or config.get("model_type") or "minimax_h3"
+    trainer_script = "train_qwen_image_2_1_lora.py" if "qwen" in arch else "train_minimax_h3_lora.py"
+    base_model_version = "qwen_image_2_1" if "qwen" in arch else "minimax_h3_fl2va"
+    network_module = (
+        "maltrainer.models.qwen_image_2_1.lora"
+        if "qwen" in arch
+        else "maltrainer.models.minimax_h3.lora"
+    )
+
     metadata: Dict[str, Any] = {
         "maltrainer_metadata_version": SCHEMA_VERSION,
-        "maltrainer_architecture": "minimax_h3",
-        "maltrainer_trainer": "train_minimax_h3_lora.py",
+        "maltrainer_architecture": arch,
+        "maltrainer_trainer": trainer_script,
         # kohya/musubi-style flat keys
-        "ss_base_model_version": "minimax_h3_fl2va",
-        "ss_network_module": "maltrainer.models.minimax_h3.lora",
+        "ss_base_model_version": base_model_version,
+        "ss_network_module": network_module,
         "ss_network_dim": lora.get("rank"),
         "ss_network_alpha": lora.get("alpha"),
         "ss_network_args": {
@@ -132,7 +141,7 @@ def build_metadata(
     metadata["step"] = step
     metadata["rank"] = lora.get("rank")
     metadata["alpha"] = lora.get("alpha")
-    metadata["architecture"] = "minimax_h3"
+    metadata["architecture"] = arch
 
     for key, value in runtime.items():
         metadata[f"maltrainer_{key}"] = value

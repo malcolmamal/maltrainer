@@ -68,8 +68,13 @@ h1 {
 
 .datasetList {
   list-style: none;
-  padding: 0;
+  padding: 0 6px 0 0;
   margin: 0;
+  /* the dataset folder can hold hundreds of datasets: scroll inside the card instead of growing it */
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -237,4 +242,104 @@ h1 {
   padding: 10px 12px;
   border-radius: 12px;
   margin-bottom: 12px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.hint {
+  margin: -6px 0 14px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.95em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 6px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: fit-content;
+}
+
+.segmented button {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.segmented button.on {
+  background: rgba(120, 160, 255, 0.25);
+  color: white;
+}
+
+.planCard {
+  border: 1px solid rgba(120, 160, 255, 0.3);
+  background: rgba(120, 160, 255, 0.06);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.planCard .inlineInfo {
+  margin-bottom: 10px;
+}
+
+.planCard .label {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.planCard .value small {
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.planCard .path {
+  margin: 4px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.warning {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 184, 0, 0.12);
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  color: #ffd98a;
+  font-size: 12px;
+}
+
+.jobItem .jobMeta {
+  color: rgba(160, 185, 255, 0.85);
+  margin-bottom: 2px;
+}
+
+.note {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(120, 160, 255, 0.1);
+  border: 1px solid rgba(120, 160, 255, 0.3);
+  color: rgba(200, 215, 255, 0.92);
+  font-size: 12px;
 }
