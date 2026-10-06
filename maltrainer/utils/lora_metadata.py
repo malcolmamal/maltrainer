@@ -96,13 +96,18 @@ def build_metadata(
     model = config.get("model", {}) or {}
 
     arch = runtime.get("model_type") or config.get("model_type") or "minimax_h3"
-    trainer_script = "train_qwen_image_2_1_lora.py" if "qwen" in arch else "train_minimax_h3_lora.py"
-    base_model_version = "qwen_image_2_1" if "qwen" in arch else "minimax_h3_fl2va"
-    network_module = (
-        "maltrainer.models.qwen_image_2_1.lora"
-        if "qwen" in arch
-        else "maltrainer.models.minimax_h3.lora"
-    )
+    if "qwen" in arch:
+        trainer_script = "train_qwen_image_2_1_lora.py"
+        base_model_version = "qwen_image_2_1"
+        network_module = "maltrainer.models.qwen_image_2_1.lora"
+    elif "supra" in arch:
+        trainer_script = "train_supra2_img_lora.py"
+        base_model_version = "supra2_img"
+        network_module = "maltrainer.models.supra2_img.lora"
+    else:
+        trainer_script = "train_minimax_h3_lora.py"
+        base_model_version = "minimax_h3_fl2va"
+        network_module = "maltrainer.models.minimax_h3.lora"
 
     metadata: Dict[str, Any] = {
         "maltrainer_metadata_version": SCHEMA_VERSION,

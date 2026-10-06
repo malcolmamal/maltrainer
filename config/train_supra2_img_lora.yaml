@@ -1,0 +1,56 @@
+# Supra2-IMG LoRA
+# Images of any size are center-cropped to a square and resized to 256x256.
+
+model:
+  transformer_path: "C:\\Development\\projects\\huggingface\\Supra2-IMG\\Supra2-IMG_fp32.safetensors"
+  vae_path: "C:\\Development\\projects\\huggingface\\Supra2-IMG\\sd-vae-ft-mse.safetensors"
+  vae_config: "C:\\Development\\projects\\huggingface\\Supra2-IMG\\sd-vae-ft-mse.config.json"
+  text_encoder_path: "C:\\Development\\projects\\huggingface\\Supra2-IMG\\flan-t5-base.safetensors"
+  text_encoder_config: "C:\\Development\\projects\\huggingface\\Supra2-IMG\\flan-t5-base.config.json"
+  tokenizer_path: "C:\\Development\\projects\\huggingface\\Supra2-IMG\\flan-t5-base.tokenizer.json"
+
+dataset:
+  path: "datasets/my_subject"
+  resolution: 256
+  trigger: "my_subject"
+  default_caption: "a photo of my_subject"
+  repeats: 1
+  num_workers: 0
+
+lora:
+  rank: 16
+  alpha: 16
+  dtype: "float32"
+  target_modules:
+    - "self_attn.qkv"
+    - "self_attn.proj"
+    - "cross_attn.q"
+    - "cross_attn.kv"
+    - "cross_attn.proj"
+    - "mlp.0"
+    - "mlp.2"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  num_epochs: 10
+  optimizer: "adamw8bit"
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  timestep_distribution: "uniform"
+  caption_dropout: 0.1
+  max_grad_norm: 1.0
+  save_every: 250
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/supra2_img_lora"
+  name: "supra2_img_lora"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"
