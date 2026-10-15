@@ -16,6 +16,7 @@ prodigyopt>=1.1.2
 # Data processing
 Pillow>=10.0.0
 numpy>=1.24.0
+av>=12.0.0  # MiniMax H3 video clips and audio files (bundles FFmpeg)
 
 # Configuration
 PyYAML>=6.0

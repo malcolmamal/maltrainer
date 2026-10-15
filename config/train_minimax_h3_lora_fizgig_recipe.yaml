@@ -1,0 +1,79 @@
+# MiniMax H3 LoRA -- Fizgig's default recipe, on maltrainer.
+#
+# Fizgig (trainers/Fizgig, "Fast" preset + "Likeness and Style" structure) gets strong
+# character LoRAs from near-default settings. This config reproduces each part of that
+# recipe that maltrainer can express; see docs/minimax-h3-lora-training.md for the sources.
+#
+#   frozen de-distillation adapter at 1.0 . LoRA on blocks 20-49 only (no refiner, no AdaLN)
+#   60 % of steps below sigma 0.5 (uniform u, shift 0.667) . Automagic3 from 1e-6 . EMA 0.98
+#   caption dropout 0.05 . rank 8 . ~0.25 MP aspect buckets . silent audio rows packed
+#
+# Images only. For clips with sound and voice recordings see
+# train_minimax_h3_lora_audio_video.yaml -- the recipe is the same.
+
+model:
+  transformer_path: "C:\\Development\\ComfyUI\\models\\diffusion_models\\MinimaxH3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+  vae_path: "C:\\Development\\ComfyUI\\models\\vae\\minimax_h3_video_vae_fp16.safetensors"
+  text_encoder_path: "C:\\Development\\ComfyUI\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+  # Ostris's fl2va v1 (rank 16): the only adapter Fizgig had up to v6.2.0, and the one this
+  #   recipe was validated against.
+  #   https://huggingface.co/ostris/minimax_h3_training_adapter
+  training_adapter_path: "C:\\Development\\trainers\\minimax_h3_training_adapter_v1.safetensors"
+  # Fizgig's default from v6.3.0 (23 Sep 2026): Circlestone's image adapter (rank 64, ~620 MB),
+  # which in Fizgig's A/Bs trained sharper photo LoRAs with better likeness and prompt-following.
+  #   https://huggingface.co/circlestone-labs/MiniMax-H3-Image-Training-Adapter
+  # training_adapter_path: "C:\\Development\\trainers\\minimax_h3_image_training_adapter.safetensors"
+  # Only needed when the adapter carries full-model AdaLN rows (the run logs a warning if
+  # they were skipped). Fizgig ships the grid as src/fizgig/assets/h3_silu_temb_grid.safetensors.
+  # training_adapter_adaln_grid: "C:\\Development\\projects\\sandbox\\trainers\\Fizgig\\src\\fizgig\\assets\\h3_silu_temb_grid.safetensors"
+
+dataset:
+  path: "datasets/my_subject"
+  media: ["image"]
+  # Fizgig trains at 0.25 MP (496 px square); buckets keep each photo's aspect ratio on a
+  # 32 px grid, so 512 gives 512x512 squares and e.g. 448x576 portraits.
+  resolution: 512
+  aspect_mode: "bucket"
+  trigger: "my_subject"
+  default_caption: "a photo of my_subject"
+  repeats: 1
+
+lora:
+  rank: 8
+  alpha: 8
+  prefix: "diffusion_model."
+  target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
+  # Identity lives in the back 30 blocks; adapters on the early ones mostly damage anatomy
+  # and colour. With nothing to train before block 20 the backward pass stops there too.
+  block_range: [20, 49]
+  include_token_refiner: false
+  include_adaln: false
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  num_epochs: 50
+  optimizer: "automagic3"
+  learning_rate: 1.0e-6      # Automagic3's starting rate; it adapts from there
+  weight_decay: 0.0
+  timestep_distribution: "lownoise"
+  lownoise_pct: 60           # % of steps below sigma 0.5 (H3's own shift 12 gives ~8 %)
+  ema_decay: 0.98            # checkpoints save the averaged weights
+  caption_dropout: 0.05
+  # Fizgig relies on the adapter alone; contrastive guidance is ai-toolkit's other remedy and
+  # can be stacked on top (see train_minimax_h3_lora_tuned.yaml).
+  do_guidance_loss: false
+  pack_silent_audio: true
+  max_grad_norm: 1.0
+  save_every: 250
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/minimax_h3_lora_fizgig_recipe"
+
+logging:
+  level: "INFO"

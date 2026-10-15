@@ -75,6 +75,12 @@ class ModelSpec:
     # Training is square-only for now: non-square images are squashed, so the plan warns about them.
     square_only: bool = False
     resolution_note: str = ""
+    # A whole recipe per optimizer, where the optimizer changes more than its learning rate.
+    optimizer_templates: tuple[tuple[str, str], ...] = ()  # (optimizer, template path)
+    # Output file prefix (the name the LoRA pickers parse) and whether a custom trigger also
+    # rewrites the default caption to "a photo of <trigger>".
+    output_prefix: str = ""
+    caption_from_trigger: bool = False
 
 
 MODELS: Dict[str, ModelSpec] = {
@@ -130,6 +136,36 @@ MODELS: Dict[str, ModelSpec] = {
                 "Training resolution is square 512×512 for now. More resolutions and "
                 "aspect-ratio bucketing are planned."
             ),
+            output_prefix="qwen21_",
+            caption_from_trigger=True,
+        ),
+        ModelSpec(
+            id="krea2",
+            label="Krea 2",
+            script="train_krea2_lora.py",
+            template="config/krea2_template.yaml",
+            optimizers=(
+                OptimizerSpec("automagic3", "Automagic3 (recommended)", 1e-6,
+                              "self-tuning; per module family, 16-step sign window"),
+                OptimizerSpec("prodigy", "Prodigy (OneTrainer recipe)", 1.0,
+                              "rank 16 / alpha 1, 200 warmup steps, unshifted logit-normal"),
+                OptimizerSpec("adamw8bit", "AdamW 8-bit", 1e-4),
+            ),
+            default_optimizer="automagic3",
+            default_duration_mode="steps",
+            default_epochs=70,
+            default_max_steps=1500,
+            native_max_steps=True,
+            model_files=(
+                ("transformer_path", "diffusion_models", "krea2_raw_fp8_scaled.safetensors"),
+                ("vae_path", "vae", "qwen_image_vae.safetensors"),
+                ("text_encoder_path", "text_encoders", "qwen3vl_4b_fp8_scaled.safetensors"),
+            ),
+            per_run_output=True,
+            resolution_note="Aspect-ratio buckets around 512×512 on a 16 px grid.",
+            optimizer_templates=(("prodigy", "config/krea2_prodigy_template.yaml"),),
+            output_prefix="krea2_",
+            caption_from_trigger=True,
         ),
     )
 }
@@ -401,8 +437,8 @@ def resolve_model_files(spec: ModelSpec) -> tuple[Dict[str, str], list[str]]:
     return dict(found), list(missing)
 
 
-def load_template(spec: ModelSpec, dataset_name: str) -> Dict[str, Any]:
-    template_path = Path(spec.template)
+def load_template(spec: ModelSpec, dataset_name: str, optimizer: Optional[str] = None) -> Dict[str, Any]:
+    template_path = Path(dict(spec.optimizer_templates).get(optimizer or "", spec.template))
     if not template_path.exists():
         raise HTTPException(status_code=500, detail=f"Template not found: {spec.template}")
     template_text = template_path.read_text(encoding="utf-8")
@@ -474,7 +510,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
     if not dataset_path.is_dir():
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    config = load_template(spec, request.dataset)
+    config = load_template(spec, request.dataset, request.optimizer or spec.default_optimizer)
     dataset_cfg = config.setdefault("dataset", {})
     train_cfg = config.setdefault("train", {})
     output_cfg = config.setdefault("output", {})
@@ -504,7 +540,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
     trigger = (request.trigger or "").strip()
     if trigger:
         dataset_cfg["trigger"] = trigger
-        if spec.id == "qwen_image_2_1":
+        if spec.caption_from_trigger:
             dataset_cfg["default_caption"] = f"a photo of {trigger}"
 
     notes: list[str] = []
@@ -605,7 +641,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
         while output_dir.exists():
             output_dir = base.with_name(f"{base.name}-{n}")
             n += 1
-        output_cfg["name"] = f"qwen21_{output_dir.name}" if spec.id == "qwen_image_2_1" else output_dir.name
+        output_cfg["name"] = f"{spec.output_prefix}{output_dir.name}"
     else:
         output_dir = output_root() / request.dataset
     output_cfg["path"] = str(output_dir)

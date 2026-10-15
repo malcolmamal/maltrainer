@@ -10,7 +10,13 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   aspect-ratio bucketing are planned. See the [Qwen-Image 2.1 training guide](docs/qwen-image-2.1-lora-training.md).
 - **Z-Image LoRA Training**: Train LoRA adapters for Z-Image (base) models
 - **Z-Image Textual Inversion**: Train textual inversion embeddings for Z-Image
-- **MiniMax H3 LoRA Training**: CLI trainer in `train_minimax_h3_lora.py`
+- **Krea 2 LoRA Training**: trains from ComfyUI's single files (the fp8 RAW DiT, the Qwen-Image VAE
+  and Qwen3-VL-4B), with an Automagic3 template and a Prodigy template that mirrors OneTrainer's
+  recipe. Run it with `train_krea2_lora.py`, `run_krea2_training.bat` or the web UI. See the
+  [Krea 2 training guide](docs/krea2-lora-training.md).
+- **MiniMax H3 LoRA Training**: CLI trainer in `train_minimax_h3_lora.py`. It trains on stills,
+  video clips with sound, and audio-only recordings, using ComfyUI's single-file checkpoints. It
+  includes Fizgig's default recipe. See the [MiniMax H3 training guide](docs/minimax-h3-lora-training.md).
 - **Optimizers**: AdamW 8-bit, Prodigy, and Automagic3 (self-tuning learning rate)
 - **Web UI**: Pick a dataset, model and optimizer, train for a number of epochs or an exact number of steps, and
   follow live progress from a job queue

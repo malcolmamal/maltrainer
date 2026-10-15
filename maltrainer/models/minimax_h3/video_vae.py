@@ -294,6 +294,12 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
         hidden_states = self.conv_out(hidden_states)
         return self.quant_conv(hidden_states)
 
+    def _normalize(self, moments: torch.Tensor) -> torch.Tensor:
+        latent_mean = moments.chunk(2, dim=1)[0]  # posterior mean (deterministic)
+        mean = self.latents_mean.view(1, -1, 1, 1, 1).to(latent_mean.device)
+        std = self.latents_std.view(1, -1, 1, 1, 1).to(latent_mean.device)
+        return (latent_mean.float() - mean) / std
+
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
         """Encode RGB image tensor [B, 3, H, W] in [0, 1] to normalized latents [B, 24, 1, H//16, W//16]."""
         if images.ndim == 4:
@@ -301,13 +307,46 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
         else:
             pixels = images
 
-        moments = self.encode_moments(pixels)
-        latent_mean = moments.chunk(2, dim=1)[0]  # Take mean (deterministic)
-        
-        mean = self.latents_mean.view(1, -1, 1, 1, 1).to(latent_mean.device)
-        std = self.latents_std.view(1, -1, 1, 1, 1).to(latent_mean.device)
-        normalized_latents = (latent_mean.float() - mean) / std
-        return normalized_latents
+        return self._normalize(self.encode_moments(pixels))
+
+    def encode_video(self, frames: torch.Tensor) -> torch.Tensor:
+        """Encode a clip [B, 3, T, H, W] in [0, 1] to normalized latents [B, 24, T_lat, H//16, W//16].
+
+        Mirrors ComfyUI's MiniMaxH3VideoVAE.encode_temporal: the clip is cut into
+        independent 17-frame chunks (the last one padded by repeating the final frame),
+        each chunk encodes to 5 latent frames, and the trailing 3 latent frames are
+        dropped. A T = 17k + 5 clip therefore yields 5k + 2 latent frames -- the grid H3's
+        RoPE (FRAME_PER_TOKEN = 1, 4, 4, 4, 4) assumes. A single causal pass over the whole
+        clip would give 1 + (T - 1) / 4 latents and misalign every frame after the first chunk.
+        """
+        if frames.shape[2] == 1:
+            return self.encode_image(frames)
+        if frames.shape[2] % VIDEO_CLIP_LENGTH:
+            pad = VIDEO_CLIP_LENGTH - frames.shape[2] % VIDEO_CLIP_LENGTH
+            frames = torch.cat([frames, frames[:, :, -1:].expand(-1, -1, pad, -1, -1)], dim=2)
+        chunks = [
+            self.encode_moments(frames[:, :, start:start + VIDEO_CLIP_LENGTH])
+            for start in range(0, frames.shape[2], VIDEO_CLIP_LENGTH)
+        ]
+        moments = torch.cat(chunks, dim=2)[:, :, :-VIDEO_TOKEN_DROP]
+        return self._normalize(moments)
+
+
+# Temporal chunking of the reference VAE (comfy/ldm/minimax/vae.py: clip_length / token_drop).
+VIDEO_CLIP_LENGTH = 17
+VIDEO_TOKEN_DROP = 3
+
+
+def align_frame_count(frames: int) -> int:
+    """Largest valid H3 clip length <= frames: the 17k + 5 grid (5, 22, 39, 56, ...)."""
+    if frames < 5:
+        raise ValueError(f"MiniMax H3 clips need at least 5 frames, got {frames}")
+    return 5 + ((frames - 5) // 17) * 17
+
+
+def video_latent_frames(frames: int) -> int:
+    """Latent frame count for a 17k + 5 frame clip (comfy_extras/nodes_minimax_h3.py)."""
+    return 1 if frames == 1 else ((frames - 5) // 17) * 5 + 2
 
 
 def _map_encoder_key(key: str) -> str | None:

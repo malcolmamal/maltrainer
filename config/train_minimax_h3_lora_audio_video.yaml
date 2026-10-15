@@ -1,0 +1,87 @@
+# MiniMax H3 LoRA on stills, video clips with sound, and voice recordings.
+#
+# One folder, three kinds of file, each with an optional <stem>.txt caption:
+#   *.jpg / *.png / *.webp            still; trains video only (audio rows ride along as silence)
+#   *.mp4 / *.mov / *.mkv / *.webm    clip at 24 fps; trains video AND its soundtrack.
+#                                     A clip with no audio track, digital silence, or a stem
+#                                     ending in "_mute" trains video only.
+#   *.wav / *.mp3 / *.flac / *.m4a    voice/sound only; a tiny zeros video placeholder sizes the
+#                                     sequence and the video loss is dropped (Fizgig's "voice" items)
+#
+# Describe the sound in the caption too (speech verbatim, who speaks, ambience, music):
+# H3's text encoder is the only place the model learns what it should sound like.
+#
+# Clip and audio lengths snap DOWN to H3's 17k + 5 frame grid at 24 fps:
+#   22 = 0.92 s, 39 = 1.63 s, 56 = 2.33 s, 73 = 3.04 s, 90 = 3.75 s, 107 = 4.46 s, 124 = 5.17 s
+# Needs PyAV for decoding:  pip install av
+
+model:
+  transformer_path: "C:\\Development\\ComfyUI\\models\\diffusion_models\\MinimaxH3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+  vae_path: "C:\\Development\\ComfyUI\\models\\vae\\minimax_h3_video_vae_fp16.safetensors"
+  audio_vae_path: "C:\\Development\\ComfyUI\\models\\vae\\minimax_h3_audio_vae_fp32.safetensors"
+  text_encoder_path: "C:\\Development\\ComfyUI\\models\\text_encoders\\qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+  # Fizgig picks by what matters most: Ostris's fl2va v1 for clips (learned a video look ~3x
+  # faster), Circlestone's image adapter when the photos are the priority. Never the ref2va
+  # file -- that one belongs to the ref2va base, not this fl2va checkpoint.
+  training_adapter_path: "C:\\Development\\trainers\\minimax_h3_training_adapter_v1.safetensors"
+  # training_adapter_path: "C:\\Development\\trainers\\minimax_h3_image_training_adapter.safetensors"
+
+dataset:
+  path: "datasets/my_subject_av"
+  media: ["image", "clip", "audio"]
+  resolution: 512            # stills
+  clip_resolution: 384       # clips: the token count grows with frames x area
+  aspect_mode: "bucket"
+  max_frames: 73             # ~3 s per clip / recording window
+  # "first": one window from the start of each file. "split": tile long files into
+  # consecutive max_frames windows (each shares the file's caption -- fine for ambience or
+  # a speaker's timbre, wrong for a verbatim transcript).
+  long_media: "first"
+  # max_segments_per_file: 16
+  clip_audio: true
+  audio_placeholder_resolution: 128
+  trigger: "my_subject"
+  default_caption: "a video of my_subject"
+  repeats: 1
+
+lora:
+  rank: 16
+  alpha: 16
+  prefix: "diffusion_model."
+  target_modules: ["qkv_proj", "out_proj", "fc1", "fc2"]
+  # Fizgig (v6.2.0+) trains photos, clips AND voice on blocks 20-49: once the adapter is on and
+  # the token refiner frozen, audio no longer needs its own narrower range, and leaving blocks
+  # 0-19 alone is what keeps the base's motion intact.
+  block_range: [20, 49]
+  include_token_refiner: false
+  include_adaln: false
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  num_epochs: 50
+  optimizer: "automagic3"
+  learning_rate: 1.0e-6
+  weight_decay: 0.0
+  timestep_distribution: "lownoise"
+  lownoise_pct: 60
+  ema_decay: 0.98
+  caption_dropout: 0.05
+  do_guidance_loss: false
+  train_audio: true
+  # Audio is ~4 % of a clip's packed sequence; raise this if the voice trains too quietly.
+  audio_loss_weight: 1.0
+  pack_silent_audio: true
+  max_grad_norm: 1.0
+  save_every: 250
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/minimax_h3_lora_audio_video"
+
+logging:
+  level: "INFO"

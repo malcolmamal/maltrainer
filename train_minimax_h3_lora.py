@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 MiniMax H3 LoRA Training Script for Maltrainer.
-Trains LoRA adapters for MiniMax H3 using INT8 ConvRot transformer, FP16 Video VAE, and Qwen3-VL text encoder.
+Trains LoRA adapters for MiniMax H3 using INT8 ConvRot transformer, FP16 Video VAE, FP32 audio
+VAE and Qwen3-VL text encoder, on stills, video clips with sound, and audio-only recordings.
 Uses automated dataset pre-caching for 40x step acceleration (~0.8s/step).
 """
 
@@ -12,8 +13,9 @@ import gc
 import json
 import logging
 import math
-import os
+import random
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -22,7 +24,6 @@ from accelerate import Accelerator, init_empty_weights
 from accelerate.utils import set_seed
 from safetensors.torch import save_file
 from torch.optim import AdamW
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from maltrainer.models.minimax_h3.int8_convrot import (
@@ -35,11 +36,30 @@ from maltrainer.models.minimax_h3.model import (
     MiniMaxH3TransformerConfig,
     MiniMaxH3TokenTag,
 )
-from maltrainer.models.minimax_h3.video_vae import load_minimax_h3_video_vae
+from maltrainer.models.minimax_h3.video_vae import load_minimax_h3_video_vae, video_latent_frames
+from maltrainer.models.minimax_h3.audio_vae import load_minimax_h3_audio_encoder
 from maltrainer.models.minimax_h3.text_encoder import load_minimax_h3_text_encoder
 from maltrainer.models.minimax_h3.lora import MiniMaxH3LoRANetwork
-from maltrainer.data.minimax_dataset import MiniMaxH3ImageDataset
+from maltrainer.data.minimax_dataset import (
+    MEDIA_KINDS,
+    MIN_AUDIO_FRAMES,
+    MIN_CLIP_FRAMES,
+    MediaSource,
+    audio_latent_frames,
+    count_media_files,
+    frames_tensor,
+    load_image,
+    plan_segments,
+    read_audio,
+    read_video_frames,
+    scan_media_sources,
+    slice_audio,
+    summarize_kinds,
+    FPS,
+    AUDIO_SAMPLE_RATE,
+)
 from maltrainer.utils.config import load_config, save_config_to_output
+from maltrainer.utils.ema import ParameterEMA
 from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
 
@@ -63,6 +83,30 @@ def apply_flow_shift(t: torch.Tensor, shift: float = 12.0) -> torch.Tensor:
     return (shift * t) / (1.0 + (shift - 1.0) * t)
 
 
+# H3 denoises its two streams on different schedules: video at flow shift 12, audio at 3
+# (ComfyUI's sigma_shift_video / sigma_shift_audio). They advance together, so at inference
+# the audio sigma is always the closed-form image of the video sigma below -- the model has
+# only ever seen (t_video, t_audio) pairs on that curve. Training keeps that coupling no
+# matter how the video sigma itself is sampled: e.g. video sigma 0.5 pairs with audio 0.2.
+VIDEO_SIGMA_SHIFT = 12.0
+AUDIO_SIGMA_SHIFT = 3.0
+
+
+def remap_sigma(sigma: torch.Tensor, from_shift: float = VIDEO_SIGMA_SHIFT, to_shift: float = AUDIO_SIGMA_SHIFT) -> torch.Tensor:
+    """A sigma on the ``from_shift`` schedule -> the same base-grid point on ``to_shift``.
+
+    Mirrors comfy/ldm/minimax/model.py ``time_shift_sigma``.
+    """
+    base = sigma / (from_shift + sigma * (1.0 - from_shift))
+    return to_shift * base / (1.0 + (to_shift - 1.0) * base)
+
+
+def pack_audio_rows(latent: torch.Tensor) -> torch.Tensor:
+    """[B, 32, 2, T] audio latent -> [B, 2*T, 32] channel-major rows (left t0..T-1, then right)."""
+    b, c, ch, t = latent.shape
+    return latent.permute(0, 2, 3, 1).reshape(b, ch * t, c)
+
+
 # --- Packed-sequence RoPE geometry -------------------------------------------------
 # These mirror comfy/ldm/minimax/model.py (_axis_from_sqrt_area / _frame_grid /
 # _video_t_grid / PackedLayout) exactly. H3 does NOT index video tokens by raw patch
@@ -80,15 +124,16 @@ def _axis_from_sqrt_area(dim: int, patch: int, sqrt_area: float) -> torch.Tensor
     return (torch.arange(n, dtype=torch.float64) * (ratio / n) + (1.0 - ratio) / 2.0) * 32.0
 
 
-def _frame_grid(latent_h: int, latent_w: int) -> torch.Tensor:
-    """Area-normalized (h, w) coordinates of one latent frame's 2x2-patch rows."""
+def _frame_grid(latent_h: int, latent_w: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Area-normalized (h, w) coordinates of one latent frame's 2x2-patch rows, plus the w axis."""
     area = math.sqrt(latent_h * latent_w)
+    w_axis = _axis_from_sqrt_area(latent_w, 2, area)
     hh, ww = torch.meshgrid(
         _axis_from_sqrt_area(latent_h, 2, area),
-        _axis_from_sqrt_area(latent_w, 2, area),
+        w_axis,
         indexing="ij",
     )
-    return torch.stack([hh.reshape(-1), ww.reshape(-1)], dim=-1)
+    return torch.stack([hh.reshape(-1), ww.reshape(-1)], dim=-1), w_axis
 
 
 def _video_t_grid(latent_t: int, origin: float) -> torch.Tensor:
@@ -99,21 +144,49 @@ def _video_t_grid(latent_t: int, origin: float) -> torch.Tensor:
     return float(origin) + torch.cat([torch.zeros(1, dtype=torch.float64), spans[:-1].cumsum(0)])
 
 
-def build_packed_position_ids(text_len: int, latent_t: int, latent_h: int, latent_w: int) -> torch.Tensor:
-    """Position ids for H3's [text | video] packed sequence (no audio rows), as [S, 3] float64.
+def build_packed_position_ids(
+    text_len: int, latent_t: int, latent_h: int, latent_w: int, audio_t: int = 0
+) -> torch.Tensor:
+    """Position ids for H3's [text | audio | video] packed sequence, as [S, 3] float64.
 
-    Matches ComfyUI's PackedLayout for audio_t=0: text tokens advance along the temporal
-    axis, and the video block's temporal origin is text_len.
+    Matches ComfyUI's PackedLayout (t2va, no references): text tokens advance along the
+    temporal axis; audio and video share the media clock's origin at text_len. Audio rows are
+    channel-major stereo -- t advances one unit per latent frame (40 per second), h stays 0,
+    and w is pinned to the video grid's first column for the left channel and its last column
+    for the right one.
     """
     text_pos = torch.zeros(text_len, 3, dtype=torch.float64)
     text_pos[:, 0] = torch.arange(text_len, dtype=torch.float64)
 
-    frame = _frame_grid(latent_h, latent_w)
+    frame, w_axis = _frame_grid(latent_h, latent_w)
+    audio_pos = torch.zeros(audio_t * 2, 3, dtype=torch.float64)
+    if audio_t:
+        audio_pos[:, 0] = (float(text_len) + torch.arange(audio_t, dtype=torch.float64)).repeat(2)
+        audio_pos[:audio_t, 2] = float(w_axis[0])
+        audio_pos[audio_t:, 2] = float(w_axis[-1])
+
     video_pos = torch.empty(latent_t, frame.shape[0], 3, dtype=torch.float64)
     video_pos[:, :, 0] = _video_t_grid(latent_t, float(text_len))[:, None]
     video_pos[:, :, 1:] = frame[None]
 
-    return torch.cat([text_pos, video_pos.reshape(-1, 3)], dim=0)
+    return torch.cat([text_pos, audio_pos, video_pos.reshape(-1, 3)], dim=0)
+
+
+@dataclass
+class H3Sample:
+    """One cached training item. Every kind carries a video latent and an audio row count."""
+
+    key: str
+    kind: str  # "image" | "clip" | "audio"
+    caption: str
+    frames: int  # 24 fps pixel frames the item spans (1 for a still)
+    video: torch.Tensor  # [1, 24, T_lat, H/16, W/16] normalized, CPU
+    audio: Optional[torch.Tensor] = None  # [1, 2*A, 32] normalized rows, CPU; None = silence
+    audio_only: bool = False  # video is a zeros placeholder; drop the video loss
+
+    @property
+    def audio_latents(self) -> int:
+        return audio_latent_frames(self.frames)
 
 
 class MiniMaxH3LoRATrainer:
@@ -135,9 +208,19 @@ class MiniMaxH3LoRATrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
-        self.latent_cache: Dict[str, torch.Tensor] = {}
+        self.samples: List[H3Sample] = []
         self._layout_cache: Dict[tuple, Dict[str, torch.Tensor]] = {}
         self.text_cache: Dict[str, torch.Tensor] = {}
+        self.ema: Optional[ParameterEMA] = None
+
+        train_config = config.get("train", {})
+        if int(train_config.get("batch_size", 1) or 1) != 1:
+            # Every item packs its own sequence (text length, frame count, aspect and audio
+            # length all vary) and H3's per-timestep modulation is shared across the batch.
+            raise ValueError(
+                "MiniMax H3 trains at batch_size 1; use train.gradient_accumulation_steps "
+                "for a larger effective batch."
+            )
 
         # Initialize accelerator
         self.accelerator = Accelerator(
@@ -165,45 +248,166 @@ class MiniMaxH3LoRATrainer:
         self.progress_logger.addHandler(file_handler)
         self.progress_logger.propagate = False
 
+    def _train_audio(self) -> bool:
+        return bool(self.config.get("train", {}).get("train_audio", True))
+
+    def _do_guidance_loss(self) -> bool:
+        train_config = self.config.get("train", {})
+        return bool(train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)))
+
     def precache_dataset(self):
-        """Pre-cache VAE latents and Qwen3-VL text embeddings into memory, then unload VAE & Text Encoder to free VRAM."""
+        """Encode every dataset item once -- video latents, audio rows, caption embeddings --
+        into memory, unloading each encoder before the next loads so peak VRAM stays at one model.
+        """
         model_config = self.config.get("model", {})
-        vae_path = model_config["vae_path"]
-        text_encoder_path = model_config["text_encoder_path"]
         dataset_config = self.config["dataset"]
+        train_audio = self._train_audio()
 
         print("=== Step 1/2: Pre-caching Dataset (VAE Latents & Text Embeddings) ===", flush=True)
         logger.info("Starting dataset pre-caching...")
 
-        # Create temporary dataset without repeats for unique extraction
-        temp_dataset = MiniMaxH3ImageDataset(
-            data_root=dataset_config["path"],
-            resolution=dataset_config.get("resolution", 512),
+        kinds = dataset_config.get("media", list(MEDIA_KINDS))
+        if isinstance(kinds, str):
+            kinds = [kinds]
+        if not train_audio:
+            # an audio-only item has nothing but its audio to train
+            kinds = [kind for kind in kinds if kind != "audio"]
+        sources = scan_media_sources(
+            dataset_config["path"],
+            kinds=kinds,
             trigger_token=dataset_config.get("trigger", None),
             default_caption=dataset_config.get("default_caption", ""),
-            repeats=1,
         )
+        if not sources:
+            raise ValueError(f"No training media ({', '.join(kinds)}) found under {dataset_config['path']}")
+        logger.info("Dataset: %s", summarize_kinds(sources))
 
-        # 1. Load VAE & Encode All Unique Images
-        print(f"Loading Video VAE from {vae_path} for pre-caching...", flush=True)
-        vae = load_minimax_h3_video_vae(vae_path, device=self.device)
+        resolution = int(dataset_config.get("resolution", 512))
+        clip_resolution = int(dataset_config.get("clip_resolution", resolution))
+        aspect_mode = str(dataset_config.get("aspect_mode", "bucket")).lower()
+        max_frames = int(dataset_config.get("max_frames", 73))
+        long_media = str(dataset_config.get("long_media", "first")).lower()
+        clip_audio = bool(dataset_config.get("clip_audio", True)) and train_audio
+        placeholder_px = int(dataset_config.get("audio_placeholder_resolution", 128))
 
-        temp_loader = DataLoader(temp_dataset, batch_size=1, shuffle=False)
-        print("Caching VAE latents for images...", flush=True)
-        for item in tqdm(temp_loader, desc="Caching VAE Latents", disable=not self.is_main_process):
-            img_path = item["image_path"][0]
-            if img_path not in self.latent_cache:
-                pixel_values = item["pixel_values"].to(self.device)
-                with torch.no_grad():
-                    latents = vae.encode_image(pixel_values).detach().cpu()
-                self.latent_cache[img_path] = latents
+        # Audio waits for the audio encoder: (sample index, source, start frame).
+        pending_audio: List[Tuple[int, MediaSource, int]] = []
+        audio_sources = [s for s in sources if s.kind == "audio"]
+        visual_sources = [s for s in sources if s.kind != "audio"]
 
-        del vae
-        gc.collect()
-        torch.cuda.empty_cache()
-        print("Video VAE latents pre-cached and VAE unloaded from VRAM.", flush=True)
+        # 1. Video VAE: stills and clip frames
+        if visual_sources:
+            vae_path = model_config["vae_path"]
+            print(f"Loading Video VAE from {vae_path} for pre-caching...", flush=True)
+            vae = load_minimax_h3_video_vae(vae_path, device=self.device)
+            for source in tqdm(visual_sources, desc="Caching video latents", disable=not self.is_main_process):
+                try:
+                    if source.kind == "image":
+                        pixels = load_image(source.path, resolution, aspect_mode).unsqueeze(0)
+                        with torch.no_grad():
+                            latent = vae.encode_image(pixels.to(self.device)).detach().cpu()
+                        self.samples.append(H3Sample(str(source.path), "image", source.caption, 1, latent))
+                        continue
 
-        # 2. Load Text Encoder & Encode All Unique Captions
+                    budget = max_frames if long_media != "split" else max_frames * int(
+                        dataset_config.get("max_segments_per_file", 16)
+                    )
+                    frames = read_video_frames(source.path, clip_resolution, budget)
+                    segments = plan_segments(len(frames), max_frames, long_media, MIN_CLIP_FRAMES)
+                    if not segments:
+                        logger.warning("Skipping %s: %d frames is shorter than one H3 clip", source.path.name, len(frames))
+                        continue
+                    for start, count in segments:
+                        with torch.no_grad():
+                            latent = vae.encode_video(frames_tensor(frames[start:start + count]).to(self.device))
+                        latent = latent.detach().cpu()
+                        if latent.shape[2] != video_latent_frames(count):
+                            raise ValueError(
+                                f"{source.path.name}: {count} frames encoded to {latent.shape[2]} latent frames, "
+                                f"expected {video_latent_frames(count)}"
+                            )
+                        key = f"{source.path}@{start}" if len(segments) > 1 else str(source.path)
+                        self.samples.append(H3Sample(key, "clip", source.caption, count, latent))
+                        if clip_audio and not source.muted:
+                            pending_audio.append((len(self.samples) - 1, source, start))
+                except Exception as e:
+                    if isinstance(e, ImportError):
+                        raise
+                    logger.warning("Skipping %s: %s", source.path.name, e)
+            del vae
+            gc.collect()
+            torch.cuda.empty_cache()
+            print("Video VAE latents pre-cached and VAE unloaded from VRAM.", flush=True)
+
+        # 2. Audio VAE: clip soundtracks and audio-only recordings
+        if pending_audio or audio_sources:
+            audio_vae_path = model_config.get("audio_vae_path")
+            if not audio_vae_path:
+                raise ValueError(
+                    "model.audio_vae_path is required to train on clip soundtracks or audio files "
+                    "(ComfyUI's minimax_h3_audio_vae_fp32.safetensors). Set train.train_audio: false "
+                    "to train video only."
+                )
+            print(f"Loading Audio VAE from {audio_vae_path} for pre-caching...", flush=True)
+            audio_vae = load_minimax_h3_audio_encoder(audio_vae_path, device=self.device)
+
+            def encode(wav) -> torch.Tensor:
+                waveform = torch.from_numpy(wav).unsqueeze(0).to(self.device)
+                return pack_audio_rows(audio_vae.encode(waveform)).detach().cpu()
+
+            decoded: Dict[str, object] = {}
+            for index, source, start in tqdm(pending_audio, desc="Caching clip audio", disable=not self.is_main_process):
+                key = str(source.path)
+                if key not in decoded:
+                    decoded = {key: read_audio(source.path)}  # one file at a time in memory
+                wav = decoded[key]
+                if wav is None:
+                    continue  # no track / digital silence: trains as a muted clip
+                sample = self.samples[index]
+                rows = encode(slice_audio(wav, start, sample.frames))
+                self._check_audio_rows(sample, rows)
+                sample.audio = rows
+            decoded.clear()
+
+            budget_frames = max_frames if long_media != "split" else max_frames * int(
+                dataset_config.get("max_segments_per_file", 16)
+            )
+            for source in tqdm(audio_sources, desc="Caching audio items", disable=not self.is_main_process):
+                try:
+                    wav = read_audio(source.path)
+                    if wav is None:
+                        logger.warning("Skipping %s: no decodable sound (or digital silence)", source.path.name)
+                        continue
+                    total = min(int(wav.shape[1] / AUDIO_SAMPLE_RATE * FPS), budget_frames)
+                    segments = plan_segments(total, max_frames, long_media, MIN_AUDIO_FRAMES)
+                    if not segments:
+                        logger.warning("Skipping %s: shorter than %.2f s", source.path.name, MIN_AUDIO_FRAMES / FPS)
+                        continue
+                    for start, count in segments:
+                        # A zeros video latent is the dataset mean in normalized space. It sizes
+                        # the packed sequence and gives the audio rows something to attend
+                        # across; the video loss is dropped for these items.
+                        side = max(32, placeholder_px // 32 * 32) // 16
+                        placeholder = torch.zeros(1, 24, video_latent_frames(count), side, side)
+                        key = f"{source.path}@{start}" if len(segments) > 1 else str(source.path)
+                        sample = H3Sample(key, "audio", source.caption, count, placeholder, audio_only=True)
+                        sample.audio = encode(slice_audio(wav, start, count))
+                        self._check_audio_rows(sample, sample.audio)
+                        self.samples.append(sample)
+                except Exception as e:
+                    if isinstance(e, ImportError):
+                        raise
+                    logger.warning("Skipping %s: %s", source.path.name, e)
+            del audio_vae
+            gc.collect()
+            torch.cuda.empty_cache()
+            print("Audio latents pre-cached and Audio VAE unloaded from VRAM.", flush=True)
+
+        if not self.samples:
+            raise ValueError("Every dataset item was skipped; see the warnings above.")
+
+        # 3. Text encoder: every unique caption, plus the empty prompt when a pass needs it
+        text_encoder_path = model_config["text_encoder_path"]
         print(f"Loading Text Encoder from {text_encoder_path} for pre-caching...", flush=True)
         text_encoder = load_minimax_h3_text_encoder(
             text_encoder_path,
@@ -212,28 +416,47 @@ class MiniMaxH3LoRATrainer:
             dtype=self.dtype,
         )
 
-        unique_captions = list(set(temp_dataset.captions))
-        print(f"Caching text embeddings for {len(unique_captions)} unique prompts...", flush=True)
-        for caption in tqdm(unique_captions, desc="Caching Prompts", disable=not self.is_main_process):
-            if caption not in self.text_cache:
-                with torch.no_grad():
-                    text_embeds = text_encoder.encode_prompts([caption], device=self.device, dtype=self.dtype).detach().cpu()
-                self.text_cache[caption] = text_embeds
-
-        # Also cache unconditional prompt if differential guidance is enabled
         train_config = self.config.get("train", {})
-        if train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)):
-            uncond_prompt = str(train_config.get("unconditional_prompt", ""))
-            if uncond_prompt not in self.text_cache:
-                with torch.no_grad():
-                    uncond_embeds = text_encoder.encode_prompts([uncond_prompt], device=self.device, dtype=self.dtype).detach().cpu()
-                self.text_cache[uncond_prompt] = uncond_embeds
+        prompts = {sample.caption for sample in self.samples}
+        if self._do_guidance_loss():
+            prompts.add(str(train_config.get("unconditional_prompt", "")))
+        if float(train_config.get("caption_dropout", 0.0) or 0.0) > 0:
+            prompts.add("")
+        print(f"Caching text embeddings for {len(prompts)} unique prompts...", flush=True)
+        for caption in tqdm(sorted(prompts), desc="Caching Prompts", disable=not self.is_main_process):
+            with torch.no_grad():
+                self.text_cache[caption] = (
+                    text_encoder.encode_prompts([caption], device=self.device, dtype=self.dtype).detach().cpu()
+                )
 
         del text_encoder
         gc.collect()
         torch.cuda.empty_cache()
         print("Text embeddings pre-cached and Text Encoder unloaded from VRAM.", flush=True)
-        logger.info("Pre-cached %d latents and %d prompt embeddings. Unloaded feature extractors from VRAM.", len(self.latent_cache), len(self.text_cache))
+
+        counts = {
+            "images": sum(1 for s in self.samples if s.kind == "image"),
+            "clips": sum(1 for s in self.samples if s.kind == "clip"),
+            "clips_with_audio": sum(1 for s in self.samples if s.kind == "clip" and s.audio is not None),
+            "audio_items": sum(1 for s in self.samples if s.kind == "audio"),
+        }
+        self.run_metadata["dataset_composition"] = counts
+        logger.info(
+            "Pre-cached %d samples (%s) and %d prompt embeddings. Unloaded feature extractors from VRAM.",
+            len(self.samples), ", ".join(f"{k}={v}" for k, v in counts.items()), len(self.text_cache),
+        )
+
+    @staticmethod
+    def _check_audio_rows(sample: H3Sample, rows: torch.Tensor) -> None:
+        # The packed layout's audio grid is sized from the frame count, the rows from the
+        # waveform. They agree by construction (hop-exact slicing); a silent mismatch would
+        # train every audio row against a shifted position, so check rather than trust it.
+        expected = sample.audio_latents * 2
+        if rows.shape[1] != expected:
+            raise ValueError(
+                f"{sample.key}: audio encoded to {rows.shape[1]} rows, the {sample.frames}-frame "
+                f"layout packs {expected}"
+            )
 
     def load_transformer_and_lora(self):
         """Load INT8 ConvRot transformer base and inject LoRA network."""
@@ -293,6 +516,8 @@ class MiniMaxH3LoRATrainer:
             prefix=lora_config.get("prefix", "diffusion_model."),
             target_modules=lora_config.get("target_modules", ["qkv_proj", "out_proj", "fc1", "fc2"]),
             include_adaln=bool(lora_config.get("include_adaln", False)),
+            include_token_refiner=bool(lora_config.get("include_token_refiner", True)),
+            block_range=lora_config.get("block_range"),
         )
         # Adapters train in fp32 by default. bf16 carries ~8 mantissa bits (~0.4% relative
         # precision), and a LoRA update is small next to the weight it lands on, so in bf16 a
@@ -308,6 +533,7 @@ class MiniMaxH3LoRATrainer:
                 multiplier=float(lora_config.get("training_adapter_multiplier", 1.0)),
                 device=self.device,
                 dtype=self.dtype,
+                adaln_grid_path=model_config.get("training_adapter_adaln_grid"),
             )
             self.run_metadata["training_adapter"] = Path(str(adapter_path)).name
             self.run_metadata["training_adapter_modules"] = attached
@@ -323,38 +549,21 @@ class MiniMaxH3LoRATrainer:
         )
         print("Transformer and LoRA network ready on GPU!", flush=True)
 
-    def create_dataset(self):
-        """Create image training dataset and dataloader."""
-        dataset_config = self.config["dataset"]
-
-        self.train_dataset = MiniMaxH3ImageDataset(
-            data_root=dataset_config["path"],
-            resolution=dataset_config.get("resolution", 512),
-            trigger_token=dataset_config.get("trigger", None),
-            default_caption=dataset_config.get("default_caption", ""),
-            repeats=dataset_config.get("repeats", 1),
-        )
-
-        self.train_dataloader = DataLoader(
-            self.train_dataset,
-            batch_size=self.config["train"].get("batch_size", 1),
-            shuffle=True,
-            num_workers=dataset_config.get("num_workers", 0),
-        )
-
-        logger.info("Training dataset configured with %d samples", len(self.train_dataset))
+    def _epoch_order(self) -> List[int]:
+        """Shuffled sample indices for one epoch (each sample ``repeats`` times), this rank's share."""
+        repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
+        order = [index for index in range(len(self.samples)) for _ in range(repeats)]
+        random.shuffle(order)
+        world = self.accelerator.num_processes
+        return order[self.accelerator.process_index::world] if world > 1 else order
 
     def _count_dataset_samples(self) -> int:
+        """Files only: the dry run does not decode, so split long clips count once."""
         dataset_config = self.config.get("dataset", {})
-        data_root = Path(str(dataset_config.get("path", "")))
-        if not data_root.exists():
-            return 1
-        supported_exts = {".jpg", ".jpeg", ".png", ".webp"}
-        sample_count = 0
-        for root, _, files in os.walk(data_root):
-            for fname in files:
-                if Path(fname).suffix.lower() in supported_exts:
-                    sample_count += 1
+        kinds = dataset_config.get("media", list(MEDIA_KINDS))
+        if isinstance(kinds, str):
+            kinds = [kinds]
+        sample_count = count_media_files(str(dataset_config.get("path", "")), kinds)
         repeats = int(dataset_config.get("repeats", 1) or 1)
         return max(sample_count, 1) * max(repeats, 1)
 
@@ -412,57 +621,70 @@ class MiniMaxH3LoRATrainer:
         save_path.write_text(json.dumps(payload, indent=2))
         self.last_saved_path = str(save_path)
 
-    def _build_packed_layout(self, num_text_tokens: int, latent_t: int, latent_h: int, latent_w: int) -> Dict[str, torch.Tensor]:
-        """Index/tag/position tensors for one [text | video] packed sequence.
+    def _build_packed_layout(
+        self, num_text_tokens: int, latent_t: int, latent_h: int, latent_w: int, audio_t: int = 0
+    ) -> Dict[str, torch.Tensor]:
+        """Index/tag/position tensors for one [text | audio | video] packed sequence.
 
-        Everything here is a function of the text length and the latent size, so the
-        conditional and unconditional passes need SEPARATE layouts whenever their prompts
-        tokenize to different lengths -- which they always do when the unconditional prompt
-        is empty (a single BOS token). Cached per shape signature; there are only ever a
-        couple of distinct ones in a run.
+        Everything here is a function of the text length, the latent size and the audio
+        length, so the conditional and unconditional passes need SEPARATE layouts whenever
+        their prompts tokenize to different lengths -- which they always do when the
+        unconditional prompt is empty (a single BOS token). Cached per shape signature.
+
+        Timestep rows: 0 = video sigma (text and video tokens), 1 = audio sigma. The model
+        indexes its AdaLN table by ``timestep_index * 3 + modality_tag``, as ComfyUI does.
         """
-        key = (num_text_tokens, latent_t, latent_h, latent_w)
+        key = (num_text_tokens, latent_t, latent_h, latent_w, audio_t)
         cached = self._layout_cache.get(key)
         if cached is not None:
             return cached
 
+        num_audio_tokens = audio_t * 2
         num_video_tokens = latent_t * (latent_h // 2) * (latent_w // 2)
-        seq_len = num_text_tokens + num_video_tokens
+        audio_start = num_text_tokens
+        video_start = audio_start + num_audio_tokens
+        seq_len = video_start + num_video_tokens
 
-        text_indices = torch.arange(0, num_text_tokens, device=self.device)
-        video_indices = torch.arange(num_text_tokens, seq_len, device=self.device)
+        text_indices = torch.arange(0, audio_start, device=self.device)
+        audio_indices = torch.arange(audio_start, video_start, device=self.device)
+        video_indices = torch.arange(video_start, seq_len, device=self.device)
         token_tags = torch.zeros((seq_len,), device=self.device, dtype=torch.long)
         token_tags[text_indices] = MiniMaxH3TokenTag.TEXT
+        token_tags[audio_indices] = MiniMaxH3TokenTag.AUDIO
         token_tags[video_indices] = MiniMaxH3TokenTag.VIDEO
+        timestep_indices = torch.zeros((seq_len,), device=self.device, dtype=torch.long)
+        timestep_indices[audio_indices] = 1
 
         layout = {
             "text_indices": text_indices,
             "video_indices": video_indices,
-            "audio_indices": torch.zeros((0,), device=self.device, dtype=torch.long),
-            "timestep_indices": torch.zeros((seq_len,), device=self.device, dtype=torch.long),
+            "audio_indices": audio_indices,
+            "timestep_indices": timestep_indices,
             "token_tags": token_tags,
             "position_ids": build_packed_position_ids(
-                num_text_tokens, latent_t, latent_h, latent_w
+                num_text_tokens, latent_t, latent_h, latent_w, audio_t
             ).to(device=self.device),
         }
         self._layout_cache[key] = layout
         return layout
 
     def _sample_timesteps(self, batch_size: int) -> torch.Tensor:
+        # fp32: in bf16 a sigma near 1 lands on a 1/256 grid, and the audio remap below
+        # amplifies that step several-fold at the low-noise end of the audio schedule.
         train_config = self.config.get("train", {})
         distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
         if distribution in {"sigmoid", "krea2_shift", "krea2"}:
             # Logit-normal base, as musubi-tuner's krea2_shift does before shifting.
             scale = float(train_config.get("sigmoid_scale", 1.0))
-            z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * scale
+            z = torch.randn(batch_size, device=self.device, dtype=torch.float32) * scale
             timesteps = torch.sigmoid(z).clamp(0.001, 0.999)
         elif distribution in {"logit_normal", "logit-normal", "logitnormal"}:
             mean = float(train_config.get("timestep_logit_mean", 0.0))
             std = float(train_config.get("timestep_logit_std", 1.0))
-            z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * std + mean
+            z = torch.randn(batch_size, device=self.device, dtype=torch.float32) * std + mean
             timesteps = torch.sigmoid(z).clamp(0.001, 0.999)
         else:
-            timesteps = torch.rand(batch_size, device=self.device, dtype=self.dtype)
+            timesteps = torch.rand(batch_size, device=self.device, dtype=torch.float32).clamp(0.001, 0.999)
         return timesteps
 
     def _resolve_flow_shift(self, latent_h: int, latent_w: int) -> float:
@@ -485,6 +707,14 @@ class MiniMaxH3LoRATrainer:
             # guidance -- which changes the dynamics that made unshifted densities
             # overdrive adapters in trainers that ran them without it.
             return 1.0
+        if distribution == "lownoise":
+            # Fizgig's "Likeness and Style" default: uniform u through the shift map, with the
+            # shift chosen so that exactly lownoise_pct % of steps land below sigma 0.5
+            # (P(sigma < 0.5) = 1 / (1 + shift)). 60 % -> shift 0.667.
+            share = float(train_config.get("lownoise_pct", 60)) / 100.0
+            if not 0.0 < share < 1.0:
+                raise ValueError("train.lownoise_pct must be between 0 and 100 (exclusive)")
+            return (1.0 - share) / share
         if distribution not in {"krea2_shift", "krea2"}:
             return float(train_config.get("timestep_shift", 12.0))
 
@@ -624,168 +854,190 @@ class MiniMaxH3LoRATrainer:
             )
             logger.info("Configured learning rate warmup for %d steps.", warmup_steps)
 
+    def _forward(self, video_patches, audio_rows, text_embeds, timestep, layout):
+        return self.lora_network(
+            video_hidden_states=video_patches,
+            audio_hidden_states=audio_rows,
+            encoder_hidden_states=text_embeds,
+            timestep=timestep,
+            timestep_indices=layout["timestep_indices"],
+            token_tags=layout["token_tags"],
+            position_ids=layout["position_ids"],
+            video_indices=layout["video_indices"],
+            audio_indices=layout["audio_indices"],
+            text_indices=layout["text_indices"],
+        )
+
+    @staticmethod
+    def _guided_target(target, uncond, sigma, scale, schedule, cfg_zero):
+        """Contrastive guidance target for one stream: uncond + scale * (target - uncond).
+
+        H3 is guidance-distilled: CFG is baked into the weights, so a plain flow-matching
+        target trains the conditional direction too weakly and the distillation degrades as
+        the LoRA takes hold. The fix extrapolates the TARGET away from the model's own
+        (detached) unconditional prediction, rather than applying CFG to the prediction.
+        Each stream uses its own sigma for the schedule, so audio decays on the audio clock.
+        """
+        uncond = uncond.detach().float()
+        guided = target.float()
+        bsz = guided.shape[0]
+        if cfg_zero:
+            # CFG-Zero*: rescale the unconditional direction onto the conditional one before
+            # extrapolating, so a poorly-aligned uncond prediction does not drag the target sideways.
+            flat_cond = guided.reshape(bsz, -1)
+            flat_uncond = uncond.reshape(bsz, -1)
+            dot = (flat_cond * flat_uncond).sum(dim=1, keepdim=True)
+            squared_norm = (flat_uncond ** 2).sum(dim=1, keepdim=True) + 1e-8
+            uncond = uncond * (dot / squared_norm).view(bsz, 1, 1)
+        if schedule == "sigma":
+            # (target - uncond) carries sigma * fresh_noise, which nothing can predict at low
+            # sigma, so decay toward a plain flow target there.
+            scale_eff = 1.0 + (scale - 1.0) * sigma.detach().float().view(bsz, 1, 1)
+        else:
+            scale_eff = scale
+        return (uncond + scale_eff * (guided - uncond)).detach().to(target.dtype)
+
+    def _training_step(self, sample: H3Sample, flow_shift: float) -> Tuple[torch.Tensor, Dict[str, float]]:
+        """Loss for one cached sample. Returns (loss, parts for logging)."""
+        train_config = self.config["train"]
+
+        latents = sample.video.to(device=self.device, dtype=torch.float32)  # [1, 24, T, h, w]
+        _, _, f_lat, h_lat, w_lat = latents.shape
+
+        caption = sample.caption
+        dropout = float(train_config.get("caption_dropout", 0.0) or 0.0)
+        if dropout > 0 and torch.rand(()).item() < dropout:
+            caption = ""
+        text_embeds = self.text_cache[caption].to(device=self.device, dtype=self.dtype)
+
+        # Sigmas: video from the configured schedule, audio on its coupled shift-3 curve.
+        sigma_v = apply_flow_shift(self._sample_timesteps(1), shift=flow_shift)
+        sigma_a = remap_sigma(sigma_v)
+
+        # x_t = (1 - sigma) * x0 + sigma * noise; the H3 checkpoint predicts (x0 - noise).
+        noise = torch.randn_like(latents)
+        noisy_latents = (1.0 - sigma_v.view(1, 1, 1, 1, 1)) * latents + sigma_v.view(1, 1, 1, 1, 1) * noise
+        video_patches = patchify_video(noisy_latents).to(self.dtype)
+        video_target = patchify_video(latents - noise)
+
+        # Audio rows. ComfyUI never runs H3 without them, so even a still packs its 2-latent
+        # (0.083 s) stereo block: silence (x0 = 0) noised at the audio sigma, no loss. A sample
+        # with real sound gets a real target. pack_silent_audio: false reproduces the old
+        # audio-free layout for A/B comparisons.
+        use_audio = sample.audio is not None and self._train_audio()
+        pack_audio = use_audio or bool(train_config.get("pack_silent_audio", True))
+        audio_t = sample.audio_latents if pack_audio else 0
+        audio_target = None
+        if use_audio:
+            a0 = sample.audio.to(device=self.device, dtype=torch.float32)
+            a_noise = torch.randn_like(a0)
+            audio_rows = (1.0 - sigma_a.view(1, 1, 1)) * a0 + sigma_a.view(1, 1, 1) * a_noise
+            audio_target = a0 - a_noise
+        else:
+            audio_rows = sigma_a.view(1, 1, 1) * torch.randn(1, audio_t * 2, 32, device=self.device)
+        audio_rows = audio_rows.to(self.dtype)
+
+        # H3's DiT is conditioned on t = 1 - sigma (comfy/ldm/minimax/model.py). Row 0 is the
+        # video/text timestep, row 1 the audio one (see _build_packed_layout).
+        timestep = torch.cat([1.0 - sigma_v, 1.0 - sigma_a]) if audio_t else 1.0 - sigma_v
+        layout = self._build_packed_layout(text_embeds.shape[1], f_lat, h_lat, w_lat, audio_t)
+
+        model_output = self._forward(video_patches, audio_rows, text_embeds, timestep, layout)
+
+        train_video = not sample.audio_only
+        if self._do_guidance_loss():
+            uncond_prompt = str(train_config.get("unconditional_prompt", ""))
+            uncond_embeds = self.text_cache[uncond_prompt].to(device=self.device, dtype=self.dtype)
+            # The empty prompt is one BOS token where the caption is several, and the packed
+            # layout is sized from the text length -- indices, tags and every media row's
+            # RoPE origin shift with it. Build its own.
+            uncond_layout = self._build_packed_layout(uncond_embeds.shape[1], f_lat, h_lat, w_lat, audio_t)
+            with torch.no_grad():
+                uncond_output = self._forward(video_patches, audio_rows, uncond_embeds, timestep, uncond_layout)
+            scale = float(train_config.get("guidance_loss_target", 3.5))
+            schedule = str(train_config.get("guidance_loss_schedule", "sigma")).lower()
+            cfg_zero = bool(train_config.get("guidance_loss_cfg_zero", False))
+            if train_video:
+                video_target = self._guided_target(
+                    video_target, uncond_output.video, sigma_v, scale, schedule, cfg_zero
+                )
+            if audio_target is not None:
+                audio_target = self._guided_target(
+                    audio_target, uncond_output.audio, sigma_a, scale, schedule, cfg_zero
+                )
+
+        parts: Dict[str, float] = {"sigma": float(sigma_v)}
+        loss = None
+        if train_video:
+            # Not 0 * loss for audio-only items: their video is a placeholder, and even a
+            # zero-weighted term would build (and walk) the whole video backward graph.
+            video_loss = torch.nn.functional.mse_loss(model_output.video.float(), video_target.float())
+            parts["video"] = float(video_loss.detach())
+            loss = video_loss
+        if audio_target is not None:
+            audio_loss = torch.nn.functional.mse_loss(model_output.audio.float(), audio_target.float())
+            parts["audio"] = float(audio_loss.detach())
+            weighted = float(train_config.get("audio_loss_weight", 1.0)) * audio_loss
+            loss = weighted if loss is None else loss + weighted
+
+        loss_weight_strength = float(train_config.get("loss_weight_strength", 1.0))
+        if loss_weight_strength != 1.0:
+            loss = loss * loss_weight_strength
+        return loss, parts
+
     def train(self):
         """Main MiniMax H3 LoRA training loop (~0.8s/step)."""
         train_config = self.config["train"]
         num_epochs = train_config.get("num_epochs", 10)
         save_every = train_config.get("save_every", 500)
-        flow_shift = None  # resolved from the first batch's latent size, then logged once
 
-        self.lora_network, self.optimizer, self.train_dataloader = self.accelerator.prepare(
-            self.lora_network, self.optimizer, self.train_dataloader
-        )
+        self.lora_network, self.optimizer = self.accelerator.prepare(self.lora_network, self.optimizer)
+
+        ema_decay = float(train_config.get("ema_decay", 0.0) or 0.0)
+        if ema_decay > 0:
+            self.ema = ParameterEMA(
+                self.accelerator.unwrap_model(self.lora_network).trainable_parameters(),
+                decay=ema_decay,
+                warmup=bool(train_config.get("ema_warmup", True)),
+            )
+            self.run_metadata["ema_decay"] = ema_decay
+            logger.info("EMA of the LoRA weights: decay %.4f (checkpoints save the average)", ema_decay)
 
         global_step = 0
         grad_accum = self.accelerator.gradient_accumulation_steps
-        steps_per_epoch = math.ceil(len(self.train_dataloader) / max(grad_accum, 1))
+        items_per_epoch = len(self._epoch_order())
+        steps_per_epoch = math.ceil(items_per_epoch / max(grad_accum, 1))
         total_steps = num_epochs * steps_per_epoch
         self.run_metadata["steps_per_epoch"] = steps_per_epoch
         self.run_metadata["planned_total_steps"] = total_steps
-        self.run_metadata["dataset_samples"] = len(self.train_dataset)
+        self.run_metadata["dataset_samples"] = len(self.samples)
 
         logger.info("Starting accelerated MiniMax H3 LoRA training for %d epochs (%d total steps)...", num_epochs, total_steps)
 
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
+        shift_logged = False
+        loss = None
 
         for epoch in range(num_epochs):
             self.lora_network.train()
 
-            for batch in self.train_dataloader:
-                with self.accelerator.accumulate(self.lora_network):
-                    image_paths = batch["image_path"]
-                    captions = batch["caption"]
-
-                    # 1. Fetch pre-cached latents [B, 24, 1, H//16, W//16]
-                    latents = torch.cat([self.latent_cache[p] for p in image_paths], dim=0).to(device=self.device, dtype=self.dtype)
-
-                    # 2. Fetch pre-cached text embeddings [B, S, 5120]
-                    text_embeds = torch.cat([self.text_cache[c] for c in captions], dim=0).to(device=self.device, dtype=self.dtype)
-
-                    # 3. Sample timesteps & apply discrete flow shift (sigma)
-                    bsz = latents.shape[0]
-                    if flow_shift is None:
-                        flow_shift = self._resolve_flow_shift(latents.shape[-2], latents.shape[-1])
-                        self.run_metadata["resolved_sigma_shift"] = round(flow_shift, 6)
-                        self.run_metadata["latent_size"] = f"{latents.shape[-2]}x{latents.shape[-1]}"
-                        logger.info(
-                            "Timestep schedule: %s, sigma shift %.3f (latent %dx%d)",
-                            train_config.get("timestep_distribution", "krea2_shift"),
-                            flow_shift,
-                            latents.shape[-2],
-                            latents.shape[-1],
-                        )
-                    raw_timesteps = self._sample_timesteps(bsz)
-                    shifted_sigmas = apply_flow_shift(raw_timesteps, shift=flow_shift)
-
-                    # 4. Sample noise and create noisy latents: x_t = (1 - sigma)*x0 + sigma*noise
-                    noise = torch.randn_like(latents)
-                    sigma_broadcast = shifted_sigmas.view(bsz, 1, 1, 1, 1)
-                    noisy_latents = (1.0 - sigma_broadcast) * latents + sigma_broadcast * noise
-
-                    # H3's DiT is conditioned on t = 1 - sigma, not on sigma itself
-                    # (comfy/ldm/minimax/model.py: t_v = 1.0 - sigma_v).
-                    model_timesteps = 1.0 - shifted_sigmas
-
-                    # 5. Build sequence inputs for MiniMax H3 transformer
-                    _, c_lat, f_lat, h_lat, w_lat = latents.shape
-                    video_patches = patchify_video(noisy_latents)
-                    dummy_audio = torch.zeros((bsz, 0, 32), device=self.device, dtype=self.dtype)
-                    layout = self._build_packed_layout(text_embeds.shape[1], f_lat, h_lat, w_lat)
-                    text_indices = layout["text_indices"]
-                    video_indices = layout["video_indices"]
-                    audio_indices = layout["audio_indices"]
-                    timestep_indices = layout["timestep_indices"]
-                    token_tags = layout["token_tags"]
-
-                    position_ids = layout["position_ids"]
-
-                    # 6. Model forward pass
-                    model_output = self.lora_network(
-                        video_hidden_states=video_patches,
-                        audio_hidden_states=dummy_audio,
-                        encoder_hidden_states=text_embeds,
-                        timestep=model_timesteps,
-                        timestep_indices=timestep_indices,
-                        token_tags=token_tags,
-                        position_ids=position_ids,
-                        video_indices=video_indices,
-                        audio_indices=audio_indices,
-                        text_indices=text_indices,
+            for index in self._epoch_order():
+                sample = self.samples[index]
+                _, _, _, h_lat, w_lat = sample.video.shape
+                flow_shift = self._resolve_flow_shift(h_lat, w_lat)
+                if not shift_logged:
+                    shift_logged = True
+                    self.run_metadata["resolved_sigma_shift"] = round(flow_shift, 6)
+                    self.run_metadata["latent_size"] = f"{h_lat}x{w_lat}"
+                    logger.info(
+                        "Timestep schedule: %s, sigma shift %.3f (latent %dx%d); audio sigma follows "
+                        "the inference coupling (video shift %.0f -> audio shift %.0f)",
+                        train_config.get("timestep_distribution", "krea2_shift"),
+                        flow_shift, h_lat, w_lat, VIDEO_SIGMA_SHIFT, AUDIO_SIGMA_SHIFT,
                     )
 
-                    # The H3 checkpoint predicts (clean - noise); target it directly rather
-                    # than negating both sides, which is the same loss written twice over.
-                    v_pred_patches = model_output.video
-
-                    target_velocity = latents - noise
-                    target_patches = patchify_video(target_velocity)
-
-                    # Contrastive guidance loss (ai-toolkit's do_guidance_loss).
-                    #
-                    # H3 is guidance-distilled: CFG is baked into the weights, so a plain
-                    # flow-matching target trains the conditional direction too weakly and the
-                    # distillation degrades as the LoRA takes hold. The fix extrapolates the
-                    # TARGET away from the model's own unconditional prediction, rather than
-                    # applying CFG to the prediction:
-                    #
-                    #   target' = uncond + scale * (target - uncond)
-                    #
-                    # The unconditional pass runs under no_grad and is detached: it shapes what
-                    # the conditional pass aims at, and must not itself be trained through.
-                    if train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)):
-                        uncond_prompt = str(train_config.get("unconditional_prompt", ""))
-                        uncond_embeds = self.text_cache[uncond_prompt].to(device=self.device, dtype=self.dtype).expand(bsz, -1, -1)
-                        # The empty prompt is one BOS token where the caption is several, and
-                        # the packed layout is sized from the text length -- indices, tags and
-                        # the video block's RoPE origin all shift with it. Build its own.
-                        uncond_layout = self._build_packed_layout(
-                            uncond_embeds.shape[1], f_lat, h_lat, w_lat
-                        )
-                        with torch.no_grad():
-                            uncond_output = self.lora_network(
-                                video_hidden_states=video_patches,
-                                audio_hidden_states=dummy_audio,
-                                encoder_hidden_states=uncond_embeds,
-                                timestep=model_timesteps,
-                                timestep_indices=uncond_layout["timestep_indices"],
-                                token_tags=uncond_layout["token_tags"],
-                                position_ids=uncond_layout["position_ids"],
-                                video_indices=uncond_layout["video_indices"],
-                                audio_indices=uncond_layout["audio_indices"],
-                                text_indices=uncond_layout["text_indices"],
-                            )
-                        uncond_patches = uncond_output.video.detach().float()
-                        guided = target_patches.float()
-
-                        if train_config.get("guidance_loss_cfg_zero", False):
-                            # CFG-Zero*: rescale the unconditional direction onto the
-                            # conditional one before extrapolating, so a poorly-aligned
-                            # uncond prediction does not drag the target sideways.
-                            flat_cond = guided.reshape(bsz, -1)
-                            flat_uncond = uncond_patches.reshape(bsz, -1)
-                            dot = (flat_cond * flat_uncond).sum(dim=1, keepdim=True)
-                            squared_norm = (flat_uncond ** 2).sum(dim=1, keepdim=True) + 1e-8
-                            uncond_patches = uncond_patches * (dot / squared_norm).view(bsz, 1, 1)
-
-                        scale = float(train_config.get("guidance_loss_target", 3.5))
-                        if str(train_config.get("guidance_loss_schedule", "sigma")).lower() == "sigma":
-                            # (target - uncond) carries sigma * fresh_noise, which nothing can
-                            # predict at low sigma, so decay toward a plain flow target there.
-                            sigma_col = shifted_sigmas.detach().float().view(bsz, 1, 1)
-                            scale_eff = 1.0 + (scale - 1.0) * sigma_col
-                        else:
-                            scale_eff = scale
-
-                        target_patches = (
-                            uncond_patches + scale_eff * (guided - uncond_patches)
-                        ).detach().to(target_patches.dtype)
-
-                    loss = torch.nn.functional.mse_loss(v_pred_patches.float(), target_patches.float())
-
-                    loss_weight_strength = float(train_config.get("loss_weight_strength", 1.0))
-                    if loss_weight_strength != 1.0:
-                        loss = loss * loss_weight_strength
-
+                with self.accelerator.accumulate(self.lora_network):
+                    loss, parts = self._training_step(sample, flow_shift)
                     self.accelerator.backward(loss)
 
                     if self.accelerator.sync_gradients:
@@ -796,10 +1048,17 @@ class MiniMaxH3LoRATrainer:
                         if self.lr_scheduler is not None:
                             self.lr_scheduler.step()
                         self.optimizer.zero_grad()
+                        if self.ema is not None:
+                            self.ema.update()
 
                 if self.accelerator.sync_gradients:
                     global_step += 1
                     progress_bar.update(1)
+
+                    detail = "".join(
+                        f", {name}: {parts[name]:.6f}" for name in ("video", "audio") if name in parts
+                    )
+                    detail += f" [{sample.kind}]"
 
                     # For Prodigy, param_groups['lr'] is only the multiplier and sits at 1.0
                     # once warmup ends; the step size it actually adapted is lr * d. Report
@@ -813,19 +1072,22 @@ class MiniMaxH3LoRATrainer:
                     if hasattr(inner_optimizer, "get_avg_learning_rate"):
                         adapted_lr = inner_optimizer.get_avg_learning_rate()
                         self.progress_logger.info(
-                            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (automagic3)",
+                            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (automagic3)%s",
                             global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
-                            epoch + 1, num_epochs, adapted_lr,
+                            epoch + 1, num_epochs, adapted_lr, detail,
                         )
                     elif prodigy_d is not None:
                         self.progress_logger.info(
-                            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (mult %.3f x d %.2e)",
+                            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (mult %.3f x d %.2e)%s",
                             global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
-                            epoch + 1, num_epochs, current_lr * prodigy_d, current_lr, prodigy_d,
+                            epoch + 1, num_epochs, current_lr * prodigy_d, current_lr, prodigy_d, detail,
                         )
                     else:
-                        self.progress_logger.info("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e",
-                                                    global_step, total_steps, int(global_step/total_steps*100), loss.item(), epoch + 1, num_epochs, current_lr)
+                        self.progress_logger.info(
+                            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e%s",
+                            global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
+                            epoch + 1, num_epochs, current_lr, detail,
+                        )
 
                     if global_step % save_every == 0:
                         self.save_checkpoint(global_step)
@@ -846,7 +1108,13 @@ class MiniMaxH3LoRATrainer:
 
         save_path = output_dir / f"minimax_h3_lora_step_{step}.safetensors"
         save_dtype = getattr(torch, str(self.config.get("output", {}).get("dtype", "bfloat16")))
-        state_dict = self.lora_network.get_state_dict(save_dtype=save_dtype)
+        network = self.accelerator.unwrap_model(self.lora_network)
+        if self.ema is not None:
+            # Checkpoints carry the averaged weights; training continues on the live ones.
+            with self.ema.applied():
+                state_dict = network.get_state_dict(save_dtype=save_dtype)
+        else:
+            state_dict = network.get_state_dict(save_dtype=save_dtype)
 
         runtime = dict(self.run_metadata)
         runtime["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -872,7 +1140,6 @@ class MiniMaxH3LoRATrainer:
                 self.dry_run_training()
                 return
 
-            self.create_dataset()
             self.precache_dataset()
             self.load_transformer_and_lora()
             self.setup_optimizer()
