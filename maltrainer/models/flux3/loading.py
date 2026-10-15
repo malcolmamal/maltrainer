@@ -14,6 +14,7 @@ They are refused: BFL's model card says to fine-tune the base model.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Tuple, Union
@@ -47,6 +48,31 @@ def _strip_container_prefix(state_dict: Dict[str, torch.Tensor]) -> Dict[str, to
     return state_dict
 
 
+def _to_module_names(state_dict: Dict[str, torch.Tensor]) -> Tuple[Dict[str, torch.Tensor], Dict[str, str]]:
+    """BFL's key spellings -> the module names, as ComfyUI's Flux.process_unet_state_dict does.
+
+    - QK-norm weights are stored as ``*_norm.scale``.
+    - ``<block>.comfy_attention.config`` is a JSON hint naming the attention kernel ComfyUI's
+      inference may use (comfy-kitchen int8 / SOL). It holds no weights; training runs plain
+      SDPA, so it is dropped and only reported.
+    """
+    out, attention = {}, {}
+    for key, value in state_dict.items():
+        if key.endswith(".comfy_attention.config"):
+            try:
+                config = json.loads(bytes(value.flatten().tolist()).decode("utf-8"))
+                configs = config if isinstance(config, list) else [config]
+                methods = ",".join(str(c.get("attention")) for c in configs)
+            except (ValueError, AttributeError):
+                methods = "unreadable"
+            attention[methods] = attention.get(methods, 0) + 1
+            continue
+        if key.endswith("_norm.scale"):
+            key = key[: -len(".scale")] + ".weight"
+        out[key] = value
+    return out, {method: f"{count} blocks" for method, count in attention.items()}
+
+
 def load_flux3_transformer(
     path: Union[str, Path],
     device: torch.device,
@@ -64,7 +90,9 @@ def load_flux3_transformer(
         state_dict, num_quant = load_comfy_int8_convrot_state_dict(str(path), device=torch.device("cpu"))
     else:
         state_dict, num_quant = load_file(str(path)), 0
-    state_dict = _strip_container_prefix(state_dict)
+    state_dict, attention_hints = _to_module_names(_strip_container_prefix(state_dict))
+    if attention_hints:
+        logger.info("Checkpoint attention hints for ComfyUI inference (not used in training): %s", attention_hints)
 
     config = Flux3Config.from_state_dict(state_dict)
     if config.flow_map:
@@ -101,6 +129,7 @@ def load_flux3_transformer(
         "depth": config.depth,
         "depth_single_blocks": config.depth_single_blocks,
         "fused_qkv": config.fused_qkv,
+        "inference_attention": attention_hints,
     }
     logger.info("FLUX.3 DiT ready: %s", info)
     return model, info
