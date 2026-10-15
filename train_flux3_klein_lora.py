@@ -244,6 +244,7 @@ class Flux3KleinLoRATrainer:
                 "decouple": bool(train_config.get("prodigy_decouple", True)),
                 "use_bias_correction": bool(train_config.get("prodigy_use_bias_correction", False)),
                 "safeguard_warmup": bool(train_config.get("prodigy_safeguard_warmup", False)),
+                "slice_p": int(train_config.get("prodigy_slice_p", 1)),
             }
             supported = set(inspect.signature(Prodigy.__init__).parameters)
             kwargs = {k: v for k, v in requested.items() if k in supported and v is not None}
