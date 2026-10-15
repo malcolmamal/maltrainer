@@ -1,0 +1,66 @@
+# FLUX.3 [klein] LoRA -- Automagic3 v2: 8-step sign window (train_flux3_klein_lora.py)
+# Dataset: Felicia Day (23 images)
+#
+# v1 (train_flux3_klein_feliciaday.yaml, 16-step window) came out under-trained: its average rate
+# crawled from 1e-6 to 5e-6 by step 500 and levelled off at 3.2e-5. Automagic3 only raises the rate
+# when an element keeps one update sign for the whole window, and 16 equal signs in a row are rare
+# with batch-1 gradients. Qwen-Image 2.1 used an 8-step window and reached ~2.3e-4 within ~100 steps.
+# Only the window changes; everything else matches v1.
+# 2500 steps = ~109 epochs of 23 images; on Qwen-Image 2.1 likeness plateaued by ~1250.
+#
+#   python train_flux3_klein_lora.py --config config/train_flux3_klein_feliciaday_automagic3_h8.yaml
+
+model:
+  transformer_path: "C:\\Development\\ComfyUI\\models\\diffusion_models\\FLUX3\\flux3_image_klein_int8_convrot.safetensors"
+  vae_path: "C:\\Development\\ComfyUI\\models\\vae\\flux2_vae.safetensors"
+  text_encoder_path: "C:\\Development\\ComfyUI\\models\\text_encoders\\qwen3vl_4b_int8_convrot.safetensors"
+
+dataset:
+  path: "C:\\Development\\ai-toolkit\\datasets\\feliciaday"
+  resolution: 512            # area target; buckets keep each image's aspect on a 16 px grid
+  aspect_mode: "bucket"
+  trigger: "feliciaday"
+  default_caption: "a photo of feliciaday"   # only for images without a .txt caption
+  repeats: 1
+
+lora:
+  rank: 16
+  alpha: 16
+  prefix: "diffusion_model."
+  targets: "blocks"          # attention + MLP of the 5 text, 5 image and 28 single blocks (228)
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  max_steps: 2500
+  num_epochs: 70
+  save_every: 250
+  timestep_distribution: "uniform"
+  timestep_shift: 6.93       # the FLUX.3 reference sampler's shift
+  max_grad_norm: 1.0
+  gradient_checkpointing: true
+  int8_grad_precision: "bf16"
+  optimizer: "automagic3"
+  learning_rate: 1.0e-6      # Automagic3 launch point; it adapts from here
+  weight_decay: 0.0
+  automagic_param_groups: true
+  automagic_polarity_history: 8   # v1: 16
+  automagic_clip_threshold: 1.0
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+  ema_decay: 0.98            # checkpoints save the average
+  caption_dropout: 0.05
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/flux3_klein_feliciaday_automagic3_h8"
+  name: "flux3_klein_feliciaday_v3_automagic3_h8"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

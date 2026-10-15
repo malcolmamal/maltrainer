@@ -367,7 +367,7 @@ class Krea2LoRATrainer:
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
         prefix = ("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (step, total, int(step / total * 100), loss.item(), epoch + 1, num_epochs))
         if hasattr(inner, "get_avg_learning_rate"):
-            rates = ", ".join(f"{g.get('name', i)} {g['lr']:.2e}" for i, g in enumerate(inner.param_groups))
+            rates = ", ".join(f"{g.get('name', i)} {lr:.2e}" for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates())))
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
         elif group.get("d") is not None:
             self.progress_logger.info("%sLR: %.2e (mult %.3f x d %.2e)", prefix, group["lr"] * group["d"], group["lr"], group["d"])
