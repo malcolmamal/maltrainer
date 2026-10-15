@@ -1,0 +1,77 @@
+# FLUX.3 [klein] LoRA template -- Automagic3 (train_flux3_klein_lora.py).
+#
+# Used by the web UI, which fills in the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    COMFYUI_MODELS_PATH; the UI finds each file anywhere under the matching subfolder
+# For the CLI, copy this file and replace the placeholders yourself.
+#
+# Recipe sources (docs/flux3-klein-lora-training.md):
+#   diffusers' train_dreambooth_lora_flux3_klein.py -- base model, rank 16 / alpha 16, attention +
+#     MLP of every block, ~1500 steps, uniform timesteps through the fixed 6.93 shift
+#   maltrainer's Krea 2 Automagic3 setup -- one adaptive rate per module family, a 16-step sign
+#     window, no weight decay, EMA 0.98, 1e-6 launch point
+
+model:
+  # The BASE model. The _sd_ files are step-distilled and refused by the trainer. The bf16 base
+  # (flux3_image_klein_bf16) also works; int8 keeps the frozen DiT at ~6 GB.
+  transformer_path: "[comfyui_models]/diffusion_models/flux3_image_klein_int8_convrot.safetensors"
+  vae_path: "[comfyui_models]/vae/flux2_vae.safetensors"
+  # Qwen3-VL-4B-Instruct. The qwen3.5_9b prompt upsampler is an inference-time tool, not needed here.
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3vl_4b_int8_convrot.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512            # area target; buckets keep each image's aspect on a 16 px grid
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 16
+  alpha: 16
+  prefix: "diffusion_model."
+  # blocks (attention + MLP of the 5 text, 5 image and 28 single blocks = 228, the diffusers set)
+  # | single (the 28 joint blocks only = 168) | all (blocks + input/timestep/modulation/output = 238)
+  targets: "blocks"
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  # Duration: max_steps (> 0) wins; otherwise num_epochs full epochs.
+  max_steps: 1500
+  num_epochs: 70
+  save_every: 250
+  # sigma = shift(u), u uniform (the diffusers trainer) or logit_normal, shift 6.93 = the FLUX.3
+  # reference sampler's, the same at every resolution
+  timestep_distribution: "uniform"
+  timestep_shift: 6.93
+  max_grad_norm: 1.0
+  gradient_checkpointing: true
+  int8_grad_precision: "bf16"     # backward through the frozen int8 Linears: bf16 | fp32 | int8
+  optimizer: "automagic3"
+  learning_rate: 1.0e-6           # Automagic3 launch point; it adapts from here
+  weight_decay: 0.0
+  automagic_param_groups: true    # attention / MLP / other each adapt their own rate
+  automagic_polarity_history: 16
+  automagic_clip_threshold: 1.0
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+  ema_decay: 0.98                 # checkpoints save the average
+  # The base model samples with real CFG against the empty prompt; dropping a caption now and
+  # then keeps the LoRA's unconditional branch in step (diffusers suggests 0.1).
+  caption_dropout: 0.05
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/flux3_klein/[person_to_train]"
+  name: "flux3_klein_[person_to_train]"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

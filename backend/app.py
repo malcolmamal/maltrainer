@@ -167,6 +167,32 @@ MODELS: Dict[str, ModelSpec] = {
             output_prefix="krea2_",
             caption_from_trigger=True,
         ),
+        ModelSpec(
+            id="flux3_klein",
+            label="FLUX.3 [klein] (Base)",
+            script="train_flux3_klein_lora.py",
+            template="config/flux3_klein_template.yaml",
+            optimizers=(
+                OptimizerSpec("automagic3", "Automagic3 (recommended)", 1e-6,
+                              "self-tuning; per module family, 16-step sign window"),
+                OptimizerSpec("adamw8bit", "AdamW 8-bit", 1e-4, "the diffusers FLUX.3 example's rate"),
+                OptimizerSpec("prodigy", "Prodigy", 1.0, "learning rate is Prodigy's multiplier"),
+            ),
+            default_optimizer="automagic3",
+            default_duration_mode="steps",
+            default_epochs=70,
+            default_max_steps=1500,
+            native_max_steps=True,
+            model_files=(
+                ("transformer_path", "diffusion_models", "flux3_image_klein_int8_convrot.safetensors"),
+                ("vae_path", "vae", "flux2_vae.safetensors"),
+                ("text_encoder_path", "text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
+            ),
+            per_run_output=True,
+            resolution_note="Aspect-ratio buckets around 512×512 on a 16 px grid.",
+            output_prefix="flux3_klein_",
+            caption_from_trigger=True,
+        ),
     )
 }
 

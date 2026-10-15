@@ -34,6 +34,16 @@ MODELS = {
             "text_encoder_path": ("text_encoders", "qwen3vl_4b_fp8_scaled.safetensors"),
         },
     ),
+    "flux3_klein": (
+        "train_flux3_klein_lora.py",
+        "config/flux3_klein_template.yaml",
+        {},
+        {
+            "transformer_path": ("diffusion_models", "flux3_image_klein_int8_convrot.safetensors"),
+            "vae_path": ("vae", "flux2_vae.safetensors"),
+            "text_encoder_path": ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
+        },
+    ),
     "qwen_image_2_1": (
         "train_qwen_image_2_1_lora.py",
         "config/qwen_image_2_1_template.yaml",
