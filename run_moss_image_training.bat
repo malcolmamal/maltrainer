@@ -5,6 +5,7 @@ REM
 REM    run_moss_image_training.bat <dataset> [automagic3^|prodigy^|adamw8bit] [extra args...]
 REM    run_moss_image_training.bat feliciaday
 REM    run_moss_image_training.bat feliciaday prodigy
+REM    run_moss_image_training.bat feliciaday adamw8bit
 REM    run_moss_image_training.bat feliciaday automagic3 --max-steps 2000 --dry-run
 REM
 REM  Settings come from the environment, or from webui.local.bat next to this file:

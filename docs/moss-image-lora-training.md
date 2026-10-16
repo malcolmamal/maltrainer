@@ -13,6 +13,7 @@ python train_moss_image_lora.py --config config/train_moss_image_feliciaday_auto
 ```bash
 run_moss_image_training.bat feliciaday              # fills config/moss_image_template.yaml (Automagic3)
 run_moss_image_training.bat feliciaday prodigy      # fills config/moss_image_prodigy_template.yaml
+run_moss_image_training.bat feliciaday adamw8bit    # fills config/moss_image_adamw_template.yaml
 ```
 
 The third is the web UI: pick **MOSS-Image (Base)**, a dataset and an optimizer.
@@ -95,8 +96,8 @@ and compare checkpoints.
 
 ## Templates
 
-Both templates use the same model files, LoRA (rank 16, alpha 16, `blocks`), timesteps and
-512 px buckets, so their runs compare directly.
+All three templates use the same model files, LoRA (rank 16, alpha 16, `blocks`), timesteps
+and 512 px buckets, so their runs compare directly.
 
 - `config/moss_image_template.yaml`: **Automagic3**. Launch point 1e-6. Attention, MLP and
   other layers each adapt their own rate, over an **8-step** sign window. On FLUX.3 a 16-step
@@ -104,10 +105,11 @@ Both templates use the same model files, LoRA (rank 16, alpha 16, `blocks`), tim
 - `config/moss_image_prodigy_template.yaml`: **Prodigy**, with FLUX.3's Prodigy settings.
   lr 1.0 (a multiplier on Prodigy's own estimate d), 100 warmup steps, decoupled weight decay
   0.01, beta2 0.99, bias correction and safeguarded warmup, no EMA, 100 epochs.
+- `config/moss_image_adamw_template.yaml`: **AdamW 8-bit** at a flat 1e-4 (Fizgig 8.1's rate
+  for FLUX.3 and Krea 2), weight decay 0.01, EMA 0.98, as in the Automagic3 template.
 
-`config/train_moss_image_feliciaday_automagic3.yaml` (2500 steps) and
-`config/train_moss_image_feliciaday_prodigy.yaml` (100 epochs) are the feliciaday runs built
-from them.
+The feliciaday runs built from them are `config/train_moss_image_feliciaday_automagic3.yaml`,
+`_prodigy.yaml` and `_adamw.yaml`.
 
 LoRA target presets (`lora.targets`):
 
@@ -121,13 +123,21 @@ Saved keys are ComfyUI's module paths (`diffusion_model.layers.N.proj.q.lora_A.w
 ComfyUI loads them with its stock LoRA loader, including on the repacked files with a fused
 `proj.qkv`.
 
-## Not verified yet
+## First real run (feliciaday, Automagic3, 2026-10-17)
 
-No real-weight run has been done here (this machine has no GPU and only stub model files). For
-the first run, watch:
+The run used 23 images at 512×512, 100 epochs (2300 steps), the Automagic3 template, the bf16 DiT
+and the int8 text encoder.
 
-- **VRAM.** The bf16 DiT is ~10 GB, plus activations with gradient checkpointing.
-- **Step time.**
-- **The loss level and its trend.**
-- **Text-encoder shape check.** The real `qwen3.5_9b_int8_convrot` file must show 32 layers
-  (8 full attention) and hidden 4096 in the log line `MOSS-Image text encoder: Qwen3.5, ...`.
+- **Loading.** The real `moss_image_base_bf16` file stores **fused** `proj.qkv`. The LoRA still
+  saves separate q/k/v adapters, which ComfyUI slices in. The text encoder logged 32 layers
+  (8 full attention) and hidden 4096. Captions were 43-82 tokens.
+- **Speed.** ~0.6 s/step, 23 minutes for the run.
+- **Rate.** Automagic3's average rate peaked at 5.7e-5 by step 200 (MLP 8.4e-5, attention
+  2.9e-5). It then decayed steadily to 1.1e-5 by the end (attention 7e-6).
+- **Loss.** Mean loss went 0.578 → 0.546. It is dominated by the high-noise timesteps, so it
+  says little about likeness.
+- **Result.** The LoRA works but needs strength 1.4-1.5, so it is under-trained. Likeness at
+  step 500 already matched step 2300, which fits the decaying rate.
+
+Two levers are untested yet: a higher constant rate (the AdamW template) and lower-noise
+timesteps (`timestep_logit_mean: 0`). Change one per run to see which one matters.
