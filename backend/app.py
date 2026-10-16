@@ -193,6 +193,34 @@ MODELS: Dict[str, ModelSpec] = {
             output_prefix="flux3_klein_",
             caption_from_trigger=True,
         ),
+        ModelSpec(
+            id="moss_image",
+            label="MOSS-Image (Base)",
+            script="train_moss_image_lora.py",
+            template="config/moss_image_template.yaml",
+            optimizers=(
+                OptimizerSpec("automagic3", "Automagic3 (recommended)", 1e-6,
+                              "self-tuning; per module family, 8-step sign window"),
+                OptimizerSpec("prodigy", "Prodigy", 1.0,
+                              "learning rate is Prodigy's multiplier; 100 warmup steps, no EMA"),
+                OptimizerSpec("adamw8bit", "AdamW 8-bit", 1e-4),
+            ),
+            default_optimizer="automagic3",
+            default_duration_mode="steps",
+            default_epochs=70,
+            default_max_steps=1500,
+            native_max_steps=True,
+            model_files=(
+                ("transformer_path", "diffusion_models", "moss_image_base_bf16.safetensors"),
+                ("vae_path", "vae", "flux2_vae.safetensors"),
+                ("text_encoder_path", "text_encoders", "qwen3.5_9b_int8_convrot.safetensors"),
+            ),
+            per_run_output=True,
+            resolution_note="Aspect-ratio buckets around 512×512 on a 16 px grid.",
+            optimizer_templates=(("prodigy", "config/moss_image_prodigy_template.yaml"),),
+            output_prefix="moss_image_",
+            caption_from_trigger=True,
+        ),
     )
 }
 

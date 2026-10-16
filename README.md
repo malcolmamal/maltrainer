@@ -18,6 +18,10 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   (the INT8 ConvRot DiT, the Flux2 VAE and Qwen3-VL-4B), with an Automagic3 template. Run it with
   `train_flux3_klein_lora.py`, `run_flux3_klein_training.bat` or the web UI. See the
   [FLUX.3 [klein] training guide](docs/flux3-klein-lora-training.md).
+- **MOSS-Image LoRA Training**: trains MOSS-Image Base (OpenMOSS, 5B) from ComfyUI's single files
+  (the bf16 or INT8 ConvRot DiT, the Flux2 VAE and Qwen3.5-9B), with an Automagic3 template and a
+  Prodigy template. Run it with `train_moss_image_lora.py`, `run_moss_image_training.bat` or the
+  web UI. See the [MOSS-Image training guide](docs/moss-image-lora-training.md).
 - **MiniMax H3 LoRA Training**: CLI trainer in `train_minimax_h3_lora.py`. It trains on stills,
   video clips with sound, and audio-only recordings, using ComfyUI's single-file checkpoints. It
   includes Fizgig's default recipe. See the [MiniMax H3 training guide](docs/minimax-h3-lora-training.md).

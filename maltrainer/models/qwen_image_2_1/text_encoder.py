@@ -49,6 +49,7 @@ class Int8Embedding(nn.Module):
         self.weight = nn.Parameter(torch.empty((num_embeddings, embedding_dim), dtype=torch.int8), requires_grad=False)
         self.register_buffer("scale_weight", torch.ones((num_embeddings, 1), dtype=torch.float32))
         self.register_buffer("int8_convrot_groupsize", torch.tensor(int(group_size), dtype=torch.int32))
+        self.out_dtype = torch.bfloat16
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         w = torch.embedding(self.weight, input_ids)
@@ -57,7 +58,7 @@ class Int8Embedding(nn.Module):
         group_size = int(self.int8_convrot_groupsize.item())
         if group_size:
             embeds = rotate_activation(embeds, group_size)
-        return embeds.to(torch.bfloat16)
+        return embeds.to(self.out_dtype)
 
 
 class Qwen3VLTextEncoder(nn.Module):
