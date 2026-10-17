@@ -141,3 +141,8 @@ and the int8 text encoder.
 
 Two levers are untested yet: a higher constant rate (the AdamW template) and lower-noise
 timesteps (`timestep_logit_mean: 0`). Change one per run to see which one matters.
+
+The Prodigy run was under-strength too. Stacked, the Automagic3 step-500 and Prodigy step-750
+LoRAs gave the best results so far: see
+[moss-image-lora-stacking-findings.md](moss-image-lora-stacking-findings.md). To keep such a
+stack as one file, merge it with [scripts/merge_loras.py](merge-loras.md).
