@@ -3,7 +3,7 @@
 Findings from the first feliciaday LoRA runs on MOSS-Image Base, October 2026.
 
 **In short:** two separately trained LoRAs were each under-strength on their own. One came from
-Automagic3, one from Prodigy. Loaded together, the results were the best so far. The likely
+Automagic3, one from Prodigy. Loaded together, both at strength 1.0, the results were the best so far. The likely
 reasons, and what to do about them, follow.
 
 ## The runs
@@ -24,9 +24,7 @@ They differed only in the optimizer.
 | Optimizer | Automagic3, 8-step sign window, launch 1e-6, EMA 0.98 | Prodigy, lr 1.0, 100 warmup steps, weight decay 0.01, no EMA |
 | Checkpoint used | step 500 | step 750 |
 | Alone at strength 1.0 | under-strength. It worked at 1.4-1.5 | under-strength. Better at 1.5, but not right |
-| Stacked together | **very good: the best results so far** | |
-
-The strengths used in the stack were not recorded yet.
+| Stacked together, both at strength 1.0 | **very good: the best results so far** | |
 
 Observations from the Automagic3 log:
 
@@ -69,9 +67,10 @@ What the runs share is the more likely cause:
 
 ## What to do with it
 
-1. **Keep the result now.** Merge the pair into one file with `scripts/merge_loras.py`, at the
-   strengths used in the stack. The merge is exact: one rank-32 LoRA that gives exactly the
-   stacked result at strength 1.0. See [merge-loras.md](merge-loras.md).
+1. **Keep the result now.** Merge the pair into one file with `scripts/merge_loras.py` at
+   1.0 each, the strengths of the stack (the default, so no `:strength` is needed). The merge
+   is exact: one rank-32 LoRA that gives exactly the stacked result at strength 1.0. See
+   [merge-loras.md](merge-loras.md).
 2. **Test the diagnosis.** Train one run with `timestep_logit_mean: 0` (centred on sigma 0.5)
    and everything else unchanged. If that single LoRA is right at strength 1.0, the timesteps
    were the bottleneck.
