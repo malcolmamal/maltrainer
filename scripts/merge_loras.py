@@ -165,7 +165,8 @@ def merge(inputs: List[Tuple[Path, float]], dtype: torch.dtype, verify: bool) ->
 def load_config(path: Path) -> dict:
     """The YAML merge config -> {"output", "dtype", "verify", "inputs": [(Path, strength)]}."""
     with open(path, encoding="utf-8") as handle:
-        config = yaml.safe_load(handle) or {}
+        raw = handle.read().replace("\xa0", " ")
+        config = yaml.safe_load(raw) or {}
     if not isinstance(config, dict) or not isinstance(config.get("loras"), list) or not config["loras"]:
         raise ValueError(f"{path}: needs a non-empty 'loras:' list")
     inputs = []

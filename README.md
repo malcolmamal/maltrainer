@@ -25,6 +25,9 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
 - **Lossless LoRA merging**: `scripts/merge_loras.py` merges LoRAs into one file that applies
   exactly what stacking them does, with per-LoRA strengths given on the command line or in a YAML
   config. It also bakes a strength into a single LoRA. See [merging LoRAs](docs/merge-loras.md).
+- **LoRA resizing**: `scripts/resize_lora.py` (or `resize_lora.bat`) shrinks a LoRA to a lower
+  rank, such as 32 to 8, with a per-layer SVD, in seconds and with no kohya install. See
+  [resizing LoRAs](docs/resize-loras.md).
 - **MiniMax H3 LoRA Training**: CLI trainer in `train_minimax_h3_lora.py`. It trains on stills,
   video clips with sound, and audio-only recordings, using ComfyUI's single-file checkpoints. It
   includes Fizgig's default recipe. See the [MiniMax H3 training guide](docs/minimax-h3-lora-training.md).
