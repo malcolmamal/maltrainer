@@ -1,0 +1,17 @@
+# MOSS-Image feliciaday "soup": the Automagic3 and Prodigy LoRAs, stacked at 1.0 each, as one file.
+# Each was under-strength alone; together they gave the best results so far
+# (docs/moss-image-lora-stacking-findings.md). The merge is exact: load the output at 1.0.
+#
+#   python scripts/merge_loras.py --config config/merge_moss_image_feliciaday_soup.yaml
+#
+# Relative paths are from the current directory (run from the repo root, like training).
+
+output: output/moss_image_feliciaday_soup.safetensors
+dtype: float32      # exact; bfloat16 halves the size (~150 MB) at ~2e-3 rounding
+verify: true
+
+loras:
+  - path: output/moss_image_feliciaday_automagic3/moss_image_feliciaday_v1_automagic3_step_500.safetensors
+    strength: 1.0
+  - path: output/moss_image_feliciaday_prodigy/moss_image_feliciaday_v1_prodigy_step_750.safetensors
+    strength: 1.0

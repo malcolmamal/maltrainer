@@ -9,18 +9,65 @@ of the LoRAs as one bigger LoRA.
 
 ## Quick start
 
-Merge the two feliciaday MOSS-Image LoRAs, each at strength 1.0, and check the result:
+Merge the two feliciaday MOSS-Image LoRAs, each at strength 1.0, and check the result. The
+LoRAs are listed in a YAML config:
+
+```bash
+python scripts/merge_loras.py --config config/merge_moss_image_feliciaday_soup.yaml
+```
+
+Then load `output/moss_image_feliciaday_soup.safetensors` in ComfyUI at **strength 1.0**.
+
+The same merge works without a config, with the LoRAs on the command line:
 
 ```bash
 python scripts/merge_loras.py output/moss_image_feliciaday_soup.safetensors output/moss_image_feliciaday_automagic3/moss_image_feliciaday_v1_automagic3_step_500.safetensors output/moss_image_feliciaday_prodigy/moss_image_feliciaday_v1_prodigy_step_750.safetensors --verify
 ```
 
-Then load `moss_image_feliciaday_soup.safetensors` in ComfyUI at **strength 1.0**.
+## YAML config
+
+A config lists the LoRAs, each with its strength, plus the output file and options. It keeps a
+merge recipe in the repo, where you can rerun or tweak it.
+
+```yaml
+output: output/moss_image_feliciaday_soup.safetensors
+dtype: float32      # optional: float32 (default) or bfloat16
+verify: true        # optional
+loras:
+  - path: output/moss_image_feliciaday_automagic3/moss_image_feliciaday_v1_automagic3_step_500.safetensors
+    strength: 1.0   # optional, default 1.0
+  - path: output/moss_image_feliciaday_prodigy/moss_image_feliciaday_v1_prodigy_step_750.safetensors
+    strength: 1.0
+  - output/some_other_run/lora.safetensors   # a bare path means strength 1.0
+```
+
+- **Paths.** Relative paths are from the current directory. Run from the repo root, as for
+  training. Windows paths work unquoted or in single quotes. In double quotes, double the
+  backslashes (`"C:\\loras\\a.safetensors"`), as in the training configs.
+- **Overrides.** On the command line, an output path, `--dtype` or `--verify` override the
+  config. Example: `merge_loras.py --config soup.yaml output/soup_bf16.safetensors --dtype bfloat16`.
+- **Overwriting** an existing output always needs `--force`, even with a config.
+- **Typos fail.** Misspelt keys (`strenght:`) raise an error instead of being ignored.
+  You can't give LoRAs in a config and on the command line at once.
+
+`config/merge_moss_image_feliciaday_soup.yaml` is the feliciaday soup.
+
+## One LoRA: bake in a strength
+
+With a single input, the script writes that LoRA with its strength folded in. A LoRA that looks
+right at 1.5 becomes one that is right at 1.0:
+
+```bash
+python scripts/merge_loras.py output/moss_image_feliciaday_adamw_x1.5.safetensors output/moss_image_feliciaday_adamw/moss_image_feliciaday_v1_adamw_step_N.safetensors:1.5
+```
+
+Replace `step_N` with the checkpoint you use. The rank stays the same (16) and the result is
+exact. In ComfyUI, the baked file at 1.0 matched the original at 1.5 to 1e-7.
 
 ## Strengths
 
-Give each input the strength it had in your stack by appending `:strength` to its path. Without
-one, the strength is 1.0.
+Give each input the strength it had in your stack: `strength:` in a config, or `:strength`
+appended to its path on the command line. Without one, the strength is 1.0.
 
 ```bash
 python scripts/merge_loras.py out.safetensors automagic_step_500.safetensors:0.8 prodigy_step_750.safetensors:1.1
@@ -34,6 +81,7 @@ scaled by half. Windows paths with a drive letter work: `C:\loras\a.safetensors:
 
 | Option | Effect |
 |---|---|
+| `--config FILE` | Read the LoRAs, strengths, output, dtype and verify from a YAML file |
 | `--verify` | For every module, compares the merged weight change with the sum of the inputs' changes in float64 and prints the worst relative difference |
 | `--dtype float32` | Default. Exact: ~1e-8 relative per module |
 | `--dtype bfloat16` | Half the file size, ~2e-3 relative rounding. Usually invisible, but not lossless |

@@ -18,6 +18,22 @@ it per module against the fp64 sum.
 
     python scripts/merge_loras.py out.safetensors a.safetensors b.safetensors
     python scripts/merge_loras.py out.safetensors a.safetensors:0.8 b.safetensors:1.2 --verify
+    python scripts/merge_loras.py out.safetensors a.safetensors:1.5     (one LoRA: bake a strength in)
+    python scripts/merge_loras.py --config config/merge_moss_image_feliciaday_soup.yaml
+
+A YAML config lists the LoRAs and their strengths (relative paths are from the current directory,
+as in the training configs):
+
+    output: output/soup.safetensors
+    dtype: float32          # optional, default float32
+    verify: true            # optional
+    loras:
+      - path: output/run_a/a_step_500.safetensors
+        strength: 1.0       # optional, default 1.0
+      - output/run_b/b_step_750.safetensors     # a bare path means strength 1.0
+
+Command-line ``output``, ``--dtype`` and ``--verify`` override the config; overwriting an
+existing output always needs ``--force``.
 
 Key layouts: ``<module>.lora_A.weight`` / ``lora_B.weight`` (maltrainer, PEFT) or
 ``<module>.lora_down.weight`` / ``lora_up.weight`` (kohya), each with an optional
@@ -35,6 +51,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import torch
+import yaml
 from safetensors import safe_open
 from safetensors.torch import save_file
 
@@ -145,7 +162,32 @@ def merge(inputs: List[Tuple[Path, float]], dtype: torch.dtype, verify: bool) ->
     return state, info, loras
 
 
-def merged_metadata(loras: list, info: dict, dtype: torch.dtype) -> Dict[str, str]:
+def load_config(path: Path) -> dict:
+    """The YAML merge config -> {"output", "dtype", "verify", "inputs": [(Path, strength)]}."""
+    with open(path, encoding="utf-8") as handle:
+        config = yaml.safe_load(handle) or {}
+    if not isinstance(config, dict) or not isinstance(config.get("loras"), list) or not config["loras"]:
+        raise ValueError(f"{path}: needs a non-empty 'loras:' list")
+    inputs = []
+    for i, entry in enumerate(config["loras"]):
+        if isinstance(entry, str):
+            entry = {"path": entry}
+        if not isinstance(entry, dict) or "path" not in entry:
+            raise ValueError(f"{path}: loras[{i}] needs a 'path'")
+        unknown = set(entry) - {"path", "strength"}
+        if unknown:
+            raise ValueError(f"{path}: loras[{i}] has unknown keys {sorted(unknown)}")
+        inputs.append((Path(entry["path"]), float(entry.get("strength", 1.0))))
+    unknown = set(config) - {"output", "dtype", "verify", "loras"}
+    if unknown:
+        raise ValueError(f"{path}: unknown keys {sorted(unknown)}")
+    dtype = config.get("dtype")
+    if dtype is not None and dtype not in DTYPES:
+        raise ValueError(f"{path}: dtype must be one of {sorted(DTYPES)}, got {dtype!r}")
+    return {"output": config.get("output"), "dtype": dtype, "verify": bool(config.get("verify", False)), "inputs": inputs}
+
+
+def merged_metadata(loras: list, info: dict, dtype: torch.dtype, config_file: Path = None) -> Dict[str, str]:
     """Carry the inputs' shared ``ss_*`` identity, fix the network size, and record the recipe."""
     out: Dict[str, str] = {}
     first = loras[0]["metadata"]
@@ -160,6 +202,7 @@ def merged_metadata(loras: list, info: dict, dtype: torch.dtype) -> Dict[str, st
         "method": "exact rank concatenation (B @ A = sum of strength * alpha / rank * B_i @ A_i)",
         "save_dtype": str(dtype).replace("torch.", ""),
         "max_rel_error": info["max_rel_error"],
+        "config_file": config_file.name if config_file else None,
         "inputs": [
             {
                 "file": lora["path"].name,
@@ -178,26 +221,44 @@ def merged_metadata(loras: list, info: dict, dtype: torch.dtype) -> Dict[str, st
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("output", type=Path, help="merged .safetensors to write")
-    parser.add_argument("inputs", nargs="+", help="LoRA files, each optionally path:strength (default 1.0)")
-    parser.add_argument("--dtype", choices=sorted(DTYPES), default="float32",
+    parser.add_argument("output", type=Path, nargs="?", help="merged .safetensors to write (overrides the config's)")
+    parser.add_argument("inputs", nargs="*", help="LoRA files, each optionally path:strength (default 1.0)")
+    parser.add_argument("--config", type=Path, help="YAML file listing the LoRAs and their strengths")
+    parser.add_argument("--dtype", choices=sorted(DTYPES), default=None,
                         help="saved dtype. float32 (default) is exact; bfloat16 halves the size at ~2e-3 relative rounding")
     parser.add_argument("--verify", action="store_true", help="check every module against the fp64 sum of the inputs")
     parser.add_argument("--force", action="store_true", help="overwrite an existing output file")
     args = parser.parse_args()
 
-    if len(args.inputs) < 2:
-        parser.error("give at least two LoRAs to merge")
-    inputs = [parse_input(spec) for spec in args.inputs]
+    if args.config:
+        if args.inputs:
+            parser.error("give the LoRAs either in --config or on the command line, not both")
+        try:
+            config = load_config(args.config)
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            parser.error(str(error))
+        inputs = config["inputs"]
+        output = args.output or (Path(config["output"]) if config["output"] else None)
+        dtype_name = args.dtype or config["dtype"] or "float32"
+        verify = args.verify or config["verify"]
+        if output is None:
+            parser.error("no output: set 'output:' in the config or pass it on the command line")
+    else:
+        if args.output is None or not args.inputs:
+            parser.error("give an output and at least one LoRA, or --config")
+        inputs = [parse_input(spec) for spec in args.inputs]
+        output, dtype_name, verify = args.output, args.dtype or "float32", args.verify
+
     for path, _ in inputs:
         if not path.is_file():
             parser.error(f"not found: {path}")
-    if args.output.exists() and not args.force:
-        parser.error(f"{args.output} exists; pass --force to overwrite")
+    if output.exists() and not args.force:
+        parser.error(f"{output} exists; pass --force to overwrite")
+    dtype = DTYPES[dtype_name]
 
-    print(f"Merging {len(inputs)} LoRAs:")
+    print(f"Merging {len(inputs)} LoRA{'s' if len(inputs) > 1 else ''}" + (f" from {args.config}" if args.config else "") + ":")
     try:
-        state, info, loras = merge(inputs, DTYPES[args.dtype], args.verify)
+        state, info, loras = merge(inputs, dtype, verify)
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -205,13 +266,13 @@ def main() -> int:
     if len(bases) > 1:
         print(f"warning: the inputs were trained on different base models: {sorted(bases)}", file=sys.stderr)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    save_file(state, str(args.output), metadata=merged_metadata(loras, info, DTYPES[args.dtype]))
-    size = args.output.stat().st_size / 1024 ** 2
-    print(f"Wrote {args.output} ({size:.0f} MB): {info['modules']} modules at rank {info['ranks']}, {args.dtype}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    save_file(state, str(output), metadata=merged_metadata(loras, info, dtype, args.config))
+    size = output.stat().st_size / 1024 ** 2
+    print(f"Wrote {output} ({size:.0f} MB): {info['modules']} modules at rank {info['ranks']}, {dtype_name}")
     if info["partial_modules"]:
         print(f"  {info['partial_modules']} modules came from only some of the inputs")
-    if args.verify:
+    if verify:
         print(f"  verify: worst module differs from the stacked inputs by {info['max_rel_error']:.2e} (relative)")
     print("Load it at strength 1.0: the strengths above are already folded in.")
     return 0

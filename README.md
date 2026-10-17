@@ -23,7 +23,8 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   Prodigy template. Run it with `train_moss_image_lora.py`, `run_moss_image_training.bat` or the
   web UI. See the [MOSS-Image training guide](docs/moss-image-lora-training.md).
 - **Lossless LoRA merging**: `scripts/merge_loras.py` merges LoRAs into one file that applies
-  exactly what stacking them does, with per-LoRA strengths. See [merging LoRAs](docs/merge-loras.md).
+  exactly what stacking them does, with per-LoRA strengths given on the command line or in a YAML
+  config. It also bakes a strength into a single LoRA. See [merging LoRAs](docs/merge-loras.md).
 - **MiniMax H3 LoRA Training**: CLI trainer in `train_minimax_h3_lora.py`. It trains on stills,
   video clips with sound, and audio-only recordings, using ComfyUI's single-file checkpoints. It
   includes Fizgig's default recipe. See the [MiniMax H3 training guide](docs/minimax-h3-lora-training.md).
