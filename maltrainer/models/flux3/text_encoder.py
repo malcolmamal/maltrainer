@@ -44,7 +44,7 @@ TAP_LAYERS = (4, 8, 12, 16, 20, 24, 28, 32)
 TEMPLATE = "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
 PAD_TOKEN = 151643
 PAD_MULTIPLE = 80
-MAX_SEQUENCE_LENGTH = 512  # the diffusers trainer's cap; ComfyUI does not cap
+MAX_SEQUENCE_LENGTH = 4096  # the reference's cap (BFL text_encoder.py); ComfyUI does not cap
 
 # The Qwen3-VL tokenizer is shared by every size; reuse the copy vendored for MiniMax H3.
 TOKENIZER_ASSETS = Path(__file__).resolve().parents[1] / "minimax_h3" / "assets" / "text_encoder"

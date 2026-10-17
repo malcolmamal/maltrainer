@@ -84,6 +84,27 @@ sampler spends 44 of its 50 steps above sigma 0.5. If likeness details stay soft
 `timestep_distribution: logit_normal` with a lower `timestep_shift` (for example 3) and compare
 checkpoints.
 
+## Compared with Fizgig 8.1
+
+Fizgig 8.1 (`src/fizgig/flux3/`, 15 October 2026) vendors BFL's reference DiT and autoencoder. Its
+conventions match maltrainer's on every point checked: sigma in [0, 1], embedded in bf16; the
+`noise - x0` target; text padded to 80-token windows with the padding attended; pads at rope
+position 1; hidden states 4..32; the posterior mean with batch-norm statistics. Its LoRA keys
+differ (kohya `lora_unet_…`), and ComfyUI loads both.
+
+Where it differs:
+
+| | Fizgig 8.1 | maltrainer |
+|---|---|---|
+| Base file | `flux3_image_klein_bf16`; it refuses the Comfy int8 file and requantizes itself on small cards | int8 or bf16. `train_flux3_klein_feliciaday_adamw_bf16.yaml` uses bf16 |
+| Speed, 0.25 MP, RTX 5090 | 0.31 s/step on bf16 (0.26 compiled) | 0.72 s/step on int8 |
+| Optimizer | adamw8bit, a flat 1e-4 or its adaptive 1e-4 to 2e-4; settings copied from Krea 2, "not yet tuned on Flux 3" | Automagic3 (the first run plateaued at ~3e-5), Prodigy, adamw8bit |
+| Rank / EMA | 16 or 32 / 0.98 | 16 or 32 / 0.98 |
+| Timesteps | logit-normal, then the 6.93 shift ("an assumption to verify") | uniform, then the 6.93 shift (the diffusers trainer); `logit_normal` selectable |
+| Text cap | 4096 tokens, the reference's | 4096 tokens (was 512) |
+
+Neither BFL nor diffusers publishes FLUX.3's training timestep distribution.
+
 ## Configuration reference
 
 | Key | Default | Meaning |

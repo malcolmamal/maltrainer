@@ -199,8 +199,9 @@ class Block(nn.Module):
         mlp = self.mlp_in(x_mod)
 
         heads = lambda t: t.view(B, N, self.num_heads, -1).transpose(1, 2)  # noqa: E731
-        q = apply_rope(self.norm.query_norm(heads(q)), pe)
-        k = apply_rope(self.norm.key_norm(heads(k)), pe)
+        # QK-norm and RoPE in fp32, rounded once: the reference's rmsnorm_rope and ComfyUI's fused rms_rope
+        q = apply_rope(self.norm.query_norm(heads(q).float()), pe).to(v.dtype)
+        k = apply_rope(self.norm.key_norm(heads(k).float()), pe).to(v.dtype)
         attn = F.scaled_dot_product_attention(q, k, heads(v))
         out = self.attn_out(attn.transpose(1, 2).reshape(B, N, -1))
         gate_mlp, up = mlp.chunk(2, dim=-1)
