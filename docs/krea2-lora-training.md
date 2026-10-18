@@ -25,10 +25,14 @@ the filled config into the output folder and starts the trainer. Pass `--max-ste
 
 ## Keys while training
 
-When the trainer runs in a console window (the CLI or a `.bat`), two keys act at the next step:
+When the trainer runs in a console window (the CLI or a `.bat`), four keys act at the next step:
 
 - `s` saves a checkpoint now, as `<name>_step_<N>.safetensors`, and training continues.
-- `q` saves `<name>_step_<N>.safetensors` and stops. No `final` file is written.
+- `q` saves `<name>_step_<N>.safetensors` and stops. No `final` file is written. If the save
+  fails (e.g. a full disk), training continues instead.
+- `p` pauses training until `p` is pressed again. `s`, `q` and `h` still work while paused, so a
+  paused run can be saved or stopped without resuming it.
+- `h` lists the keys.
 
 The web UI starts the trainer without a console, so the keys do nothing there.
 

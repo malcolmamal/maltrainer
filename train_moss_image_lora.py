@@ -517,6 +517,8 @@ class MOSSImageLoRATrainer:
                     if save_every > 0 and global_step % save_every == 0 and global_step < total_steps:
                         self.save_checkpoint(global_step)
                     stopped = keys is not None and keys.handle(global_step, self.save_checkpoint)
+                    if keys is not None:
+                        monitor.exclude(keys.take_paused_seconds())
                 progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"})
                 if global_step >= total_steps or stopped:
                     break

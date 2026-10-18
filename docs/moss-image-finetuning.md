@@ -354,11 +354,15 @@ raw weights, so it writes its own copy (10 GB + 20 GB EMA).
 
 ## Keys while training
 
-In a console window:
+In a console window, at the next step:
 - `s` saves a checkpoint now (`<name>_step_<N>.safetensors`, plus the resume state) and training
   continues.
 - `q` does the same, then stops, ready for `--resume-from <name>_state`. No `final` file is
-  written.
+  written. If the save fails (e.g. a full disk), training continues instead of stopping.
+- `p` pauses training until `p` is pressed again: the GPU sits idle with the model loaded, e.g.
+  while you free disk space or check the previews. `s`, `q` and `h` still work while paused. The
+  pause is left out of the monitor's s/step.
+- `h` lists the keys.
 
 Each save of a full model takes ~10-20 s, with 10 GB per checkpoint.
 
