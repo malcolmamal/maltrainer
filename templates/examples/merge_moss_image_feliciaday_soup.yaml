@@ -2,7 +2,7 @@
 # Each was under-strength alone; together they gave the best results so far
 # (docs/moss-image-lora-stacking-findings.md). The merge is exact: load the output at 1.0.
 #
-#   python scripts/merge_loras.py --config config/merge_moss_image_feliciaday_soup.yaml
+#   python scripts/merge_loras.py --config templates/examples/merge_moss_image_feliciaday_soup.yaml
 #
 # Relative paths are from the current directory (run from the repo root, like training).
 

@@ -255,19 +255,19 @@ dataset:
 ## Reproducing
 
 Configs: `config/train_qwen_image_2_1_feliciaday_bench_{adamw,prodigy,automagic3}.yaml` and
-`config/train_qwen_image_2_1_rheaseehorn_bench_{adamw,prodigy,automagic3}.yaml`.
-Prompt sets: `config/bench_prompts/rhea_prompts.json` (Rhea) and `config/bench_prompts/knight_woman_prompts.json` (the corrected Felicia knight prompt; Felicia's other prompts are the defaults in `qwen_2_1_bench_generate.py`).
+`templates/examples/train_qwen_image_2_1_rheaseehorn_bench_{adamw,prodigy,automagic3}.yaml`.
+Prompt sets: `templates/examples/bench_prompts/rhea_prompts.json` (Rhea) and `templates/examples/bench_prompts/knight_woman_prompts.json` (the corrected Felicia knight prompt; Felicia's other prompts are the defaults in `qwen_2_1_bench_generate.py`).
 
 ```bash
 # 0. sanity-check the stack (VAE latents, text conditioning, DiT) before any training
-venv\Scripts\python.exe scripts\qwen_2_1_stack_probe.py --config config\train_qwen_image_2_1_rheaseehorn_bench_automagic3.yaml
+venv\Scripts\python.exe scripts\qwen_2_1_stack_probe.py --config templates\examples\train_qwen_image_2_1_rheaseehorn_bench_automagic3.yaml
 
 # 1. train (one per optimizer)
-venv\Scripts\python.exe train_qwen_image_2_1_lora.py --config config\train_qwen_image_2_1_rheaseehorn_bench_automagic3.yaml
+venv\Scripts\python.exe train_qwen_image_2_1_lora.py --config templates\examples\train_qwen_image_2_1_rheaseehorn_bench_automagic3.yaml
 
 # 2. sample every snapshot of every run (+ base model), 3 prompts x 3 seeds
-venv\Scripts\python.exe scripts\qwen_2_1_bench_generate.py --outdir samples\bench_rhea --prompts-json config\bench_prompts\rhea_prompts.json ^
-    --configs config\train_qwen_image_2_1_rheaseehorn_bench_adamw.yaml config\train_qwen_image_2_1_rheaseehorn_bench_prodigy.yaml config\train_qwen_image_2_1_rheaseehorn_bench_automagic3.yaml
+venv\Scripts\python.exe scripts\qwen_2_1_bench_generate.py --outdir samples\bench_rhea --prompts-json templates\examples\bench_prompts\rhea_prompts.json ^
+    --configs templates\examples\train_qwen_image_2_1_rheaseehorn_bench_adamw.yaml templates\examples\train_qwen_image_2_1_rheaseehorn_bench_prodigy.yaml templates\examples\train_qwen_image_2_1_rheaseehorn_bench_automagic3.yaml
 
 # 3. score (ComfyUI venv: InsightFace, OpenCV, Qwen3-VL-4B judge)
 C:\Development\ComfyUI\venv\Scripts\python.exe scripts\qwen_2_1_bench_score.py --bench samples\bench_rhea

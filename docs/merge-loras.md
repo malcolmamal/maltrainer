@@ -13,7 +13,7 @@ Merge the two feliciaday MOSS-Image LoRAs, each at strength 1.0, and check the r
 LoRAs are listed in a YAML config:
 
 ```bash
-python scripts/merge_loras.py --config config/merge_moss_image_feliciaday_soup.yaml
+python scripts/merge_loras.py --config templates/examples/merge_moss_image_feliciaday_soup.yaml
 ```
 
 Then load `output/moss_image_feliciaday_soup.safetensors` in ComfyUI at **strength 1.0**.
@@ -50,7 +50,7 @@ loras:
 - **Typos fail.** Misspelt keys (`strenght:`) raise an error instead of being ignored.
   You can't give LoRAs in a config and on the command line at once.
 
-`config/merge_moss_image_feliciaday_soup.yaml` is the feliciaday soup.
+`templates/examples/merge_moss_image_feliciaday_soup.yaml` is the feliciaday soup.
 
 ## One LoRA: bake in a strength
 

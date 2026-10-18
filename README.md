@@ -168,7 +168,7 @@ See [Watching a run](docs/qwen-image-2.1-lora-training.md#watching-a-run) for wh
 1. Prepare your dataset (images with optional `.txt` caption files)
 2. Copy and edit the example config:
    ```bash
-   cp config/train_zimage_lora_example.yaml config/my_lora.yaml
+   cp templates/examples/train_zimage_lora_example.yaml config/my_lora.yaml
    ```
 3. Run training:
    ```bash
@@ -209,7 +209,7 @@ my_dataset/
 ### Configuring Training
 
 1. **Choose the right config template**:
-   - For LoRA training: `config/train_zimage_lora_example.yaml`
+   - For LoRA training: `templates/examples/train_zimage_lora_example.yaml`
    - For Textual Inversion: `config/train_zimage_embedding_example.yaml`
 
 2. **Edit the configuration**:

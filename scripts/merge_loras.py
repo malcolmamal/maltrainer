@@ -19,7 +19,7 @@ it per module against the fp64 sum.
     python scripts/merge_loras.py out.safetensors a.safetensors b.safetensors
     python scripts/merge_loras.py out.safetensors a.safetensors:0.8 b.safetensors:1.2 --verify
     python scripts/merge_loras.py out.safetensors a.safetensors:1.5     (one LoRA: bake a strength in)
-    python scripts/merge_loras.py --config config/merge_moss_image_feliciaday_soup.yaml
+    python scripts/merge_loras.py --config templates/examples/merge_moss_image_feliciaday_soup.yaml
 
 A YAML config lists the LoRAs and their strengths (relative paths are from the current directory,
 as in the training configs):

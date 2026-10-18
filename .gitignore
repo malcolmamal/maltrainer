@@ -14,6 +14,6 @@ samples/
 webui.local.bat
 webui.local.sh
 
-# per-person run configs (generated from the templates) and local merge configs
-config/*__*.yaml
+# run configs are local (per person, per run); reusable ones live in templates/
+config/
 /merge.yaml
