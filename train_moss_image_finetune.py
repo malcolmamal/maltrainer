@@ -29,6 +29,7 @@ import argparse
 import contextlib
 import hashlib
 import logging
+import math
 import os
 import random
 import re
@@ -371,6 +372,12 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             if self.global_step >= total_steps:
                 logger.warning("The resumed run is already at step %d of %d; raise train.max_steps to continue.", self.global_step, total_steps)
                 return
+        if resume is not None:
+            # The epochs this run will end at: the ones done so far, then what the remaining steps
+            # need at the current epoch size (the planned count assumed every epoch at this size).
+            num_epochs = self.epoch + math.ceil(
+                (total_steps - self.global_step + self.position // accum) / steps_per_epoch
+            )
         self._setup_prior()
         if self.reg_keys:
             self.run_metadata.update({"reg_images": len(self.reg_keys), "reg_lr_multiplier": self.reg_multiplier})
@@ -400,8 +407,8 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             monitor.exclude(self._maybe_preview(0, total_steps))  # the base model: what later previews compare with
         epoch = self.epoch
         first = resume is not None
-        # Until the step budget is spent: a resumed run may need more epochs than num_epochs
-        # suggests, e.g. after a dataset change.
+        # Until the step budget is spent. num_epochs is only for display; the guard keeps it true
+        # should the step count run past the estimate.
         while self.global_step < total_steps:
             num_epochs = max(num_epochs, epoch + 1)
             if first and same_data:
