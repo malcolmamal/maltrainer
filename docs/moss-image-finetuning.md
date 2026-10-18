@@ -271,7 +271,7 @@ keeps only Linear weights: norm scales, biases and other vectors stay frozen.
 | `["layers."]` | `false` | the 42 blocks with their norms |
 | `[]` | `false` | all 5.08B |
 | `["layers.40.", "layers.41."]` | `true` | two blocks, 0.23B |
-| `["text_embedder."]` | `true` | the 2 text-embedder blocks and the text projection |
+| `["text_embedder."]` | `true` | the 2 text-embedder blocks and the text projection (logs a warning) |
 
 Why the default leaves out the text side, as OpenMOSS's guide and Fizgig do:
 

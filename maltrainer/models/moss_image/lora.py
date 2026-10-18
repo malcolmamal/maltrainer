@@ -25,23 +25,27 @@ BLOCK_ATTN = ("q", "k", "v", "o")
 BLOCK_FFN = ("ffn_up_gate", "ffn_down")
 TEXT_ATTN = ("qkv", "proj")
 TEXT_FFN = ("ffn_gate", "ffn_up", "ffn_down")
+# The text adapter (text_embedder: its projection and 2 blocks) never gets an adapter, as in Fizgig
+# (OpenMOSS's guide: keep the text side frozen). It reads every prompt, so training it on a few
+# captions changes how all prompts are read, and in Fizgig's runs it exaggerated expressions
+# more with every epoch. TEXT_ATTN / TEXT_FFN stay for grouping loaded LoRAs that do adapt it.
 IO_LAYERS = (
-    "video_embedder", "text_embedder.proj", "time_embedding.0", "time_embedding.2",
+    "video_embedder", "time_embedding.0", "time_embedding.2",
     "shared_block_modulation", "video_head_modulation", "final_linear_video",
 )
 
 # Named target sets.
 #   blocks  attention + feed-forward of the 42 joint blocks (252 adapters)
 #   attn    attention only of the 42 joint blocks (168)
-#   all     blocks + the 2 text-embedder blocks + the input, timestep, modulation and output
-#           Linears (269)
+#   all     blocks + the input, timestep, modulation and output Linears (258); the text adapter
+#           stays frozen
 TARGET_PRESETS = ("blocks", "attn", "all")
 
-# The blocks the reference sampler skips in CFG's negative branch (the pipeline's
-# uncond_skip_layers=[22]; ComfyUI's SkipLayerGuidanceDiTSimple on layer 22). A LoRA there acts on
-# the positive branch only, so CFG multiplies its effect instead of partly cancelling it. AI
-# Toolkit and Fizgig leave these blocks out; so does lora.skip_blocks by default.
-UNCOND_SKIP_BLOCKS = (22,)
+# Blocks left without an adapter by default: none. The reference sampler skips block 22 in CFG's
+# negative branch (the pipeline's uncond_skip_layers=[22]; ComfyUI's SkipLayerGuidanceDiTSimple),
+# so a LoRA there acts on the positive branch only. AI Toolkit leaves it out for that reason, but
+# Fizgig's A/B runs (v8.6.0, 2026-10-18) found that costs likeness, and Fizgig now trains it.
+DEFAULT_SKIP_BLOCKS: tuple = ()
 
 
 def _block_leaf(name: str) -> Optional[str]:
@@ -67,9 +71,6 @@ def selected(name: str, preset: str) -> bool:
         return leaf in (BLOCK_ATTN if preset == "attn" else BLOCK_ATTN + BLOCK_FFN)
     if preset != "all":
         return False
-    leaf = _text_leaf(name)
-    if leaf is not None:
-        return leaf in TEXT_ATTN + TEXT_FFN
     return name in IO_LAYERS
 
 
@@ -85,7 +86,7 @@ def param_group_of(name: str) -> str:
 
 class MOSSImageLoRANetwork(nn.Module):
     def __init__(self, transformer: nn.Module, rank: int = 16, alpha: float = 16.0, targets: str = "blocks",
-                 prefix: str = "diffusion_model.", skip_blocks: Iterable[int] = UNCOND_SKIP_BLOCKS):
+                 prefix: str = "diffusion_model.", skip_blocks: Iterable[int] = DEFAULT_SKIP_BLOCKS):
         super().__init__()
         if targets not in TARGET_PRESETS:
             raise ValueError(f"lora.targets must be one of {TARGET_PRESETS}, got {targets!r}")

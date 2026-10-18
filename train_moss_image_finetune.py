@@ -261,6 +261,13 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         prefixes = list(DEFAULT_TRAINABLE_PREFIXES) if prefixes is None else list(prefixes)
         linears_only = bool(finetune_config.get("linears_only", True))
         self.named_trainable = select_trainable(self.transformer, prefixes, linears_only=linears_only)
+        text_side = sum(p.numel() for name, p in self.named_trainable if name.startswith("text_embedder."))
+        if text_side:
+            logger.warning(
+                "finetune.trainable_prefixes trains the text adapter (%.1fM parameters in text_embedder). "
+                "OpenMOSS and Fizgig keep it frozen: it reads every prompt, and in Fizgig's runs "
+                "training it exaggerated expressions more each epoch.", text_side / 1e6,
+            )
         self.transformer.train()
         # The inherited _training_step runs whatever lora_network holds.
         self.lora_network = self.transformer

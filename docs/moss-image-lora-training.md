@@ -159,21 +159,27 @@ LoRA target presets (`lora.targets`):
 
 | Preset | Adapters | What |
 |---|---|---|
-| `blocks` | 246 | attention (`proj.q/k/v/o`) + feed-forward (`proj.ffn_up_gate/ffn_down`) of the 42 joint blocks, block 22 skipped |
-| `attn` | 164 | attention only |
-| `all` | 263 | `blocks` + the 2 text-embedder blocks + input, timestep, modulation and output Linears |
+| `blocks` | 252 | attention (`proj.q/k/v/o`) + feed-forward (`proj.ffn_up_gate/ffn_down`) of the 42 joint blocks |
+| `attn` | 168 | attention only |
+| `all` | 258 | `blocks` + input, timestep, modulation and output Linears |
 
-The counts are with the default `lora.skip_blocks: [22]`; with `[]` they are 252 / 168 / 269.
+The counts are with the default `lora.skip_blocks: []`; with `[22]` they are 246 / 164 / 252.
 
-### Block 22 is left out
+No preset trains the text adapter (`text_embedder`: its projection and 2 blocks), as in Fizgig and as
+OpenMOSS's guide asks. It reads every prompt, so training it on a few captions changes how all
+prompts are read, and in Fizgig's runs it exaggerated expressions more with every epoch. `all`
+included it until 2026-10-19.
+
+### Block 22 is trained
 
 The reference sampler runs CFG with block 22 skipped in the negative (empty-prompt) branch: the
 pipeline's `uncond_skip_layers=[22]`, ComfyUI's SkipLayerGuidanceDiTSimple on layer 22. A LoRA
 on any other block acts on both branches, so CFG's difference partly cancels it. A LoRA on block
-22 acts on the positive branch alone, and CFG multiplies its effect by the CFG scale (3-4).
-AI Toolkit and Fizgig leave the block out for that reason, and so does `lora.skip_blocks` by
-default. The training forward still runs block 22; it only has no adapter. Set
-`skip_blocks: []` to adapt all 42 blocks, or list other block numbers to leave out.
+22 acts on the positive branch alone. AI Toolkit leaves the block out for that reason, and so did
+this trainer until 2026-10-19. Fizgig did too, then found in A/B runs that leaving it out cost
+likeness (the positive branch always runs it) and trains it since v8.6.0, as `lora.skip_blocks: []`
+now does by default. Set `skip_blocks: [22]` for the old behaviour, or list other block numbers to
+leave out.
 
 Saved keys are ComfyUI's module paths (`diffusion_model.layers.N.proj.q.lora_A.weight`).
 ComfyUI loads them with its stock LoRA loader, including on the repacked files with a fused

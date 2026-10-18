@@ -28,14 +28,14 @@ lora:
   rank: 16
   alpha: 16
   prefix: "diffusion_model."
-  # blocks (attention + feed-forward of the 42 joint blocks = 246 with block 22 skipped) | attn (attention only = 168)
-  # | all (blocks + the 2 text-embedder blocks + input/timestep/modulation/output = 269)
+  # blocks (attention + feed-forward of the 42 joint blocks = 252) | attn (attention only = 168)
+  # | all (blocks + input/timestep/modulation/output = 258; the text adapter is never trained)
   targets: "blocks"
   dtype: "float32"
-  # Blocks without an adapter. The reference sampler skips block 22 in CFG's negative branch,
-  # so a LoRA there would act on the positive branch only and CFG would amplify it (AI Toolkit
-  # and Fizgig leave it out too). [] = adapt all 42 blocks.
-  skip_blocks: [22]
+  # Blocks without an adapter. [] = adapt all 42 blocks. The reference sampler skips block 22 in
+  # CFG's negative branch, and AI Toolkit leaves it out for that; Fizgig's A/B runs found that
+  # costs likeness, so it trains block 22 now, and so do we. [22] = the old behaviour.
+  skip_blocks: []
 
 train:
   batch_size: 1

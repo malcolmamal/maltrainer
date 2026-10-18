@@ -42,7 +42,7 @@ from maltrainer.data.flux3_dataset import load_flux3_image
 from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
 from maltrainer.models.flux3.vae import load_flux2_vae_decoder, load_flux2_vae_encoder
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
-from maltrainer.models.moss_image.lora import UNCOND_SKIP_BLOCKS, MOSSImageLoRANetwork
+from maltrainer.models.moss_image.lora import DEFAULT_SKIP_BLOCKS, MOSSImageLoRANetwork
 from maltrainer.models.moss_image.sampling import sample as moss_sample
 from maltrainer.models.moss_image.text_encoder import MAX_SEQUENCE_LENGTH, TEMPLATE, load_moss_image_text_encoder
 from maltrainer.utils.compile import compile_blocks
@@ -388,7 +388,7 @@ class MOSSImageLoRATrainer:
             alpha=float(lora_config.get("alpha", lora_config.get("rank", 16))),
             targets=str(lora_config.get("targets", "blocks")),
             prefix=lora_config.get("prefix", "diffusion_model."),
-            skip_blocks=lora_config.get("skip_blocks", UNCOND_SKIP_BLOCKS) or (),
+            skip_blocks=lora_config.get("skip_blocks", DEFAULT_SKIP_BLOCKS) or (),
         )
         self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
