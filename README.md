@@ -158,7 +158,7 @@ See [Watching a run](docs/qwen-image-2.1-lora-training.md#watching-a-run) for wh
    yet, so crop first) and optional `.txt` captions.
 3. Copy the template, replace `[comfyui_models]` and `[person_to_train]`, and train:
    ```bash
-   cp config/qwen_image_2_1_template.yaml config/my_qwen_lora.yaml
+   cp templates/qwen_image_2_1_template.yaml config/my_qwen_lora.yaml
    python train_qwen_image_2_1_lora.py --config config/my_qwen_lora.yaml
    ```
    Or use the web UI, which fills the template in for you.
@@ -229,8 +229,8 @@ my_dataset/
 
 Two Turbo templates are included so you can compare the de-distilled model vs the training adapter approach:
 
-- De-distilled (OneTrainer-style): [config/zimage_turbo_template-onetrainer.yaml](config/zimage_turbo_template-onetrainer.yaml)
-- Training adapter (AI Toolkit-style): [config/zimage_turbo_template-adapter.yaml](config/zimage_turbo_template-adapter.yaml)
+- De-distilled (OneTrainer-style): [templates/zimage_turbo_template-onetrainer.yaml](templates/zimage_turbo_template-onetrainer.yaml)
+- Training adapter (AI Toolkit-style): [templates/zimage_turbo_template-adapter.yaml](templates/zimage_turbo_template-adapter.yaml)
 
 Notes:
 - `model.extras_name_or_path` points the text encoder + VAE to the Turbo base while the transformer loads from the de-distilled model.

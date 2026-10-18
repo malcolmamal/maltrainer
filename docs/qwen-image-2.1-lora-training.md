@@ -160,7 +160,7 @@ roughly 70% of its plateau after 11 epochs and 90–95% after 22, so runs under 
 and nothing above 119 epochs or 2500 steps was tested. Type a number in **Max steps**, or switch to **Epochs**,
 to override the automatic choice.
 
-The command-line template ([`config/qwen_image_2_1_template.yaml`](../config/qwen_image_2_1_template.yaml)) does
+The command-line template ([`templates/qwen_image_2_1_template.yaml`](../templates/qwen_image_2_1_template.yaml)) does
 not do this: it has a fixed `max_steps: 1500`.
 
 Each run gets its own folder, so nothing is overwritten:
@@ -172,7 +172,7 @@ exists. The folder holds `config.yaml` (the exact config used), `training.log`, 
 ## Training from the command line
 
 ```bash
-cp config/qwen_image_2_1_template.yaml config/my_qwen_lora.yaml
+cp templates/qwen_image_2_1_template.yaml config/my_qwen_lora.yaml
 # edit: replace [comfyui_models] and [person_to_train], set dataset.path
 python train_qwen_image_2_1_lora.py --config config/my_qwen_lora.yaml
 
@@ -180,7 +180,7 @@ python train_qwen_image_2_1_lora.py --config config/my_qwen_lora.yaml
 python train_qwen_image_2_1_lora.py --config config/my_qwen_lora.yaml --dry-run --dry-run-step-time 0.01
 ```
 
-The template ([`config/qwen_image_2_1_template.yaml`](../config/qwen_image_2_1_template.yaml)) is the benchmarked
+The template ([`templates/qwen_image_2_1_template.yaml`](../templates/qwen_image_2_1_template.yaml)) is the benchmarked
 recommended setting. The web UI uses the same file.
 
 ---

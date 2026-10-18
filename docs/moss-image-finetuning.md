@@ -11,7 +11,7 @@ optimizer groups, checkpoint layout and fused q/k/v) is in
 `maltrainer/models/moss_image/finetune.py`.
 
 ```bash
-python train_moss_image_finetune.py --config config/moss_image_finetune_template.yaml
+python train_moss_image_finetune.py --config templates/moss_image_finetune_template.yaml
 python train_moss_image_finetune.py --config my_run.yaml --resume-from output/.../moss_image_ft_x_state
 ```
 

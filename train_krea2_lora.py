@@ -9,7 +9,7 @@ embeddings are cached once, then the encoders are unloaded before the DiT loads.
 Conventions follow ComfyUI's Krea 2 implementation (comfy/ldm/krea2, ModelType.FLUX): the DiT
 gets sigma in [0, 1] and predicts v = noise - x0.
 
-    python train_krea2_lora.py --config config/krea2_automagic_template.yaml
+    python train_krea2_lora.py --config templates/krea2_template.yaml
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@ Conventions follow ComfyUI's FLUX.3 (comfy/ldm/flux3, ModelType.FLUX) and the di
 trainer. The DiT gets sigma in [0, 1] and predicts v = noise - x0. Sigmas come from the
 reference schedule's fixed shift of 6.93, with no resolution-dependent shift.
 
-    python train_flux3_klein_lora.py --config config/flux3_klein_template.yaml
+    python train_flux3_klein_lora.py --config templates/flux3_klein_template.yaml
 """
 
 from __future__ import annotations

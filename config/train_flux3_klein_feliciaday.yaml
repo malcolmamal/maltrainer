@@ -1,7 +1,7 @@
 # FLUX.3 [klein] LoRA -- Automagic3, first run (train_flux3_klein_lora.py)
 # Dataset: Felicia Day (23 images)
 #
-# The recipe is config/flux3_klein_template.yaml, filled in for this dataset.
+# The recipe is templates/flux3_klein_template.yaml, filled in for this dataset.
 # 1500 steps = ~65 epochs of 23 images; compare the 750-1500 checkpoints.
 #
 #   python train_flux3_klein_lora.py --config config/train_flux3_klein_feliciaday.yaml

@@ -11,9 +11,9 @@ python train_krea2_lora.py --config my_krea2_config.yaml
 ```
 
 ```bash
-run_krea2_training.bat feliciaday            # fills config/krea2_template.yaml (Automagic3)
-run_krea2_training.bat feliciaday prodigy    # fills config/krea2_prodigy_template.yaml
-run_krea2_training.bat feliciaday adamw8bit  # fills config/krea2_adamw_template.yaml
+run_krea2_training.bat feliciaday            # fills templates/krea2_template.yaml (Automagic3)
+run_krea2_training.bat feliciaday prodigy    # fills templates/krea2_prodigy_template.yaml
+run_krea2_training.bat feliciaday adamw8bit  # fills templates/krea2_adamw_template.yaml
 ```
 
 The third is the web UI: pick **Krea 2**, a dataset and an optimizer.
@@ -66,7 +66,7 @@ don't change the maths:
 
 ## Templates
 
-### Automagic3 — `config/krea2_template.yaml` (default)
+### Automagic3 — `templates/krea2_template.yaml` (default)
 
 | Setting | Value | Source |
 |---|---|---|
@@ -83,7 +83,7 @@ don't change the maths:
 On Krea 2, Fizgig's release notes say Automagic "matched the standard recipe rather than beating
 it, and took longer". Compare the 1000 to 1500 step checkpoints before settling on a duration.
 
-### AdamW 8-bit — `config/krea2_adamw_template.yaml` (Fizgig Standard)
+### AdamW 8-bit — `templates/krea2_adamw_template.yaml` (Fizgig Standard)
 
 Fizgig 8.4's "Krea 2 Standard" preset (`families/krea2.py`).
 
@@ -101,7 +101,7 @@ Alpha 1 scales the LoRA by 1/16, so that 3e-4 moves the weights about as much as
 alpha = rank: five times less than this template. Prodigy estimates its own step size and makes up
 for the 1/16, which likely explains why Prodigy did better than AdamW in OneTrainer.
 
-### Prodigy — `config/krea2_prodigy_template.yaml` (your OneTrainer recipe)
+### Prodigy — `templates/krea2_prodigy_template.yaml` (your OneTrainer recipe)
 
 These are the values OneTrainer actually resolves from `krea2prodigy_template.json`. Several keys
 in that file are ignored by OneTrainer's `PRODIGY` optimizer.

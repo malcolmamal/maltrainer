@@ -1,7 +1,7 @@
 # MOSS-Image LoRA -- Prodigy, 1500 steps (train_moss_image_lora.py)
 # Dataset: Felicia Day (23 images)
 #
-# The Prodigy template (config/moss_image_prodigy_template.yaml), i.e. FLUX.3's Prodigy settings.
+# The Prodigy template (templates/moss_image_prodigy_template.yaml), i.e. FLUX.3's Prodigy settings.
 # 1500 steps (~65 epochs): the Automagic3 run's likeness at step 500 already matched step 2300,
 # and on Qwen-Image 2.1 Prodigy overcooked past ~1500. A checkpoint every 125 to find the peak.
 #

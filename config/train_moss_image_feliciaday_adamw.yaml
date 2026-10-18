@@ -1,7 +1,7 @@
 # MOSS-Image LoRA -- AdamW 8-bit, 1500 steps (train_moss_image_lora.py)
 # Dataset: Felicia Day (23 images)
 #
-# The AdamW template (config/moss_image_adamw_template.yaml): a flat 1e-4, weight decay 0.01.
+# The AdamW template (templates/moss_image_adamw_template.yaml): a flat 1e-4, weight decay 0.01.
 # Same LoRA, timesteps and EMA as the Automagic3 v1 run, whose LoRA came out under-strength (good
 # at 1.4-1.5): its adaptive rate decayed from ~5.7e-5 to ~1.1e-5, and its likeness at step 500
 # already matched step 2300. At 2-5x that step size, AdamW should peak earlier: 1500 steps

@@ -20,7 +20,7 @@ instead of a LoRA. Data, caching, timesteps and loss are the LoRA trainer's
 - optional prior preservation (prior.weight, DOP) and regularisation images (dataset.reg_path),
   from maltrainer/finetune/
 
-    python train_moss_image_finetune.py --config config/moss_image_finetune_template.yaml
+    python train_moss_image_finetune.py --config templates/moss_image_finetune_template.yaml
 """
 
 from __future__ import annotations

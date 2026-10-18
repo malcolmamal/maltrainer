@@ -1,7 +1,7 @@
 # MOSS-Image LoRA -- Automagic3 (train_moss_image_lora.py)
 # Dataset: Felicia Day (23 images)
 #
-# The template's recipe (config/moss_image_automagic_template.yaml) with the FLUX.3 v3 lessons: an 8-step
+# The template's recipe (templates/moss_image_automagic_template.yaml) with the FLUX.3 v3 lessons: an 8-step
 # sign window (16 left FLUX.3 under-trained at ~3e-5) and 2500 steps (~109 epochs). Same LoRA,
 # timesteps and resolution as train_moss_image_feliciaday_prodigy.yaml, so the two compare directly.
 #

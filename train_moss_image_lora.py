@@ -13,7 +13,7 @@ predicts v = noise - x0, under a plain per-token MSE. By default sigmas follow t
 final pretraining interval: logit-normal (mean 1.09, std 0.95 on logit sigma), cut at 0.95 and
 rescaled onto [0, 1], 1 % uniform, no shift.
 
-    python train_moss_image_lora.py --config config/moss_image_automagic_template.yaml
+    python train_moss_image_lora.py --config templates/moss_image_automagic_template.yaml
 """
 
 from __future__ import annotations

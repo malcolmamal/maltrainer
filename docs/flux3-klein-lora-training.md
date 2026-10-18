@@ -11,7 +11,7 @@ python train_flux3_klein_lora.py --config my_flux3_config.yaml
 ```
 
 ```bash
-run_flux3_klein_training.bat feliciaday              # fills config/flux3_klein_template.yaml (Automagic3)
+run_flux3_klein_training.bat feliciaday              # fills templates/flux3_klein_template.yaml (Automagic3)
 run_flux3_klein_training.bat feliciaday adamw8bit
 ```
 
@@ -65,7 +65,7 @@ Two details are copied from the reference on purpose:
   diffusers trainer pads the empty prompt to the dropped caption's window instead, so that it
   can stack a batch.
 
-## Template — `config/flux3_klein_template.yaml`
+## Template — `templates/flux3_klein_template.yaml`
 
 | Setting | Value | Source |
 |---|---|---|

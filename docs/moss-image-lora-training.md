@@ -11,9 +11,9 @@ python train_moss_image_lora.py --config config/train_moss_image_feliciaday_auto
 ```
 
 ```bash
-run_moss_image_training.bat feliciaday              # fills config/moss_image_automagic_template.yaml (Automagic3)
-run_moss_image_training.bat feliciaday prodigy      # fills config/moss_image_prodigy_template.yaml
-run_moss_image_training.bat feliciaday adamw8bit    # fills config/moss_image_adamw_template.yaml
+run_moss_image_training.bat feliciaday              # fills templates/moss_image_automagic_template.yaml (Automagic3)
+run_moss_image_training.bat feliciaday prodigy      # fills templates/moss_image_prodigy_template.yaml
+run_moss_image_training.bat feliciaday adamw8bit    # fills templates/moss_image_adamw_template.yaml
 ```
 
 The third is the web UI: pick **MOSS-Image (Base)**, a dataset and an optimizer.
@@ -134,13 +134,13 @@ and compare checkpoints.
 All three templates use the same model files, LoRA (rank 16, alpha 16, `blocks`), timesteps
 and 512 px buckets, so their runs compare directly.
 
-- `config/moss_image_automagic_template.yaml`: **Automagic3**. Launch point 1e-6. Attention, MLP and
+- `templates/moss_image_automagic_template.yaml`: **Automagic3**. Launch point 1e-6. Attention, MLP and
   other layers each adapt their own rate, over an **8-step** sign window. On FLUX.3 a 16-step
   window left the rate stuck near 3e-5 and the LoRA under-trained. EMA 0.98, 20 epochs.
-- `config/moss_image_prodigy_template.yaml`: **Prodigy**, with FLUX.3's Prodigy settings.
+- `templates/moss_image_prodigy_template.yaml`: **Prodigy**, with FLUX.3's Prodigy settings.
   lr 1.0 (a multiplier on Prodigy's own estimate d), 100 warmup steps, decoupled weight decay
   0.01, beta2 0.99, bias correction and safeguarded warmup, no EMA, 20 epochs.
-- `config/moss_image_adamw_template.yaml`: **AdamW 8-bit** at a flat 1e-4 (Fizgig 8.1's rate
+- `templates/moss_image_adamw_template.yaml`: **AdamW 8-bit** at a flat 1e-4 (Fizgig 8.1's rate
   for FLUX.3 and Krea 2), weight decay 0.01, EMA 0.98, as in the Automagic3 template.
 
 The feliciaday runs built from them are `config/train_moss_image_feliciaday_automagic3.yaml`,
