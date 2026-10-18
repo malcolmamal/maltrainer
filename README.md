@@ -11,9 +11,11 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
 - **Z-Image LoRA Training**: Train LoRA adapters for Z-Image (base) models
 - **Z-Image Textual Inversion**: Train textual inversion embeddings for Z-Image
 - **Krea 2 LoRA Training**: trains from ComfyUI's single files (the fp8 RAW DiT, the Qwen-Image VAE
-  and Qwen3-VL-4B), with an Automagic3 template and a Prodigy template that mirrors OneTrainer's
-  recipe. Run it with `train_krea2_lora.py`, `run_krea2_training.bat` or the web UI. See the
-  [Krea 2 training guide](docs/krea2-lora-training.md).
+  and Qwen3-VL-4B), with an Automagic3 template, a Prodigy template that mirrors OneTrainer's
+  recipe and an AdamW 8-bit template after Fizgig's Standard preset. Optional DOP keeps the
+  likeness off people the prompt doesn't name, and `scripts/boost_text_fusion.py` applies
+  Fizgig's text-fusion ×3 boost to a finished LoRA. Run it with `train_krea2_lora.py`,
+  `run_krea2_training.bat` or the web UI. See the [Krea 2 training guide](docs/krea2-lora-training.md).
 - **FLUX.3 [klein] LoRA Training**: trains the base (undistilled) Klein from ComfyUI's single files
   (the INT8 ConvRot DiT, the Flux2 VAE and Qwen3-VL-4B), with an Automagic3 template. Run it with
   `train_flux3_klein_lora.py`, `run_flux3_klein_training.bat` or the web UI. See the
@@ -22,12 +24,24 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   (the bf16 or INT8 ConvRot DiT, the Flux2 VAE and Qwen3.5-9B), with an Automagic3 template and a
   Prodigy template. Run it with `train_moss_image_lora.py`, `run_moss_image_training.bat` or the
   web UI. See the [MOSS-Image training guide](docs/moss-image-lora-training.md).
+- **Datasets**: folder layout (subfolders are fine), `.txt` captions, several people in one set,
+  sizes and buckets. See [datasets](docs/datasets.md).
+- **MOSS-Image full finetuning**: `train_moss_image_finetune.py` trains the bf16 DiT's own weights
+  (all 5.08B or a chosen subset) on a 32 GB GPU with fused Automagic3. It has an optional EMA in
+  CPU RAM and can resume exactly from a saved state. See
+  [MOSS-Image finetuning](docs/moss-image-finetuning.md).
 - **Lossless LoRA merging**: `scripts/merge_loras.py` merges LoRAs into one file that applies
   exactly what stacking them does, with per-LoRA strengths given on the command line or in a YAML
   config. It also bakes a strength into a single LoRA. See [merging LoRAs](docs/merge-loras.md).
 - **LoRA resizing**: `scripts/resize_lora.py` (or `resize_lora.bat`) shrinks a LoRA to a lower
   rank, such as 32 to 8, with a per-layer SVD, in seconds and with no kohya install. See
   [resizing LoRAs](docs/resize-loras.md).
+- **LoRA extraction**: `scripts/extract_lora.py` (or `extract_lora.bat`) turns a full finetune
+  into a LoRA with an SVD of each layer's change, at several ranks in one pass, fixed or per
+  layer (LyCORIS-style `fro` / `ratio` / `threshold`). See [extracting LoRAs](docs/extract-lora.md).
+- **Combined training**: `scripts/train_combined.py` trains one dataset with several optimizers,
+  one after another, and merges the LoRAs into one soup at a strength each; Stabilis then resizes
+  it and copies it into ComfyUI. See [combined training](docs/combined-training.md).
 - **MiniMax H3 LoRA Training**: CLI trainer in `train_minimax_h3_lora.py`. It trains on stills,
   video clips with sound, and audio-only recordings, using ComfyUI's single-file checkpoints. It
   includes Fizgig's default recipe. See the [MiniMax H3 training guide](docs/minimax-h3-lora-training.md).

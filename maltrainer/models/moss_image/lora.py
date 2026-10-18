@@ -11,7 +11,7 @@ weight (comfy/lora.py).
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 import torch
 from torch import nn
@@ -36,6 +36,12 @@ IO_LAYERS = (
 #   all     blocks + the 2 text-embedder blocks + the input, timestep, modulation and output
 #           Linears (269)
 TARGET_PRESETS = ("blocks", "attn", "all")
+
+# The blocks the reference sampler skips in CFG's negative branch (the pipeline's
+# uncond_skip_layers=[22]; ComfyUI's SkipLayerGuidanceDiTSimple on layer 22). A LoRA there acts on
+# the positive branch only, so CFG multiplies its effect instead of partly cancelling it. AI
+# Toolkit and Fizgig leave these blocks out; so does lora.skip_blocks by default.
+UNCOND_SKIP_BLOCKS = (22,)
 
 
 def _block_leaf(name: str) -> Optional[str]:
@@ -79,18 +85,20 @@ def param_group_of(name: str) -> str:
 
 class MOSSImageLoRANetwork(nn.Module):
     def __init__(self, transformer: nn.Module, rank: int = 16, alpha: float = 16.0, targets: str = "blocks",
-                 prefix: str = "diffusion_model."):
+                 prefix: str = "diffusion_model.", skip_blocks: Iterable[int] = UNCOND_SKIP_BLOCKS):
         super().__init__()
         if targets not in TARGET_PRESETS:
             raise ValueError(f"lora.targets must be one of {TARGET_PRESETS}, got {targets!r}")
         self.transformer = transformer
         self.prefix = prefix
         self.targets = targets
+        self.skip_blocks = tuple(sorted({int(i) for i in skip_blocks}))
+        skipped = tuple(f"layers.{i}." for i in self.skip_blocks)
         self.lora_layers = nn.ModuleDict()
         self.name_map: Dict[str, str] = {}
 
         for name, module in list(transformer.named_modules()):
-            if not isinstance(module, nn.Linear):
+            if not isinstance(module, nn.Linear) or name.startswith(skipped):
                 continue
             if _block_leaf(name) == "qkv":
                 base = name[: -len(".qkv")]
@@ -108,7 +116,10 @@ class MOSSImageLoRANetwork(nn.Module):
         counts: Dict[str, int] = {}
         for name in self.name_map.values():
             counts[param_group_of(name)] = counts.get(param_group_of(name), 0) + 1
-        logger.info("MOSS-Image LoRA: %d adapters (%s), rank %d, alpha %s, targets %s", len(self.lora_layers), counts, rank, alpha, targets)
+        logger.info(
+            "MOSS-Image LoRA: %d adapters (%s), rank %d, alpha %s, targets %s, skipped blocks %s",
+            len(self.lora_layers), counts, rank, alpha, targets, list(self.skip_blocks) or "none",
+        )
 
     def _add(self, name: str, in_features: int, out_features: int, rank: int, alpha: float) -> LoRALayer:
         layer = LoRALayer(in_features, out_features, rank, alpha)

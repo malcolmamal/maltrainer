@@ -9,7 +9,8 @@ conversion.
 from __future__ import annotations
 
 import logging
-from typing import Dict, Iterable, List, Optional
+from contextlib import contextmanager
+from typing import Dict, Iterable, Iterator, List, Optional
 
 import torch
 from torch import nn
@@ -80,6 +81,7 @@ class Krea2LoRANetwork(nn.Module):
         self.targets = targets
         self.lora_layers = nn.ModuleDict()
         self.name_map: Dict[str, str] = {}
+        self._active = [True]  # shared with every wrapped forward; see disabled()
         block_range = tuple(block_range) if block_range is not None else None
         for name, module in transformer.named_modules():
             if not hasattr(module, "in_features") or not _selected(name, targets, block_range):
@@ -88,7 +90,7 @@ class Krea2LoRANetwork(nn.Module):
             safe = name.replace(".", "_")
             self.lora_layers[safe] = layer
             self.name_map[safe] = name
-            self._wrap(module, layer)
+            self._wrap(module, layer, self._active)
         if not self.lora_layers:
             raise ValueError("No Krea 2 modules matched the LoRA targets")
         counts: Dict[str, int] = {}
@@ -97,15 +99,26 @@ class Krea2LoRANetwork(nn.Module):
         logger.info("Krea 2 LoRA: %d layers (%s), rank %d, alpha %s, targets %s", len(self.lora_layers), counts, rank, alpha, targets)
 
     @staticmethod
-    def _wrap(module: nn.Module, lora: nn.Module) -> None:
+    def _wrap(module: nn.Module, lora: nn.Module, active: List[bool]) -> None:
         original = module.forward
 
-        def forward(x, _orig=original, _lora=lora):
+        def forward(x, _orig=original, _lora=lora, _active=active):
             base = _orig(x)
+            if not _active[0]:
+                return base
             delta = _lora(x)
             return (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta
 
         module.forward = forward
+
+    @contextmanager
+    def disabled(self) -> Iterator[None]:
+        """Run the base model alone: every adapter is skipped until the block exits."""
+        self._active[0] = False
+        try:
+            yield
+        finally:
+            self._active[0] = True
 
     def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)

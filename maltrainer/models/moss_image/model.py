@@ -228,8 +228,11 @@ class MOSSImageTransformer(nn.Module):
             return checkpoint(block, *args, use_reentrant=False)
         return block(*args)
 
-    def forward(self, x: torch.Tensor, sigma: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
-        """x [B, 128, H, W] noisy latent, sigma [B] in [0, 1], context [B, L, 4096] -> v [B, 128, H, W]."""
+    def forward(self, x: torch.Tensor, sigma: torch.Tensor, context: torch.Tensor, skip_layers=()) -> torch.Tensor:
+        """x [B, 128, H, W] noisy latent, sigma [B] in [0, 1], context [B, L, 4096] -> v [B, 128, H, W].
+
+        skip_layers: joint blocks to leave out (CFG's negative branch skips block 22 in the reference
+        sampler; ComfyUI's SkipLayerGuidanceDiTSimple)."""
         B, _, H, W = x.shape
         dtype, device = self.compute_dtype, x.device
         x = x.to(dtype)
@@ -249,7 +252,9 @@ class MOSSImageTransformer(nn.Module):
             txt = self._run(block, txt, txt_pe)
 
         joint = torch.cat([self.video_embedder(x.flatten(2).transpose(1, 2)), txt], dim=1)
-        for block in self.layers:
+        for index, block in enumerate(self.layers):
+            if index in skip_layers:
+                continue
             joint = self._run(block, joint, *mod, pe)
 
         out = self.final_norm_video(joint[:, :n_img]) * (1 + head_scale) + head_shift

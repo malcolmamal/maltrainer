@@ -1,6 +1,6 @@
 # MOSS-Image LoRA template -- Prodigy (train_moss_image_lora.py).
 #
-# Placeholders as in moss_image_template.yaml: [person_to_train], [comfyui_models].
+# Placeholders as in moss_image_automagic_template.yaml: [person_to_train], [comfyui_models].
 #
 # Same model files, LoRA, timesteps and resolution as the Automagic3 template, so the two compare
 # directly. Prodigy settings are those of the FLUX.3 [klein] Prodigy run
@@ -26,15 +26,19 @@ lora:
   rank: 16
   alpha: 16
   prefix: "diffusion_model."
-  targets: "blocks"          # attention + feed-forward of the 42 joint blocks (252)
+  targets: "blocks"          # attention + feed-forward of the 42 joint blocks (246 with block 22 skipped)
   dtype: "float32"
+  # Blocks without an adapter. The reference sampler skips block 22 in CFG's negative branch,
+  # so a LoRA there would act on the positive branch only and CFG would amplify it (AI Toolkit
+  # and Fizgig leave it out too). [] = adapt all 42 blocks.
+  skip_blocks: [22]
 
 train:
   batch_size: 1
   gradient_accumulation_steps: 1
   max_steps: 0               # 0 = train num_epochs full epochs
-  num_epochs: 100
-  save_every: 250
+  num_epochs: 20
+  save_every: 0              # 0 = only the final file
   timestep_distribution: "logit_normal"   # the report's final pretraining interval, as in the Automagic3 template
   timestep_logit_mean: 1.09
   timestep_logit_std: 0.95
@@ -44,6 +48,10 @@ train:
   timestep_grid: 1000
   max_grad_norm: 1.0
   gradient_checkpointing: true
+  # torch.compile each block. Measured on a 5090 (2026-10-18): 3% faster at 512 px, 7% at
+  # 1024 px, for a 25-50 s compile at the start. Worth it only for long or large runs. Needs
+  # triton-windows on Windows; without it the run stays eager and says so.
+  compile: false
   int8_grad_precision: "bf16"
   optimizer: "prodigy"
   learning_rate: 1.0         # Prodigy's multiplier on its own estimated step size
@@ -59,6 +67,22 @@ train:
   prodigy_safeguard_warmup: true   # keeps the d estimate from overshooting during warmup
   ema_decay: 0.0
   caption_dropout: 0.05
+
+# Previews rendered with the weights in training (no checkpoint saved): every N steps and before
+# the first, the same seed per prompt each time. The trigger-free prompt shows whether the LoRA
+# leaks into the class. ~24 s per 1024 px image (30 steps, CFG 3). every: 0 = off.
+sample:
+  every: 500
+  at_start: true
+  prompts:
+    - "a photo of [person_to_train] smiling, close-up with face visible, soft light from the front"
+    - "a photo of a person smiling, close-up with face visible, soft light from the front"
+  negative: ""
+  steps: 30
+  cfg: 3.0
+  width: 1024
+  height: 1024
+  seed: 42
 
 dtype: "bfloat16"
 mixed_precision: "bf16"

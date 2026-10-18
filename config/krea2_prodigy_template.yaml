@@ -63,7 +63,12 @@ train:
   prodigy_safeguard_warmup: false
   prodigy_slice_p: 11
   ema_decay: 0.0
-  caption_dropout: 0.0
+  caption_dropout: 0.0            # OneTrainer's 0; the other Krea 2 templates use 0.05
+  # DOP: see krea2_template.yaml.
+  dop: false
+  dop_class: "woman"
+  dop_multiplier: 1.0
+  dop_every: 1
 
 dtype: "bfloat16"
 mixed_precision: "bf16"

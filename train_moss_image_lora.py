@@ -13,12 +13,13 @@ predicts v = noise - x0, under a plain per-token MSE. By default sigmas follow t
 final pretraining interval: logit-normal (mean 1.09, std 0.95 on logit sigma), cut at 0.95 and
 rescaled onto [0, 1], 1 % uniform, no shift.
 
-    python train_moss_image_lora.py --config config/moss_image_template.yaml
+    python train_moss_image_lora.py --config config/moss_image_automagic_template.yaml
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gc
 import logging
 import math
@@ -30,20 +31,29 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from accelerate import Accelerator
 from accelerate.utils import set_seed
+from PIL import Image
 from safetensors.torch import save_file
 from torch.optim import AdamW
 from tqdm import tqdm
 
+from maltrainer.data.disk_cache import FolderCache, cache_key, content_hash, model_identity
 from maltrainer.data.flux3_dataset import load_flux3_image
 from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
-from maltrainer.models.flux3.vae import load_flux2_vae_encoder
+from maltrainer.models.flux3.vae import load_flux2_vae_decoder, load_flux2_vae_encoder
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
-from maltrainer.models.moss_image.lora import MOSSImageLoRANetwork
-from maltrainer.models.moss_image.text_encoder import load_moss_image_text_encoder
+from maltrainer.models.moss_image.lora import UNCOND_SKIP_BLOCKS, MOSSImageLoRANetwork
+from maltrainer.models.moss_image.sampling import sample as moss_sample
+from maltrainer.models.moss_image.text_encoder import MAX_SEQUENCE_LENGTH, TEMPLATE, load_moss_image_text_encoder
+from maltrainer.utils.compile import compile_blocks
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
+from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
+from maltrainer.utils.previews import Previews
+from maltrainer.utils.step_planner import DEFAULT_EPOCHS, Group, folder_counts
+from maltrainer.utils.step_planner import report as step_report
+from maltrainer.utils.train_monitor import TrainMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +97,9 @@ class MOSSImageLoRATrainer:
         self.samples: List[Tuple[str, str]] = []  # (key, caption)
         self.latent_cache: Dict[str, torch.Tensor] = {}
         self.text_cache: Dict[str, torch.Tensor] = {}
+        # sample: previews of fixed prompts every N steps, rendered with the weights in training
+        self.previews = Previews(config.get("sample"), Path(config.get("output", {}).get("path", "./output")))
+        self._preview_decoder = None
 
         train_config = config.get("train", {})
         if int(train_config.get("batch_size", 1) or 1) != 1:
@@ -139,42 +152,140 @@ class MOSSImageLoRATrainer:
         print("=== Step 1/2: Pre-caching Dataset (VAE Latents & Text Embeddings) ===", flush=True)
         resolution = int(dataset_config.get("resolution", 512))
         aspect_mode = str(dataset_config.get("aspect_mode", "bucket")).lower()
+        # dataset.cache: each image folder keeps a .maltrainer_cache of its own encodings.
+        use_disk = bool(dataset_config.get("cache", True))
 
-        vae = load_flux2_vae_encoder(model_config["vae_path"], self.device)
+        # Latents: from the disk cache where possible; the VAE loads only if something is new.
+        vae_id = model_identity(model_config["vae_path"])
+        latents: Dict[str, torch.Tensor] = {}
+        pending = []
+        for source in sources:
+            folder = FolderCache(source.path.parent)
+            key = cache_key("moss_image_latent/v1", content_hash(source.path), resolution, aspect_mode, vae_id) if use_disk else None
+            latent = folder.get("latents", key) if use_disk else None
+            if latent is None:
+                pending.append((source, folder, key))
+            else:
+                latents[str(source.path)] = latent
+        if pending:
+            vae = load_flux2_vae_encoder(model_config["vae_path"], self.device)
+            for source, folder, key in tqdm(pending, desc="Caching latents", disable=not self.is_main_process):
+                try:
+                    pixels = load_flux3_image(source.path, resolution, aspect_mode).unsqueeze(0).to(self.device)
+                    latent = vae.encode(pixels)[0].cpu()
+                    latents[str(source.path)] = latent
+                    if use_disk:
+                        folder.put("latents", key, latent)
+                except Exception as e:
+                    logger.warning("Skipping %s: %s", source.path.name, e)
+            del vae
+            gc.collect()
+            torch.cuda.empty_cache()
+        # Path order whatever came from disk, so a resumed run shuffles the same samples.
         sizes: Dict[Tuple[int, int], int] = {}
-        for source in tqdm(sources, desc="Caching latents", disable=not self.is_main_process):
-            try:
-                pixels = load_flux3_image(source.path, resolution, aspect_mode).unsqueeze(0).to(self.device)
-                latent = vae.encode(pixels)[0].cpu()
-                self.latent_cache[str(source.path)] = latent
-                self.samples.append((str(source.path), source.caption))
-                size = (pixels.shape[-1], pixels.shape[-2])
-                sizes[size] = sizes.get(size, 0) + 1
-            except Exception as e:
-                logger.warning("Skipping %s: %s", source.path.name, e)
-        del vae
-        gc.collect()
-        torch.cuda.empty_cache()
+        for source in sources:
+            latent = latents.get(str(source.path))
+            if latent is None:
+                continue
+            self.latent_cache[str(source.path)] = latent
+            self.samples.append((str(source.path), source.caption))
+            size = (latent.shape[-1] * 16, latent.shape[-2] * 16)
+            sizes[size] = sizes.get(size, 0) + 1
         logger.info("Training sizes (w x h: images): %s", ", ".join(f"{w}x{h}: {n}" for (w, h), n in sorted(sizes.items())))
-        print("VAE latents pre-cached and VAE unloaded from VRAM.", flush=True)
+        logger.info("Latents: %d from the disk cache, %d encoded", len(sources) - len(pending), len(pending))
+        print("VAE latents ready.", flush=True)
 
-        prompts = {caption for _, caption in self.samples}
+        # A caption's embedding lives in every folder whose images use it; the empty dropout
+        # prompt in the dataset folder itself.
+        prompt_folders: Dict[str, set] = {}
+        for key, caption in self.samples:
+            prompt_folders.setdefault(caption, set()).add(Path(key).parent)
         if float(train_config.get("caption_dropout", 0.0) or 0.0) > 0:
-            prompts.add("")
-        encoder = load_moss_image_text_encoder(
-            model_config["text_encoder_path"], self.device, self.dtype, model_config.get("tokenizer_path")
+            prompt_folders.setdefault("", set()).add(Path(dataset_config["path"]))
+        for caption in self._extra_prompts():
+            prompt_folders.setdefault(caption, set()).add(Path(dataset_config["path"]))
+        prompts = sorted(prompt_folders)
+        text_id = cache_key(
+            "moss_image_text/v1", model_identity(model_config["text_encoder_path"]), model_config.get("tokenizer_path"),
+            TEMPLATE, MAX_SEQUENCE_LENGTH, self.dtype,
         )
-        for caption in tqdm(sorted(prompts), desc="Caching prompts", disable=not self.is_main_process):
-            self.text_cache[caption] = encoder.encode(caption, self.device, self.dtype).cpu()
-        del encoder
-        gc.collect()
-        torch.cuda.empty_cache()
+        pending_prompts = []
+        for caption in prompts:
+            key = cache_key(text_id, caption)
+            folders = [FolderCache(folder) for folder in sorted(prompt_folders[caption])]
+            embeds = None
+            if use_disk:
+                for folder in folders:
+                    if folder.has("text", key) and (embeds := folder.get("text", key)) is not None:
+                        break
+            if embeds is None:
+                pending_prompts.append((caption, key, folders))
+                continue
+            self.text_cache[caption] = embeds
+            for folder in folders:  # e.g. a caption now shared with a new folder
+                if not folder.has("text", key):
+                    folder.put("text", key, embeds)
+        if pending_prompts:
+            encoder = load_moss_image_text_encoder(
+                model_config["text_encoder_path"], self.device, self.dtype, model_config.get("tokenizer_path")
+            )
+            for caption, key, folders in tqdm(pending_prompts, desc="Caching prompts", disable=not self.is_main_process):
+                self.text_cache[caption] = encoder.encode(caption, self.device, self.dtype).cpu()
+                if use_disk:
+                    for folder in folders:
+                        folder.put("text", key, self.text_cache[caption])
+            del encoder
+            gc.collect()
+            torch.cuda.empty_cache()
+        logger.info("Prompt embeddings: %d from the disk cache, %d encoded", len(prompts) - len(pending_prompts), len(pending_prompts))
         lengths = sorted({embeds.shape[0] for embeds in self.text_cache.values()})
-        print("Text embeddings pre-cached and Text Encoder unloaded from VRAM.", flush=True)
+        print("Text embeddings ready.", flush=True)
         logger.info(
             "Pre-cached %d images and %d prompt embeddings (text lengths: %s tokens).",
             len(self.samples), len(self.text_cache), lengths,
         )
+
+    def _extra_prompts(self) -> List[str]:
+        """Captions to encode beside the samples' own: the preview prompts (and the finetune's
+        prior-preservation ones)."""
+        return self.previews.captions
+
+    # ------------------------------------------------------------------ previews
+
+    @torch.no_grad()
+    def _render_preview(self, prompt: str, seed: int) -> Image.Image:
+        """One preview with the weights as they are now: the reference sampler, then the VAE decoder."""
+        p = self.previews
+        if self._preview_decoder is None:
+            self._preview_decoder = load_flux2_vae_decoder(self.config["model"]["vae_path"], self.device)
+        context = self.text_cache[prompt].to(self.device, self.dtype)
+        negative = self.text_cache[p.negative].to(self.device, self.dtype) if p.cfg != 1.0 else None
+        latents = moss_sample(self.lora_network, context, p.height, p.width, steps=p.steps, seed=seed, cfg=p.cfg,
+                              negative=negative, device=self.device)
+        image = self._preview_decoder.decode(latents)[0]
+        return Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8"))
+
+    def _preview_variants(self):
+        """(label, weights context) per row of the preview strip. LoRA checkpoints save the EMA
+        average, so the previews show it."""
+        if self.ema is not None and hasattr(self.ema, "applied"):
+            return [("", self.ema.applied)]
+        return [("", contextlib.nullcontext)]
+
+    def _maybe_preview(self, step: int, total: int) -> float:
+        """Render the previews if they are due; returns the seconds spent (0 if not)."""
+        if not self.is_main_process or not self.previews.due(step, total):
+            return 0.0
+        was_training = self.lora_network.training
+        self.lora_network.eval()
+        # hand training's cached-but-unused memory back first, so the render does not stack on it
+        gc.collect()
+        torch.cuda.empty_cache()
+        try:
+            return self.previews.render(step, self._render_preview, self._preview_variants())
+        finally:
+            self.lora_network.train(was_training)
+            torch.cuda.empty_cache()
 
     # ------------------------------------------------------------------ model
 
@@ -198,6 +309,7 @@ class MOSSImageLoRATrainer:
             alpha=float(lora_config.get("alpha", lora_config.get("rank", 16))),
             targets=str(lora_config.get("targets", "blocks")),
             prefix=lora_config.get("prefix", "diffusion_model."),
+            skip_blocks=lora_config.get("skip_blocks", UNCOND_SKIP_BLOCKS) or (),
         )
         self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
@@ -206,8 +318,20 @@ class MOSSImageLoRATrainer:
             "lora_layers": len(self.lora_network.lora_layers),
             "trainable_parameters": trainable,
             "lora_dtype": str(self.lora_dtype).replace("torch.", ""),
+            "lora_skip_blocks": list(self.lora_network.skip_blocks),
         })
         logger.info("LoRA: %.1fM trainable parameters in %s", trainable / 1e6, self.lora_dtype)
+        self._maybe_compile()
+
+    def _maybe_compile(self):
+        """train.compile: torch.compile each of the 42 blocks (after the LoRA wraps their Linears)."""
+        train_config = self.config.get("train", {})
+        if not bool(train_config.get("compile", False)):
+            self.run_metadata["compiled"] = False
+            return
+        self.run_metadata["compiled"] = compile_blocks(
+            self.transformer.layers, self.device, mode=train_config.get("compile_mode") or None
+        )
 
     def setup_optimizer(self):
         train_config = self.config["train"]
@@ -329,6 +453,7 @@ class MOSSImageLoRATrainer:
         context = self.text_cache[caption].to(self.device, self.dtype).unsqueeze(0)
 
         sigma = self._sample_sigma()
+        self.last_sigma = sigma  # for the monitor's noise bands
         noise = torch.randn_like(x0)
         s = sigma.view(1, 1, 1, 1)
         noisy = (1.0 - s) * x0 + s * noise
@@ -358,14 +483,19 @@ class MOSSImageLoRATrainer:
         )
 
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
+        keys = KeyCommands() if self.is_main_process else None
+        monitor = TrainMonitor(every=int(train_config.get("monitor_every", 100) or 100))
+        stopped = False
         global_step = 0
         loss = None
+        monitor.exclude(self._maybe_preview(0, total_steps))
         for epoch in range(num_epochs):
             self.lora_network.train()
             for index in self._epoch_order():
                 with self.accelerator.accumulate(self.lora_network):
                     loss = self._training_step(index)
                     self.accelerator.backward(loss)
+                    monitor.record(loss.item(), float(self.last_sigma))
                     if self.accelerator.sync_gradients:
                         self.accelerator.clip_grad_norm_(network.trainable_parameters(), float(train_config.get("max_grad_norm", 1.0)))
                         self.optimizer.step()
@@ -379,15 +509,23 @@ class MOSSImageLoRATrainer:
                     global_step += 1
                     progress_bar.update(1)
                     self._log_step(global_step, total_steps, loss, epoch, num_epochs)
+                    monitor.step_done(global_step, total_steps, self.optimizer)
+                    monitor.exclude(self._maybe_preview(global_step, total_steps))
                     if save_every > 0 and global_step % save_every == 0 and global_step < total_steps:
                         self.save_checkpoint(global_step)
+                    stopped = keys is not None and keys.handle(global_step, self.save_checkpoint)
                 progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"})
-                if global_step >= total_steps:
+                if global_step >= total_steps or stopped:
                     break
-            if global_step >= total_steps:
+            if global_step >= total_steps or stopped:
                 break
 
         progress_bar.close()
+        if keys is not None:
+            keys.close()
+        if stopped:
+            logger.info("MOSS-Image LoRA training stopped by key at step %d (saved as step %d).", global_step, global_step)
+            return
         self.save_checkpoint("final")
         logger.info("MOSS-Image LoRA training completed!")
 
@@ -395,6 +533,7 @@ class MOSSImageLoRATrainer:
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
         prefix = ("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (step, total, int(step / total * 100), loss.item(), epoch + 1, num_epochs))
+        prefix += getattr(self, "step_note", "")
         if hasattr(inner, "get_avg_learning_rate"):
             rates = ", ".join(f"{g.get('name', i)} {lr:.2e}" for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates())))
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
@@ -427,11 +566,30 @@ class MOSSImageLoRATrainer:
 
     # ------------------------------------------------------------------ dry run / entry
 
-    def simulate(self):
-        """Plan from the real dataset folder and tick through the steps without loading models."""
+    def _dry_run_samples(self) -> int:
+        """One epoch's samples, counted from the dataset folder without decoding anything."""
         dataset_config = self.config["dataset"]
         repeats = max(int(dataset_config.get("repeats", 1) or 1), 1)
-        samples = max(count_media_files(dataset_config.get("path", ""), ["image"]), 1) * repeats
+        return max(count_media_files(dataset_config.get("path", ""), ["image"]), 1) * repeats
+
+    @classmethod
+    def step_groups(cls, config: dict) -> List[Group]:
+        """The image folders an epoch draws from, for --suggest-steps."""
+        dataset_config = config["dataset"]
+        root = dataset_config.get("path", "")
+        return [Group("Subjects", root, max(int(dataset_config.get("repeats", 1) or 1), 1), folder_counts(root))]
+
+    @classmethod
+    def step_notes(cls, config: dict) -> List[str]:
+        return []
+
+    @classmethod
+    def suggest_steps(cls, config: dict, epochs: float) -> str:
+        return step_report(cls.step_groups(config), config.get("train", {}), epochs, cls.step_notes(config))
+
+    def simulate(self):
+        """Plan from the real dataset folder and tick through the steps without loading models."""
+        samples = self._dry_run_samples()
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(samples, self.config["train"])
         logger.info("Dry run: %d samples, %d steps/epoch -> %d epochs, %d total steps", samples, steps_per_epoch, num_epochs, total_steps)
         with tqdm(total=total_steps, desc="Training Steps (dry run)", disable=not self.is_main_process) as bar:
@@ -467,9 +625,15 @@ def main():
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")
     parser.add_argument("--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step")
+    parser.add_argument("--suggest-steps", type=float, nargs="?", const=DEFAULT_EPOCHS, metavar="EPOCHS",
+                        help=f"Count the dataset's images and suggest train.max_steps for EPOCHS epochs "
+                             f"(default {DEFAULT_EPOCHS}), then exit without training")
     args = parser.parse_args()
 
     config = load_config(args.config)
+    if args.suggest_steps is not None:
+        print(MOSSImageLoRATrainer.suggest_steps(config, args.suggest_steps))
+        return
     setup_logging(config.get("logging", {}))
     if config.get("output"):
         save_config_to_output(config, config["output"]["path"])

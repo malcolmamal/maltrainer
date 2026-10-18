@@ -13,3 +13,7 @@ samples/
 # per-machine web UI launcher settings (copy the .example files)
 webui.local.bat
 webui.local.sh
+
+# per-person run configs (generated from the templates) and local merge configs
+config/*__*.yaml
+/merge.yaml

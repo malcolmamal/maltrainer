@@ -27,7 +27,7 @@ MODELS = {
     "krea2": (
         "train_krea2_lora.py",
         "config/krea2_template.yaml",
-        {"prodigy": "config/krea2_prodigy_template.yaml"},
+        {"prodigy": "config/krea2_prodigy_template.yaml", "adamw8bit": "config/krea2_adamw_template.yaml"},
         {
             "transformer_path": ("diffusion_models", "krea2_raw_fp8_scaled.safetensors"),
             "vae_path": ("vae", "qwen_image_vae.safetensors"),
@@ -46,7 +46,7 @@ MODELS = {
     ),
     "moss_image": (
         "train_moss_image_lora.py",
-        "config/moss_image_template.yaml",
+        "config/moss_image_automagic_template.yaml",
         {"prodigy": "config/moss_image_prodigy_template.yaml", "adamw8bit": "config/moss_image_adamw_template.yaml"},
         {
             "transformer_path": ("diffusion_models", "moss_image_base_bf16.safetensors"),

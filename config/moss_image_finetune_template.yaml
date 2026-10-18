@@ -1,0 +1,120 @@
+# MOSS-Image full finetune template -- Automagic3, fused (train_moss_image_finetune.py).
+#
+# For the CLI: copy this file and replace the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    your ComfyUI models folder
+#
+# Trains the DiT's own weights, not a LoRA. Data, timesteps and loss match
+# moss_image_automagic_template.yaml; see docs/moss-image-finetuning.md.
+# Each checkpoint is a full ComfyUI model file (~10 GB), plus the resume state (~15 GB, 35 GB
+# with EMA) of the latest save.
+
+model:
+  # The plain bf16 BASE model (the int8 file cannot be finetuned). To start from an earlier
+  # finetune with a fresh optimizer, point this at that output file instead.
+  transformer_path: "[comfyui_models]/diffusion_models/moss_image_base_bf16.safetensors"
+  vae_path: "[comfyui_models]/vae/flux2_vae.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3.5_9b_int8_convrot.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512            # area target; buckets keep each image's aspect on a 16 px grid
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+  cache: true                # keep encodings in each image folder's .maltrainer_cache (docs/datasets.md)
+  # Regularisation images: ordinary photos of the class (not model output), trained beside the
+  # subjects at train.reg_lr_multiplier x the step. Empty = none.
+  reg_path: ""
+  reg_default_caption: ""    # for reg images without a .txt
+  reg_repeats: 1
+
+finetune:
+  # Parameter-name prefixes to train. ["layers."] = the 42 joint blocks (the default when the key
+  # is missing); [] = everything, including the text embedder OpenMOSS advise keeping frozen.
+  # ["layers.30.", "layers.31."] trains just those two blocks.
+  trainable_prefixes: ["layers."]
+  # Only Linear weights train (4.76B in the blocks); norms, biases and other vectors stay frozen.
+  linears_only: true
+
+# Prior preservation (DOP): before step 1 the original model's predictions are recorded for each
+# image with its trigger replaced by the class word; each step then holds the model to them on
+# that class caption, so the subjects stay behind their triggers. ~2x the step time at every 1.
+prior:
+  weight: 0.0             # 0 = off
+  classes: {"[person_to_train]": "person"}   # trigger: class word
+  samples_per_image: 8       # recorded noised inputs per image (0.26 MB each at 512 px)
+  every: 1                   # add the term every N steps
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1  # must stay 1 while automagic_fused is on
+  max_steps: 1000            # > 0 wins over num_epochs
+  num_epochs: 20
+  save_every: 0              # 0 = only at the end or on [s] / [q]; each save is a 10 GB model
+  save_state: true           # also write <name>_state/ for resume_from (latest save only)
+  # Continue an interrupted (or finished) run exactly: weights, optimizer, EMA, step, data order
+  # and RNG. Set to the <name>_state folder; raise max_steps to train past the old end.
+  resume_from: ""
+  timestep_distribution: "logit_normal"
+  timestep_logit_mean: 1.09
+  timestep_logit_std: 0.95
+  timestep_cutoff: 0.95
+  timestep_uniform_mix: 0.01
+  timestep_shift: 1.0
+  timestep_grid: 1000
+  gradient_checkpointing: true
+  compile: false                  # torch.compile each block: 3-7% faster (docs), needs triton-windows
+  optimizer: "automagic3"         # the only one supported here
+  # A fixed rate: min = max = learning_rate pins Automagic3, so its vote cannot move it. Left to
+  # adapt, it walked from 1e-6 down to ~2.5e-7 on MOSS-Image's flat loss (people run,
+  # 2026-10-18), a step of 0.002 bf16 spacings on these weights (|w| ~0.03): rounding noise, and
+  # the finetune's change came out flat-spectrum. 1e-5 is Fizgig's finetune rate (Adafactor, the
+  # same normalised update). If previews look burned, try 5e-6 with the same pin.
+  learning_rate: 1.0e-5
+  automagic_min_lr: 1.0e-5
+  automagic_max_lr: 1.0e-5
+  weight_decay: 0.0
+  automagic_fused: true           # step inside backward: no full gradient copy (~10 GB saved)
+  automagic_param_groups: true    # attention / MLP each keep their own rate (moot while pinned)
+  automagic_polarity_history: 8
+  automagic_clip_threshold: 1.0   # per-tensor update clip; replaces max_grad_norm here
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+  # EMA of all weights, kept in fp32 in CPU RAM (20 GB); checkpoints then save the average.
+  # 0 = off. A full finetune moves slowly, so use a long average (0.999), not the LoRA's 0.98.
+  ema_decay: 0.0
+  ema_every: 4                    # update every N steps (decay^N): same time constant, 1/N the cost
+  ema_warmup: false               # the warmup keeps the average far shorter than 0.999 means (docs)
+  caption_dropout: 0.05
+  reg_lr_multiplier: 0.2          # step size of regularisation images (0.1-0.3 anchors)
+
+# Previews rendered with the weights in training (no checkpoint saved): every N steps and before
+# the first, the same seed per prompt each time. The trigger-free prompt shows whether the person
+# leaks into the class. ~24 s per 1024 px image (30 steps, CFG 3). every: 0 = off.
+sample:
+  every: 1000
+  at_start: true
+  prompts:
+    - "photo of [person_to_train] smiling, close-up with face visible, soft light from the front"
+    - "photo of a person smiling, close-up with face visible, soft light from the front"
+  negative: ""
+  steps: 30
+  cfg: 3.0
+  width: 1024
+  height: 1024
+  seed: 42
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/moss_image_finetune/[person_to_train]"
+  name: "moss_image_ft_[person_to_train]"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

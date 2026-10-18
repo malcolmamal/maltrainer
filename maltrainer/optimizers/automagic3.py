@@ -58,6 +58,15 @@ class Automagic3(torch.optim.Optimizer):
         super().__init__(params, defaults)
 
         self.fused = fused
+        # Multiplies every update's step size (not the learned rates): regularisation images train
+        # at a fraction of the step (maltrainer/finetune/regularisation.py). 1 = off.
+        self.lr_scale = 1.0
+        # Training-health statistics, summed on the device (no sync per step) and read with
+        # pop_stats(): each group's vote signal, and how many gradient values were NaN / inf
+        # (they are zeroed before the update, so without this count they would pass unseen).
+        self._signal_sum: dict = {}
+        self._signal_steps: dict = {}
+        self._nonfinite = None
         self._rebuild_group_index()
         self._hook_handles = []
         for group in self.param_groups:
@@ -144,6 +153,28 @@ class Automagic3(torch.optim.Optimizer):
         vals = (packed.unsqueeze(-1) >> shifts).bitwise_and_(1)
         return vals.view(-1)[:numel]
 
+    @classmethod
+    def _vote_masks(cls, hist: torch.Tensor, start: int, numel: int):
+        """(up, down) 0/1 masks from the packed sign history, oldest row at ``start``.
+
+        up: the sign was the same in all H steps. down: it flipped at every step. Both are
+        bitwise ANDs over the packed rows (1 bit per element), so only the two results get
+        unpacked -- the same masks as unpacking all H rows to a byte per bit and counting,
+        at a fraction of the memory traffic (that was ~0.6 s per step on 5B parameters).
+        """
+        H = hist.shape[0]
+        rows = [hist[(start + i) % H] for i in range(H)]
+        all_set = rows[0].clone()
+        any_set = rows[0].clone()
+        alternating = rows[0] ^ rows[1]
+        for prev, cur in zip(rows[1:], rows[2:]):
+            alternating.bitwise_and_(prev ^ cur)
+        for row in rows[1:]:
+            all_set.bitwise_and_(row)
+            any_set.bitwise_or_(row)
+        up = all_set.bitwise_or_(any_set.bitwise_not_())
+        return cls._unpack_bits(up, numel), cls._unpack_bits(alternating, numel)
+
     def _rebuild_group_index(self) -> None:
         self._param_group_index = {
             p: gi for gi, group in enumerate(self.param_groups) for p in group["params"]
@@ -220,6 +251,8 @@ class Automagic3(torch.optim.Optimizer):
         if grad.dtype != torch.float32:
             grad = grad.to(torch.float32)
 
+        bad = grad.isfinite().logical_not_().sum()
+        self._nonfinite = bad if self._nonfinite is None else self._nonfinite.add_(bad.to(self._nonfinite.device))
         grad.nan_to_num_(nan=0.0, posinf=0.0, neginf=0.0)
 
         beta2 = group["beta2"]
@@ -267,17 +300,7 @@ class Automagic3(torch.optim.Optimizer):
         state["hist_fill"] = fill
 
         if fill == H:
-            _, shifts = self._pack_consts(hist.device)
-            chron = torch.roll(hist, -state["hist_idx"], dims=0)
-            bits = (
-                (chron.unsqueeze(-1) >> shifts)
-                .bitwise_and_(1)
-                .view(H, -1)[:, : update.numel()]
-            )
-            s1 = bits.sum(0, dtype=torch.int16)
-            flips = (bits[1:] ^ bits[:-1]).sum(0, dtype=torch.int16)
-            up = s1.eq(H).logical_or_(s1.eq(0))
-            down = flips.eq(H - 1)
+            up, down = self._vote_masks(hist, state["hist_idx"], update.numel())
             w = update.abs().view(-1)
             num = (w * up).sum().sub_((w * down).sum())
             den = w.sum()
@@ -301,12 +324,12 @@ class Automagic3(torch.optim.Optimizer):
         if p.dtype == torch.float32:
             if wd != 0.0:
                 update.add_(p, alpha=wd)
-            p.addcmul_(update, lr_t, value=-1.0)
+            p.addcmul_(update, lr_t, value=-self.lr_scale)
         else:
             new_p_fp32 = p.to(torch.float32)
             if wd != 0.0:
                 update.add_(new_p_fp32, alpha=wd)
-            new_p_fp32.addcmul_(update, lr_t, value=-1.0)
+            new_p_fp32.addcmul_(update, lr_t, value=-self.lr_scale)
             self._stochastic_copy_(p, new_p_fp32)
 
         p.grad = None
@@ -341,6 +364,10 @@ class Automagic3(torch.optim.Optimizer):
                 continue
             den = self._group_den[gi]
             signal = num.div_(den.clamp_(min=1e-30)).clamp_(-1.0, 1.0)
+            name = group.get("name", str(gi))
+            total = self._signal_sum.get(name)
+            self._signal_sum[name] = signal.detach().clone() if total is None else total.add_(signal.to(total.device))
+            self._signal_steps[name] = self._signal_steps.get(name, 0) + 1
             factor = torch.exp(signal)
             for p in group["params"]:
                 st = self.state.get(p)
@@ -351,6 +378,21 @@ class Automagic3(torch.optim.Optimizer):
                 lr_t.mul_(f).clamp_(min=group["min_lr"], max=group["max_lr"])
             self._group_num[gi] = None
             self._group_den[gi] = None
+
+    def pop_stats(self) -> dict:
+        """Statistics since the last call, then reset (one GPU sync).
+
+        signal: per group, the mean of the vote signal in [-1, 1], weighted by update size: the
+            share of elements whose update kept one sign over the last ``polarity_history`` steps
+            minus the share whose sign flipped every step. Positive = updates keep a direction
+            (learning); near 0 = sign noise; negative = overshooting. Computed even when the rate
+            is pinned (min_lr = max_lr), where it no longer moves the rate.
+        nonfinite: gradient values that were NaN or inf (zeroed before their update).
+        """
+        signal = {name: float(total) / self._signal_steps[name] for name, total in self._signal_sum.items()}
+        nonfinite = int(self._nonfinite) if self._nonfinite is not None else 0
+        self._signal_sum, self._signal_steps, self._nonfinite = {}, {}, None
+        return {"signal": signal, "nonfinite": nonfinite}
 
     def get_learning_rates(self) -> List[float]:
         out = []
@@ -368,7 +410,19 @@ class Automagic3(torch.optim.Optimizer):
         return sum(lrs) / len(lrs) if lrs else float(self.defaults["lr"])
 
     def load_state_dict(self, state_dict):
+        # torch casts floating state to each param's dtype, which would round the fp32 rates
+        # of bf16 params (a full finetune) to bf16; put the saved values back afterwards.
+        saved_lrs = {
+            idx: st["lr"].detach().clone()
+            for idx, st in state_dict["state"].items()
+            if isinstance(st.get("lr"), torch.Tensor)
+        }
         super().load_state_dict(state_dict)
+        params = [p for group in self.param_groups for p in group["params"]]
+        for idx, lr in saved_lrs.items():
+            st = self.state.get(params[int(idx)])
+            if st is not None:
+                st["lr"] = lr.to(device=params[int(idx)].device, dtype=torch.float32)
         for group in self.param_groups:
             for k, v in self.defaults.items():
                 group[k] = v

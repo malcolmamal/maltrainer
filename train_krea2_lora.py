@@ -38,6 +38,7 @@ from maltrainer.models.krea2.text_encoder import load_krea2_text_encoder
 from maltrainer.models.krea2.vae import load_krea2_vae
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
+from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
 
@@ -80,8 +81,17 @@ class Krea2LoRATrainer:
         self.samples: List[Tuple[str, str]] = []  # (key, caption)
         self.latent_cache: Dict[str, torch.Tensor] = {}
         self.text_cache: Dict[str, torch.Tensor] = {}
+        self.dop_captions: Dict[str, str] = {}  # sample key -> its caption with the trigger replaced
+        self.micro_step = 0
+        self.last_dop_loss: Optional[float] = None
 
         train_config = config.get("train", {})
+        self.dop = bool(train_config.get("dop", False))
+        if self.dop:
+            if not str(train_config.get("dop_class", "") or "").strip():
+                raise ValueError("train.dop needs train.dop_class, the class word that replaces the trigger")
+            if not str(config.get("dataset", {}).get("trigger", "") or "").strip():
+                raise ValueError("train.dop needs dataset.trigger: DOP's captions are the captions without it")
         if int(train_config.get("batch_size", 1) or 1) != 1:
             raise ValueError(
                 "Krea 2 trains at batch_size 1 (every caption keeps its own unpadded length, as in "
@@ -148,6 +158,9 @@ class Krea2LoRATrainer:
         prompts = {caption for _, caption in self.samples}
         if float(train_config.get("caption_dropout", 0.0) or 0.0) > 0:
             prompts.add("")
+        if self.dop:
+            self._plan_dop_captions()
+            prompts.update(self.dop_captions.values())
         encoder = load_krea2_text_encoder(
             model_config["text_encoder_path"], self.device, self.dtype, model_config.get("tokenizer_path")
         )
@@ -158,6 +171,35 @@ class Krea2LoRATrainer:
         torch.cuda.empty_cache()
         print("Text embeddings pre-cached and Text Encoder unloaded from VRAM.", flush=True)
         logger.info("Pre-cached %d images and %d prompt embeddings.", len(self.samples), len(self.text_cache))
+
+    def _plan_dop_captions(self) -> None:
+        """DOP's caption per sample: the trigger replaced by the class word, as ai-toolkit does."""
+        train_config = self.config["train"]
+        trigger = str(self.config["dataset"]["trigger"]).strip()
+        cls = str(train_config["dop_class"]).strip()
+        for key, caption in self.samples:
+            if trigger in caption:
+                self.dop_captions[key] = caption.replace(trigger, cls)
+        missing = len(self.samples) - len(self.dop_captions)
+        example = next(((c, self.dop_captions[k]) for k, c in self.samples if k in self.dop_captions), None)
+        logger.info(
+            "DOP: %d of %d captions name the trigger %r; their DOP caption swaps it for %r%s",
+            len(self.dop_captions), len(self.samples), trigger, cls,
+            f" (e.g. {example[0]!r} -> {example[1]!r})" if example else "",
+        )
+        if missing:
+            logger.warning(
+                "DOP: %d caption(s) don't contain the trigger %r and get no DOP pass (holding them to the "
+                "base model would unlearn the subject).", missing, trigger,
+            )
+        if not self.dop_captions:
+            raise ValueError(f"train.dop: no caption contains the trigger {trigger!r}")
+        self.run_metadata["dop"] = {
+            "class": cls,
+            "multiplier": float(train_config.get("dop_multiplier", 1.0)),
+            "every": int(train_config.get("dop_every", 1) or 1),
+            "captions": len(self.dop_captions),
+        }
 
     # ------------------------------------------------------------------ model
 
@@ -284,7 +326,8 @@ class Krea2LoRATrainer:
         world = self.accelerator.num_processes
         return order[self.accelerator.process_index::world] if world > 1 else order
 
-    def _training_step(self, index: int, shift_logged: List[bool]) -> torch.Tensor:
+    def _training_step(self, index: int, shift_logged: List[bool]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """The flow-matching loss for one sample, and the noised latent and sigma it used."""
         train_config = self.config["train"]
         key, caption = self.samples[index]
         dropout = float(train_config.get("caption_dropout", 0.0) or 0.0)
@@ -305,11 +348,29 @@ class Krea2LoRATrainer:
 
         noise = torch.randn_like(x0)
         s = sigma.view(1, 1, 1, 1)
-        noisy = (1.0 - s) * x0 + s * noise
-        pred = self.lora_network(noisy.to(self.dtype), sigma, context)
+        noisy = ((1.0 - s) * x0 + s * noise).to(self.dtype)
+        pred = self.lora_network(noisy, sigma, context)
         loss = torch.nn.functional.mse_loss(pred.float(), (noise - x0).float())
         strength = float(train_config.get("loss_weight_strength", 1.0))
-        return loss * strength if strength != 1.0 else loss
+        return (loss * strength if strength != 1.0 else loss), noisy, sigma
+
+    def _dop_loss(self, index: int, noisy: torch.Tensor, sigma: torch.Tensor) -> Optional[torch.Tensor]:
+        """Differential output preservation (ai-toolkit's diff_output_preservation).
+
+        On the same noised latent and sigma, the caption without the trigger: the base model's
+        prediction (adapters off, no grad) is the target for the LoRA's prediction. None when this
+        sample's caption has no trigger, or it isn't a DOP step (``train.dop_every``).
+        """
+        train_config = self.config["train"]
+        caption = self.dop_captions.get(self.samples[index][0])
+        every = max(int(train_config.get("dop_every", 1) or 1), 1)
+        if caption is None or self.micro_step % every:
+            return None
+        context = self.text_cache[caption].to(self.device, self.dtype).unsqueeze(0)
+        with torch.no_grad(), self.accelerator.unwrap_model(self.lora_network).disabled():
+            target = self.lora_network(noisy, sigma, context).float()
+        pred = self.lora_network(noisy, sigma, context)
+        return torch.nn.functional.mse_loss(pred.float(), target) * float(train_config.get("dop_multiplier", 1.0))
 
     def train(self):
         train_config = self.config["train"]
@@ -328,6 +389,8 @@ class Krea2LoRATrainer:
         logger.info("Starting Krea 2 LoRA training: %d epochs, %d total steps", num_epochs, total_steps)
 
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
+        keys = KeyCommands() if self.is_main_process else None
+        stopped = False
         global_step = 0
         shift_logged = [False]
         loss = None
@@ -335,8 +398,15 @@ class Krea2LoRATrainer:
             self.lora_network.train()
             for index in self._epoch_order():
                 with self.accelerator.accumulate(self.lora_network):
-                    loss = self._training_step(index, shift_logged)
+                    loss, noisy, sigma = self._training_step(index, shift_logged)
                     self.accelerator.backward(loss)
+                    if self.dop:
+                        # its own backward, so the first pass's graph is freed before the second
+                        dop_loss = self._dop_loss(index, noisy, sigma)
+                        if dop_loss is not None:
+                            self.accelerator.backward(dop_loss)
+                            self.last_dop_loss = dop_loss.item()
+                    self.micro_step += 1
                     if self.accelerator.sync_gradients:
                         self.accelerator.clip_grad_norm_(network.trainable_parameters(), float(train_config.get("max_grad_norm", 1.0)))
                         self.optimizer.step()
@@ -352,13 +422,19 @@ class Krea2LoRATrainer:
                     self._log_step(global_step, total_steps, loss, epoch, num_epochs)
                     if save_every > 0 and global_step % save_every == 0 and global_step < total_steps:
                         self.save_checkpoint(global_step)
+                    stopped = keys is not None and keys.handle(global_step, self.save_checkpoint)
                 progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"})
-                if global_step >= total_steps:
+                if global_step >= total_steps or stopped:
                     break
-            if global_step >= total_steps:
+            if global_step >= total_steps or stopped:
                 break
 
         progress_bar.close()
+        if keys is not None:
+            keys.close()
+        if stopped:
+            logger.info("Krea 2 LoRA training stopped by key at step %d (saved as step %d).", global_step, global_step)
+            return
         self.save_checkpoint("final")
         logger.info("Krea 2 LoRA training completed!")
 
@@ -366,6 +442,8 @@ class Krea2LoRATrainer:
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
         prefix = ("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (step, total, int(step / total * 100), loss.item(), epoch + 1, num_epochs))
+        if self.last_dop_loss is not None:
+            prefix += "DOP: %.6f, " % self.last_dop_loss
         if hasattr(inner, "get_avg_learning_rate"):
             rates = ", ".join(f"{g.get('name', i)} {lr:.2e}" for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates())))
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)

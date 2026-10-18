@@ -38,6 +38,7 @@ ARCHITECTURES = {
     "krea2": ("train_krea2_lora.py", "krea2_raw", "maltrainer.models.krea2.lora"),
     "flux3_klein": ("train_flux3_klein_lora.py", "flux3_image_klein_base", "maltrainer.models.flux3.lora"),
     "moss_image": ("train_moss_image_lora.py", "moss_image_base", "maltrainer.models.moss_image.lora"),
+    "moss_image_finetune": ("train_moss_image_finetune.py", "moss_image_base", "maltrainer.models.moss_image.finetune"),
 }
 
 

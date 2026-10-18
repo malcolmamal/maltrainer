@@ -11,16 +11,51 @@ python train_moss_image_lora.py --config config/train_moss_image_feliciaday_auto
 ```
 
 ```bash
-run_moss_image_training.bat feliciaday              # fills config/moss_image_template.yaml (Automagic3)
+run_moss_image_training.bat feliciaday              # fills config/moss_image_automagic_template.yaml (Automagic3)
 run_moss_image_training.bat feliciaday prodigy      # fills config/moss_image_prodigy_template.yaml
 run_moss_image_training.bat feliciaday adamw8bit    # fills config/moss_image_adamw_template.yaml
 ```
 
 The third is the web UI: pick **MOSS-Image (Base)**, a dataset and an optimizer.
 
+For how to lay out and caption a dataset (subfolders, `.txt` captions, several people), see
+[datasets.md](datasets.md). To train the DiT's own weights instead of a LoRA, see
+[moss-image-finetuning.md](moss-image-finetuning.md).
+
 `run_moss_image_training.bat` wraps `scripts/train_from_template.py`. That script fills the
 template's placeholders and writes the filled config into the output folder before it starts.
 Pass `--max-steps`, `--epochs`, `--trigger` or `--dry-run` after the optimizer.
+
+`--suggest-steps [EPOCHS]` counts the dataset's images per folder and prints the `train.max_steps`
+for that many epochs (default 22), then exits without loading a model:
+
+```bash
+python train_moss_image_lora.py --config config/train_moss_image_feliciaday_automagic3.yaml --suggest-steps
+```
+
+## The `[monitor]` line
+
+Every `train.monitor_every` steps (default 100) the log gets a summary: the mean loss by noise
+band, Automagic3's direction signal per group, NaN gradient counts, s/step and peak VRAM. Three
+NaN losses in a row stop the run without saving. The fields are explained in
+[moss-image-finetuning.md](moss-image-finetuning.md#watching-a-run-the-monitor-line); a LoRA run
+has no prior or drift field.
+
+## Previews
+
+The templates' `sample:` section renders two prompts (the trigger, and a trigger-free one) at
+1024 px every 500 steps and before the first, with the LoRA as it is (the EMA average when EMA is
+on). Nothing is saved but the PNGs in `<output.path>/samples/`. About 24 s per image. See
+[moss-image-finetuning.md](moss-image-finetuning.md#previews-during-training) for the settings.
+
+## Keys while training
+
+When the trainer runs in a console window (the CLI or a `.bat`), two keys act at the next step:
+
+- `s` saves a checkpoint now, as `<name>_step_<N>.safetensors`, and training continues.
+- `q` saves `<name>_step_<N>.safetensors` and stops. No `final` file is written.
+
+The web UI starts the trainer without a console, so the keys do nothing there.
 
 ## Model files
 
@@ -99,12 +134,12 @@ and compare checkpoints.
 All three templates use the same model files, LoRA (rank 16, alpha 16, `blocks`), timesteps
 and 512 px buckets, so their runs compare directly.
 
-- `config/moss_image_template.yaml`: **Automagic3**. Launch point 1e-6. Attention, MLP and
+- `config/moss_image_automagic_template.yaml`: **Automagic3**. Launch point 1e-6. Attention, MLP and
   other layers each adapt their own rate, over an **8-step** sign window. On FLUX.3 a 16-step
-  window left the rate stuck near 3e-5 and the LoRA under-trained. EMA 0.98, 1500 steps.
+  window left the rate stuck near 3e-5 and the LoRA under-trained. EMA 0.98, 20 epochs.
 - `config/moss_image_prodigy_template.yaml`: **Prodigy**, with FLUX.3's Prodigy settings.
   lr 1.0 (a multiplier on Prodigy's own estimate d), 100 warmup steps, decoupled weight decay
-  0.01, beta2 0.99, bias correction and safeguarded warmup, no EMA, 100 epochs.
+  0.01, beta2 0.99, bias correction and safeguarded warmup, no EMA, 20 epochs.
 - `config/moss_image_adamw_template.yaml`: **AdamW 8-bit** at a flat 1e-4 (Fizgig 8.1's rate
   for FLUX.3 and Krea 2), weight decay 0.01, EMA 0.98, as in the Automagic3 template.
 
@@ -115,13 +150,56 @@ LoRA target presets (`lora.targets`):
 
 | Preset | Adapters | What |
 |---|---|---|
-| `blocks` | 252 | attention (`proj.q/k/v/o`) + feed-forward (`proj.ffn_up_gate/ffn_down`) of the 42 joint blocks |
-| `attn` | 168 | attention only |
-| `all` | 269 | `blocks` + the 2 text-embedder blocks + input, timestep, modulation and output Linears |
+| `blocks` | 246 | attention (`proj.q/k/v/o`) + feed-forward (`proj.ffn_up_gate/ffn_down`) of the 42 joint blocks, block 22 skipped |
+| `attn` | 164 | attention only |
+| `all` | 263 | `blocks` + the 2 text-embedder blocks + input, timestep, modulation and output Linears |
+
+The counts are with the default `lora.skip_blocks: [22]`; with `[]` they are 252 / 168 / 269.
+
+### Block 22 is left out
+
+The reference sampler runs CFG with block 22 skipped in the negative (empty-prompt) branch: the
+pipeline's `uncond_skip_layers=[22]`, ComfyUI's SkipLayerGuidanceDiTSimple on layer 22. A LoRA
+on any other block acts on both branches, so CFG's difference partly cancels it. A LoRA on block
+22 acts on the positive branch alone, and CFG multiplies its effect by the CFG scale (3-4).
+AI Toolkit and Fizgig leave the block out for that reason, and so does `lora.skip_blocks` by
+default. The training forward still runs block 22; it only has no adapter. Set
+`skip_blocks: []` to adapt all 42 blocks, or list other block numbers to leave out.
 
 Saved keys are ComfyUI's module paths (`diffusion_model.layers.N.proj.q.lora_A.weight`).
 ComfyUI loads them with its stock LoRA loader, including on the repacked files with a fused
 `proj.qkv`.
+
+## torch.compile
+
+`train.compile: true` compiles each of the 42 blocks with `torch.compile` (after the LoRA wraps
+their Linears; gradient checkpointing stays outside the compiled block). The templates leave it
+off. `train.compile_mode` passes a mode such as `max-autotune-no-cudagraphs`; leave it unset for
+the default.
+
+Measured on the RTX 5090 (2026-10-18, feliciaday, bf16 DiT, rank 16, block 22 skipped, the
+GPU shared with another process), steady-state steps after warm-up:
+
+| Resolution | Eager | Compiled | Faster | Compile at the start |
+|---|---|---|---|---|
+| 512 px | 0.701 s/step | 0.681 s/step | 3% | ~48 s |
+| 1024 px | 2.05 s/step | 1.91 s/step | 7% | ~25 s |
+
+That is well below Fizgig's 26% (bf16 at 1 MP on a 5090). At 512 px a run needs ~2,400 steps
+to repay the compile, so the templates leave it **off**. Turn it on for long runs or 1024 px and
+up.
+
+Inductor may log "fx graph cache unable to load compiled graph" (a torch unpickling bug when it
+reads graphs cached by an earlier run). It then compiles again, and training is unaffected.
+
+- **Compile time.** The first step compiles; the first new caption length recompiles once with
+  dynamic sizes. After that, new caption lengths and buckets reuse the graph. On the GPU check
+  (5 shapes) there were no further recompiles.
+- **Numerics.** Compiled and eager steps agree to bf16 rounding (loss within 1e-4 relative, LoRA
+  gradients within ~1%, the same as two eager kernels' drift).
+- **Triton.** Inductor needs Triton. On Windows that is `pip install "triton-windows<3.7"` for
+  torch 2.10 (installed in this repo's venv on 2026-10-18). Without it the run logs why and
+  trains eager.
 
 ## First real run (feliciaday, Automagic3, 2026-10-17)
 
