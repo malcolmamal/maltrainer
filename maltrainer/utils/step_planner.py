@@ -9,11 +9,12 @@ and the regularisation images ``reg_repeats`` times), so max_steps = epochs x st
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union
 
-from maltrainer.data.minimax_dataset import _media_kind, count_media_files
+from maltrainer.data.minimax_dataset import _media_kind
 
 DEFAULT_EPOCHS = 22  # the MOSS-Image people LoRAs had likeness by ~20 epochs
 
@@ -35,20 +36,20 @@ class Group:
 
 
 def folder_counts(root: Union[str, Path], kinds: Sequence[str] = ("image",)) -> List[Tuple[str, int]]:
-    """Images per immediate sub-folder of ``root`` (each counted with everything below it), and
-    "." for the files directly in it. Hidden folders such as .maltrainer_cache are skipped."""
+    """Images per folder that holds them directly, at any depth below ``root``, as paths relative
+    to it ("people/feliciaday", "body/eyes"; "." for ``root`` itself). Hidden folders such as
+    .maltrainer_cache are skipped."""
     root = Path(root)
     if not root.is_dir():
         return []
+    kinds = set(kinds)
     out = []
-    top = sum(1 for p in root.iterdir() if p.is_file() and _media_kind(p) in set(kinds))
-    if top:
-        out.append((".", top))
-    for sub in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
-        n = count_media_files(sub, kinds)
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        n = sum(1 for name in files if _media_kind(Path(folder) / name) in kinds)
         if n:
-            out.append((sub.name, n))
-    return out
+            out.append((Path(os.path.relpath(folder, root)).as_posix(), n))
+    return sorted(out)
 
 
 def report(
