@@ -96,9 +96,13 @@ train:
 sample:
   every: 1000
   at_start: true
+  rows: [raw, ema]           # with EMA on: which weights to render; [] = no previews
+  # Every prompt is encoded at the start, enabled or not; a plain line is enabled. While training,
+  # key [e] switches prompts, the interval and the rows; saving this file applies it as well.
   prompts:
     - "photo of [person_to_train] smiling, close-up with face visible, soft light from the front"
-    - "photo of a person smiling, close-up with face visible, soft light from the front"
+    - prompt: "photo of a person smiling, close-up with face visible, soft light from the front"
+      enabled: true          # the class without a name: does the person leak into it?
   negative: ""
   steps: 30
   cfg: 3.0

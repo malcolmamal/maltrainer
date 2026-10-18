@@ -362,7 +362,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             float(train_config.get("timestep_shift", 1.0)),
         )
         progress_bar = tqdm(total=total_steps, initial=self.global_step, desc="Training Steps", disable=not self.is_main_process)
-        keys = KeyCommands()
+        keys = KeyCommands(menu=self._preview_menu)
         stopped = False
         micro = 0
         loss = None
@@ -443,6 +443,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 stopped = keys is not None and keys.handle(self.global_step, self.save_checkpoint)
                 if keys is not None:
                     monitor.exclude(keys.take_paused_seconds())
+                self._watch_config()
                 if self.global_step >= total_steps or stopped:
                     break
             if stopped:
@@ -672,7 +673,9 @@ def main():
     setup_logging(config.get("logging", {}))
     if config.get("output"):
         save_config_to_output(config, config["output"]["path"])
-    MOSSImageFinetuneTrainer(config, dry_run=args.dry_run, dry_run_step_time=args.dry_run_step_time).run()
+    trainer = MOSSImageFinetuneTrainer(config, dry_run=args.dry_run, dry_run_step_time=args.dry_run_step_time)
+    trainer.config_path = Path(args.config)
+    trainer.run()
 
 
 if __name__ == "__main__":

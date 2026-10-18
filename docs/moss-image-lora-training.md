@@ -46,7 +46,9 @@ has no prior or drift field.
 The templates' `sample:` section renders two prompts (the trigger, and a trigger-free one) at
 1024 px every 500 steps and before the first, with the LoRA as it is (the EMA average when EMA is
 on). Nothing is saved but the PNGs in `<output.path>/samples/`. About 24 s per image. See
-[moss-image-finetuning.md](moss-image-finetuning.md#previews-during-training) for the settings.
+[moss-image-finetuning.md](moss-image-finetuning.md#previews-during-training) for the settings. The
+`sample:` section can be edited while training runs; the trainer picks up the saved file at
+the next step (same page).
 
 ## Keys while training
 
@@ -57,6 +59,9 @@ When the trainer runs in a console window (the CLI or a `.bat`), four keys act a
   fails (e.g. a full disk), training continues instead.
 - `p` pauses training until `p` is pressed again. `s`, `q` and `h` still work while paused, so a
   paused run can be saved or stopped without resuming it.
+- `e` opens the preview menu: prompts on/off and the interval (see
+  [moss-image-finetuning.md](moss-image-finetuning.md#previews-during-training)). Training waits
+  while it is open.
 - `h` lists the keys.
 
 The web UI starts the trainer without a console, so the keys do nothing there.

@@ -98,6 +98,50 @@ sample:
 
 - **Files** go to `<output.path>/samples/`: `step001000_00.png` per prompt, `step001000.png` with
   all of them side by side, and `prompts.txt` naming each index with its seed.
+- **Define prompts upfront, switch them while training runs.** Every prompt in `sample.prompts`
+  is encoded at the start, enabled or not, so turning one on later is instant. A plain line is
+  enabled; this form defines one that is off:
+
+  ```yaml
+  prompts:
+    - "RAW photo of feliciaday, a woman smiling slightly ..."     # on
+    - prompt: "RAW photo of a woman smiling slightly ..."
+      enabled: false                                             # off, ready to switch on
+  rows: [raw, ema]       # with EMA: which weights to render; [] = none
+  ```
+
+- **The preview menu, key `e`:** training waits while it is open.
+
+  ```
+  Preview settings   ↑↓ move · space toggle · ←→ every ±100 · Enter apply · Esc cancel
+  > Every:   300 steps   (0 = off)
+    [x] raw weights
+    [x] EMA average
+    [x] 00  RAW photo of feliciaday, a woman smiling slightly, close-up with face …
+    [ ] 01  RAW photo of a woman smiling slightly, close-up with face visible, sof…
+  ```
+
+  ←/→ change the interval by 100 wherever the cursor is (0 = off); space switches the row or
+  prompt under the cursor; both rows off means no previews. Enter applies and logs the changes,
+  Esc leaves everything as it was. The changes last for the run; the config file is not
+  rewritten (that would drop its comments), so set `enabled:` / `every:` / `rows:` there to keep
+  them for the next start.
+- **Or edit the file while training runs:** change the `sample:` section of the config file you
+  started with and save it. At the next step the trainer re-reads that section and logs what
+  changed; for the prompts it names, the file wins over earlier menu choices:
+  - `every`, `steps`, `cfg`, size, `negative`, `seed` and `at_start` apply from the next round
+  - a **new prompt** is encoded on the CPU in the background (~6 s; the GPU is busy training and
+    the text encoder does not fit beside it) and joins the next round once it is ready
+  - a **removed prompt** stops rendering
+  - each prompt keeps the number it was first given (its seed is `seed` + that number, and its
+    files are `_NN`), so adding or removing prompts never renumbers the others; `prompts.txt`
+    lists every number, marking removed prompts
+  - a half-saved or broken file is reported and the previous settings stay
+  - edits outside `sample:` are reported and apply at the next start only
+
+  The CPU encoding differs ~2.6% from the GPU's (the int8 layers run a float fallback on the
+  CPU), so a prompt added mid-run can render slightly differently after a restart, when it is
+  encoded on the GPU. These embeddings serve previews only and never enter the caption cache.
 - **The sampler** is the reference pipeline's (`maltrainer/models/moss_image/sampling.py`): the
   shift-5 schedule snapped to the 1000 training sigmas, Euler, CFG against the negative with block
   22 skipped. The VAE decoder is the full FLUX.2 one from `model.vae_path`; MOSS-Image's own small
@@ -362,6 +406,8 @@ In a console window, at the next step:
 - `p` pauses training until `p` is pressed again: the GPU sits idle with the model loaded, e.g.
   while you free disk space or check the previews. `s`, `q` and `h` still work while paused. The
   pause is left out of the monitor's s/step.
+- `e` opens the preview menu: prompts on/off, the interval, the raw/EMA rows (see
+  [Previews during training](#previews-during-training)). Training waits while it is open.
 - `h` lists the keys.
 
 Each save of a full model takes ~10-20 s, with 10 GB per checkpoint.

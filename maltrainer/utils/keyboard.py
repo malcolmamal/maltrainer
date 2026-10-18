@@ -4,6 +4,8 @@ Single-key commands while training runs in a console:
 - ``s`` saves a checkpoint now; training continues
 - ``q`` saves a checkpoint and stops (only once the save succeeded)
 - ``p`` pauses training until ``p`` is pressed again; ``s``, ``q`` and ``h`` still work while paused
+- ``e`` opens the trainer's menu, if it has one (the MOSS-Image trainers: the preview settings);
+  training waits while it is open
 - ``h`` lists the keys
 
 Keys are read without blocking at each optimizer step, so a press acts at the next step
@@ -19,22 +21,47 @@ import logging
 import os
 import sys
 import time
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 logger = logging.getLogger(__name__)
 
-SAVE, QUIT, PAUSE, HELP = "s", "q", "p", "h"
+SAVE, QUIT, PAUSE, MENU, HELP = "s", "q", "p", "e", "h"
 HELP_TEXT = {
     SAVE: "save a checkpoint now (training continues)",
     QUIT: "save a checkpoint and stop",
     PAUSE: "pause training; press p again to resume (s, q and h still work while paused)",
+    MENU: "preview settings: prompts on/off, the interval, the raw/EMA rows (training waits)",
     HELP: "list these keys",
 }
 
 
+def read_key() -> str:
+    """One key press, blocking: "up", "down", "left", "right", "enter", "esc", "space", or the
+    character itself (lower case)."""
+    if os.name == "nt":
+        import msvcrt
+
+        char = msvcrt.getwch()
+        if char in ("\x00", "\xe0"):
+            return {"H": "up", "P": "down", "K": "left", "M": "right"}.get(msvcrt.getwch(), "")
+    else:
+        import select
+
+        char = sys.stdin.read(1)
+        if char == "\x1b":
+            if not select.select([sys.stdin], [], [], 0.05)[0]:
+                return "esc"
+            if sys.stdin.read(1) != "[":
+                return "esc"
+            return {"A": "up", "B": "down", "C": "right", "D": "left"}.get(sys.stdin.read(1), "")
+    return {"\r": "enter", "\n": "enter", "\x1b": "esc", " ": "space"}.get(char, char.lower())
+
+
 class KeyCommands:
-    def __init__(self, keys: str = SAVE + QUIT + PAUSE + HELP):
-        self.keys = set(keys)
+    def __init__(self, keys: str = SAVE + QUIT + PAUSE + HELP, menu: Optional[Callable[[], None]] = None):
+        """``menu``: opened by ``e`` (the key exists only when a trainer offers one)."""
+        self.menu = menu
+        self.keys = set(keys) | ({MENU} if menu is not None else set())
         self._restore = None
         self.paused_seconds = 0.0  # time spent paused since take_paused_seconds() last read it
         try:
@@ -55,8 +82,8 @@ class KeyCommands:
                 logger.info("Key commands unavailable: %s", e)
                 self.enabled = False
         if self.enabled:
-            logger.info("Keys: %s", ", ".join(f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0]}"
-                                              for k in (SAVE, QUIT, PAUSE, HELP) if k in self.keys))
+            logger.info("Keys: %s", ", ".join(f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}"
+                                              for k in (SAVE, QUIT, PAUSE, MENU, HELP) if k in self.keys))
 
     def poll(self) -> List[str]:
         """The command keys pressed since the last poll, in order."""
@@ -86,7 +113,7 @@ class KeyCommands:
 
     def show_help(self) -> None:
         logger.info("Keys (act at the next step):")
-        for key in (SAVE, QUIT, PAUSE, HELP):
+        for key in (SAVE, QUIT, PAUSE, MENU, HELP):
             if key in self.keys:
                 logger.info("  [%s] %s", key, HELP_TEXT[key])
 
@@ -109,15 +136,30 @@ class KeyCommands:
             return False
         return stop
 
+    def _open_menu(self, count_time: bool = True) -> None:
+        """``count_time``: add the menu's time to paused_seconds (not when called from a pause,
+        whose own total already covers it)."""
+        started = time.time()
+        try:
+            self.menu()
+        except Exception as error:  # a menu problem must not end the run
+            logger.error("The menu failed (%s); training continues", error)
+        finally:
+            if count_time:
+                self.paused_seconds += time.time() - started
+
     def _pause(self, step: int, save: Callable[[int], None]) -> bool:
         """Wait at this step until ``p`` again; True if ``q`` (with a successful save) ends the run."""
-        logger.info("Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help", step)
+        logger.info("Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s", step,
+                    ", [e] preview settings" if self.menu is not None else "")
         started = time.time()
         try:
             while True:
                 pressed = self.poll()
                 if HELP in pressed:
                     self.show_help()
+                if MENU in pressed and self.menu is not None:
+                    self._open_menu(count_time=False)
                 if self._save_keys(pressed, step, save):
                     return True
                 if PAUSE in pressed:
@@ -134,6 +176,8 @@ class KeyCommands:
             return False
         if HELP in pressed:
             self.show_help()
+        if MENU in pressed and self.menu is not None:
+            self._open_menu()
         if self._save_keys(pressed, step, save):
             return True
         if PAUSE in pressed:
