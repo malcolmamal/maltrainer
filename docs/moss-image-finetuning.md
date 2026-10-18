@@ -233,6 +233,32 @@ the state files, so about 1 minute. A cold cache adds the encoding: ~25 images/s
 captions/s. The measured rows come from aneta/anetalarge on the 5090 workstation (hashing:
 270 images, 237 MB, 0.55 s).
 
+## Per-folder repeats
+
+`dataset.repeats` sets how often each image appears in an epoch; `dataset.folder_repeats` sets it
+per folder, by its path under `dataset.path` or by the folder's own name:
+
+```yaml
+dataset:
+  repeats: 1                 # every folder not listed
+  folder_repeats:
+    emmawatson: 0.5          # trained well: a random half of her images each epoch
+    gosiamarek: 3            # trained worst: every image three times per epoch
+    people/zendaya: 3        # new: catch up
+```
+
+- **Fractional values** work: 2.5 shows every image twice plus a random half once more; 0.5 a
+  random half. The half is drawn again every epoch, so all images are used over a run.
+- **What a person learns** depends on how often each image is trained on, not on epochs: 3x for 7
+  epochs is 21 times per image, as 1x for 21 epochs.
+- **Folder size counts too:** a person with 62 images at 1x gets more steps than one with 19
+  images at 3x. Set the repeats with that in mind.
+- `--suggest-steps` lists every folder with its repeats and samples per epoch, and names any
+  `folder_repeats` entry that matches no folder (a typo would otherwise do nothing).
+- Regularisation images use `dataset.reg_repeats`, not this table.
+- `max_steps` counts from the start of the run: resuming at step 8505 for 7 more epochs of 2033
+  steps is `8505 + 7 x 2033 = 22736`.
+
 ## What trains
 
 `finetune.trainable_prefixes` lists parameter-name prefixes. Without the key, the default is
@@ -300,6 +326,14 @@ What it costs:
   sigma and a noise seed are stored for the input. The record is saved as
   `<name>_prior.safetensors` in the output folder and hard-linked into each resume state, since a
   resumed model is no longer the original.
+- **People added later:** a resumed run whose dataset has images the saved prior does not cover
+  (new people, new photos of old ones) records theirs from the original model too. It puts the
+  base checkpoint's values (`model.transformer_path`) back into the trained parameters for the
+  recording and restores the trained ones bit for bit afterwards; the frozen parameters never
+  changed, so the model is exactly the original meanwhile. About 6 inputs a second at 512 px
+  (440 new images x 8 inputs: ~10 min), and ~9.5 GB of CPU RAM for the trained values meanwhile.
+  Add the new people to `prior.classes` first, or their captions name no trigger and they get no
+  prior (`--suggest-steps` warns). `model.transformer_path` must still be the run's original base.
 - **Training:** a second forward and backward on every step it runs, so roughly double the step
   time at `every: 1`. `every: 2` halves that.
 

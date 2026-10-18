@@ -659,7 +659,7 @@ class MOSSImageLoRATrainer:
         """The image folders an epoch draws from, for --suggest-steps."""
         dataset_config = config["dataset"]
         root = dataset_config.get("path", "")
-        return [Group("Subjects", root, max(int(dataset_config.get("repeats", 1) or 1), 1), folder_counts(root))]
+        return [Group("Subjects", root, float(dataset_config.get("repeats", 1) or 1), folder_counts(root))]
 
     @classmethod
     def step_notes(cls, config: dict) -> List[str]:

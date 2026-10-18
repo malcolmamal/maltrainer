@@ -35,15 +35,16 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 import torch
 from safetensors.torch import load_file, save_file
 from tqdm import tqdm
 
-from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
-from maltrainer.finetune.prior import PriorPreservation, class_caption, resolve_classes
-from maltrainer.finetune.regularisation import epoch_order, set_step_scale
+from maltrainer.data.minimax_dataset import scan_media_sources
+from maltrainer.finetune.prior import PriorPreservation, class_caption, resolve_classes, weights_from_file
+from maltrainer.finetune.regularisation import set_step_scale
+from maltrainer.finetune.repeats import folder_repeats, repeat_order, samples_per_epoch, unknown_keys
 from maltrainer.finetune.selection import select_trainable
 from maltrainer.models.flux3.loading import is_int8_convrot
 from maltrainer.models.moss_image.finetune import DEFAULT_TRAINABLE_PREFIXES, drift_targets, param_groups, save_full_model
@@ -119,6 +120,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
     def step_groups(cls, config: dict) -> List[Group]:
         groups = super().step_groups(config)
         dataset_config = config["dataset"]
+        groups[0].folder_repeats = dict(dataset_config.get("folder_repeats") or {})
         reg_path = dataset_config.get("reg_path")
         if reg_path:
             groups.append(Group("Regularisation", reg_path, max(int(dataset_config.get("reg_repeats", 1)), 0), folder_counts(reg_path)))
@@ -133,12 +135,15 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         Folders with no caption at all would train on the empty prompt: they are named too."""
         dataset_config = config["dataset"]
         root = dataset_config.get("path", "")
+        stray = unknown_keys(dataset_config.get("folder_repeats"), [name for name, _ in folder_counts(root)])
+        stray_note = ([f"dataset.folder_repeats names {', '.join(stray)}, which matches no folder (no effect)"]
+                      if stray else [])
         sources = scan_media_sources(root, kinds=["image"], trigger_token=dataset_config.get("trigger"),
                                      default_caption=dataset_config.get("default_caption", ""))
         by_folder: dict = {}
         for source in sources:
             by_folder.setdefault(source.path.parent, []).append(source.caption)
-        notes = []
+        notes = list(stray_note)
         uncaptioned = sorted(Path(os.path.relpath(folder, root)).as_posix()
                              for folder, captions in by_folder.items() if any(not c.strip() for c in captions))
         if uncaptioned:
@@ -178,10 +183,8 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         return notes
 
     def _dry_run_samples(self) -> int:
-        dataset_config = self.config["dataset"]
-        reg_path = dataset_config.get("reg_path")
-        reg = count_media_files(reg_path, ["image"]) if reg_path else 0
-        return super()._dry_run_samples() + reg * max(int(dataset_config.get("reg_repeats", 1)), 0)
+        """One epoch, counted from the folders as --suggest-steps does (per-folder repeats included)."""
+        return sum(group.samples for group in self.step_groups(self.config))
 
     def _rel(self, key: str) -> str:
         """A sample's name relative to its dataset folder, so a moved dataset still matches."""
@@ -204,18 +207,27 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
     def _extra_prompts(self) -> List[str]:
         return super()._extra_prompts() + sorted(set(self._prior_captions().values()))
 
-    def _epoch_order(self) -> List[int]:
+    def _repeat_groups(self) -> List[tuple]:
+        """(sample indices, repeats) per subject folder (dataset.folder_repeats, else
+        dataset.repeats), and the regularisation images with dataset.reg_repeats."""
         dataset_config = self.config["dataset"]
-        subjects = [i for i, (key, _) in enumerate(self.samples) if key not in self.reg_keys]
-        reg = [i for i, (key, _) in enumerate(self.samples) if key in self.reg_keys]
-        return epoch_order(subjects, reg, dataset_config.get("repeats", 1) or 1, dataset_config.get("reg_repeats", 1))
+        default = float(dataset_config.get("repeats", 1) or 1)
+        table = dataset_config.get("folder_repeats") or {}
+        folders: Dict[str, List[int]] = {}
+        reg = []
+        for i, (key, _) in enumerate(self.samples):
+            if key in self.reg_keys:
+                reg.append(i)
+            else:
+                folders.setdefault(Path(os.path.relpath(Path(key).parent, dataset_config["path"])).as_posix(), []).append(i)
+        groups = [(indices, folder_repeats(folder, table, default)) for folder, indices in sorted(folders.items())]
+        return groups + [(reg, float(max(dataset_config.get("reg_repeats", 1), 0)))]
+
+    def _epoch_order(self) -> List[int]:
+        return repeat_order(self._repeat_groups())
 
     def _epoch_size(self) -> int:
-        dataset_config = self.config["dataset"]
-        reg = sum(1 for key, _ in self.samples if key in self.reg_keys)
-        subjects = len(self.samples) - reg
-        return (subjects * max(int(dataset_config.get("repeats", 1) or 1), 1)
-                + reg * max(int(dataset_config.get("reg_repeats", 1)), 0))
+        return sum(samples_per_epoch(len(indices), repeats) for indices, repeats in self._repeat_groups())
 
     # ------------------------------------------------------------------ model
 
@@ -488,9 +500,22 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                     "original model it needs is gone. Set prior.weight: 0 to resume without one."
                 )
             self.prior.load(path)
-            missing = [k for k in captions if self._rel(k) not in self.prior]
+            missing = {k: c for k, c in captions.items() if self._rel(k) not in self.prior}
             if missing:
-                logger.warning("Prior: %d image(s) added since the prior was recorded train without one", len(missing))
+                # images added since the prior was recorded (e.g. new people): record theirs from the
+                # original model too, by putting the base checkpoint's values back for the recording
+                logger.info("Prior: %d image(s) added since it was recorded; recording theirs from the original "
+                            "weights in %s (~%.0f min)", len(missing), self.layout_path.name,
+                            len(missing) * self.prior.samples_per_image / 6 / 60)
+                was_training = self.transformer.training
+                self.transformer.eval()
+                with weights_from_file(self.named_trainable, self.layout_path):
+                    self.prior.build(
+                        ((self._rel(key), self.latent_cache[key], caption) for key, caption in missing.items()),
+                        self._sample_sigma, self._predict, self.device,
+                    )
+                self.transformer.train(was_training)
+                torch.cuda.empty_cache()
         else:
             self.prior.build(
                 ((self._rel(key), self.latent_cache[key], caption) for key, caption in captions.items()),
@@ -516,6 +541,8 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         dataset still matches and any added, removed or recaptioned image does not."""
         root = self.config["dataset"]["path"]
         digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"))
+        if self.config["dataset"].get("folder_repeats"):  # only then, so earlier states keep their fingerprint
+            digest.update(repr(sorted(self.config["dataset"]["folder_repeats"].items())).encode("utf-8"))
         for key, caption in self.samples:
             if key in self.reg_keys:  # marked only then, so states without regularisation keep their fingerprint
                 digest.update(f"\x1ereg:{self._rel(key)}\x1f{caption}".encode("utf-8"))

@@ -15,6 +15,11 @@ recorded prediction)`` for one of its recorded inputs. Without the trigger, the 
 what it did before, so the subjects stay behind their trigger words instead of bleeding into the
 class.
 
+**Images added later** (a resumed run with new people) are recorded from the original model as
+well: ``weights_from_file`` puts the trained parameters' original values back from the base
+checkpoint for the recording and restores the trained ones bit for bit afterwards. Frozen
+parameters never changed, so the model is then exactly the original.
+
 Only the sigma and noise seed of each input are kept; the noise is regenerated from the seed on
 the CPU, so it is identical every time. Predictions are kept in bf16 on the CPU (128 x 32 x 32 at
 512 px for MOSS-Image: 0.26 MB each).
@@ -24,12 +29,13 @@ Noising is flow matching, ``(1 - sigma) x0 + sigma noise``, the convention of ev
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import random
 import re
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 import torch
 from safetensors import safe_open
@@ -65,6 +71,34 @@ def resolve_classes(prior_config: dict, trigger: Optional[str]) -> Dict[str, str
             "or dataset.trigger with prior.class_word"
         )
     return classes
+
+
+CONTAINER_PREFIXES = ("", "diffusion_model.", "model.diffusion_model.")
+
+
+@contextlib.contextmanager
+def weights_from_file(
+    named: Sequence[Tuple[str, torch.nn.Parameter]],
+    path: Union[str, Path],
+    prefixes: Sequence[str] = CONTAINER_PREFIXES,
+) -> Iterator[None]:
+    """The parameters hold the values stored under their names in the safetensors file at
+    ``path`` (e.g. the base checkpoint) for the duration, then their own values again, bit for
+    bit. Their current values wait in CPU RAM meanwhile (the trained set's size)."""
+    backup = [param.detach().to("cpu", copy=True) for _, param in named]
+    try:
+        with safe_open(str(path), framework="pt", device="cpu") as handle, torch.no_grad():
+            keys = set(handle.keys())
+            for name, param in named:
+                key = next((prefix + name for prefix in prefixes if prefix + name in keys), None)
+                if key is None:
+                    raise KeyError(f"{Path(path).name} has no tensor for {name}")
+                param.copy_(handle.get_tensor(key).to(param.device, param.dtype))
+        yield
+    finally:
+        with torch.no_grad():
+            for (_, param), saved in zip(named, backup):
+                param.copy_(saved.to(param.device))
 
 
 def _noise(seed: int, shape: torch.Size) -> torch.Tensor:

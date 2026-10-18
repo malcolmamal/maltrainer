@@ -12,9 +12,10 @@ import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from maltrainer.data.minimax_dataset import _media_kind
+from maltrainer.finetune.repeats import folder_repeats, samples_per_epoch
 
 DEFAULT_EPOCHS = 22  # the MOSS-Image people LoRAs had likeness by ~20 epochs
 
@@ -23,16 +24,20 @@ DEFAULT_EPOCHS = 22  # the MOSS-Image people LoRAs had likeness by ~20 epochs
 class Group:
     label: str
     root: str
-    repeats: int
+    repeats: float  # the default for every folder
     folders: List[Tuple[str, int]] = field(default_factory=list)  # (sub-folder, images)
+    folder_repeats: Dict[str, float] = field(default_factory=dict)  # dataset.folder_repeats
 
     @property
     def images(self) -> int:
         return sum(n for _, n in self.folders)
 
+    def repeats_for(self, folder: str) -> float:
+        return folder_repeats(folder, self.folder_repeats, self.repeats)
+
     @property
     def samples(self) -> int:
-        return self.images * self.repeats
+        return sum(samples_per_epoch(n, self.repeats_for(name)) for name, n in self.folders)
 
 
 def folder_counts(root: Union[str, Path], kinds: Sequence[str] = ("image",)) -> List[Tuple[str, int]]:
@@ -63,10 +68,13 @@ def report(
     accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     lines = []
     for g in groups:
-        lines.append(f"{g.label}: {g.root} ({g.images} images x {g.repeats} repeats = {g.samples} samples per epoch)")
+        varied = any(g.repeats_for(name) != g.repeats for name, _ in g.folders)
+        repeats = "per-folder repeats" if varied else f"{g.repeats:g} repeats"
+        lines.append(f"{g.label}: {g.root} ({g.images} images, {repeats} = {g.samples} samples per epoch)")
         width = max((len(name) for name, _ in g.folders), default=0)
         for name, n in g.folders:
-            lines.append(f"  {name:<{width}}  {n:>5}")
+            r = g.repeats_for(name)
+            lines.append(f"  {name:<{width}}  {n:>5}" + (f"  x {r:<4g} = {samples_per_epoch(n, r):>4}" if varied else ""))
         if not g.folders:
             lines.append("  (no images found)")
     samples = sum(g.samples for g in groups)
