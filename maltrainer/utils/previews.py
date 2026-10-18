@@ -20,7 +20,10 @@ pictures directly comparable over the run. A trainer can render several variants
 files are named step000050_00_raw.png / step000050_00_ema.png.
 
 The trainer brings the render function (prompt, seed) -> PIL image; the prompts must be encoded
-while the text encoder is loaded, so ``captions`` lists what to cache.
+while the text encoder is loaded, so ``captions`` lists what to cache. ``current`` names the
+image being rendered ("step 300, image 2/4, ema") for the trainer's progress bar. Each image is
+logged with its time, and one slower than ``slow_after`` seconds (24 s is normal at 1024 px on a
+5090) is flagged: the usual cause is VRAM overflowing into system RAM.
 """
 
 from __future__ import annotations
@@ -49,6 +52,8 @@ class Previews:
         self.width = int(config.get("width", 1024))
         self.height = int(config.get("height", 1024))
         self.seed = int(config.get("seed", 42))
+        self.slow_after = float(config.get("slow_after", 60))
+        self.current = ""
         self.dir = Path(output_dir) / "samples"
         if self.every > 0 and not self.prompts:
             logger.warning("sample.every is set but sample.prompts is empty: no previews")
@@ -83,13 +88,26 @@ class Previews:
             )
         started = time.time()
         rows = []
+        count = len(variants) * len(self.prompts)
+        k = 0
         for label, weights in variants:
             images = []
             with weights():
                 for i, prompt in enumerate(self.prompts):
+                    k += 1
+                    self.current = f"step {step}, image {k}/{count}" + (f", {label}" if label else "")
+                    one = time.time()
                     image = render_one(prompt, self.seed + i)
                     image.save(self.dir / f"step{step:06d}_{i:02d}{'_' + label if label else ''}.png")
                     images.append(image)
+                    took = time.time() - one
+                    logger.info("[sample] %s: %.0fs", self.current, took)
+                    if took > self.slow_after:
+                        logger.warning(
+                            "[sample] %s took %.0fs (over %.0fs): the GPU is probably out of VRAM and spilling into "
+                            "system RAM. Close other GPU programs; NVIDIA Control Panel's 'CUDA - Sysmem Fallback "
+                            "Policy: Prefer No Sysmem Fallback' turns this into an out-of-memory error instead",
+                            self.current, took, self.slow_after)
             rows.append(images)
         width = max(sum(im.width for im in row) for row in rows)
         height = sum(max(im.height for im in row) for row in rows)

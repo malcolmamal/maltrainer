@@ -66,16 +66,19 @@ def sample(
     shift: float = SHIFT,
     uncond_skip: Sequence[int] = UNCOND_SKIP,
     device: Optional[torch.device] = None,
+    on_step: Optional[Callable[[int, int], None]] = None,
 ) -> torch.Tensor:
     """Denoised latents [1, 128, h, w] fp32. ``dit(x, sigma [1], context, skip_layers=...)`` is the
-    DiT; context / negative: [L, 4096] or [1, L, 4096] text states."""
+    DiT; context / negative: [L, 4096] or [1, L, 4096] text states. ``on_step(done, total)`` is
+    called after every step (a progress bar)."""
     device = device or context.device
     x = initial_noise(seed, height, width).to(device)
     pos = (context if context.dim() == 3 else context[None]).to(device)
     use_cfg = cfg != 1.0 and negative is not None
     neg = (negative if negative.dim() == 3 else negative[None]).to(device) if use_cfg else None
     sigmas = schedule(steps, shift)
-    for i in range(len(sigmas) - 1):
+    total = len(sigmas) - 1
+    for i in range(total):
         s, s_next = float(sigmas[i]), float(sigmas[i + 1])
         sigma = torch.tensor([s], device=device)
         v = dit(x, sigma, pos).float()
@@ -83,4 +86,6 @@ def sample(
             vu = dit(x, sigma, neg, skip_layers=tuple(uncond_skip)).float()
             v = vu + cfg * (v - vu)  # CFG combines fp32 predictions, as the reference
         x = x + (s_next - s) * v
+        if on_step is not None:
+            on_step(i + 1, total)
     return x

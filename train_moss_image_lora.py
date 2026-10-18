@@ -260,8 +260,11 @@ class MOSSImageLoRATrainer:
             self._preview_decoder = load_flux2_vae_decoder(self.config["model"]["vae_path"], self.device)
         context = self.text_cache[prompt].to(self.device, self.dtype)
         negative = self.text_cache[p.negative].to(self.device, self.dtype) if p.cfg != 1.0 else None
-        latents = moss_sample(self.lora_network, context, p.height, p.width, steps=p.steps, seed=seed, cfg=p.cfg,
-                              negative=negative, device=self.device)
+        with tqdm(total=p.steps, desc=f"Sampling ({p.current})", leave=False,
+                  disable=not self.is_main_process) as bar:
+            latents = moss_sample(self.lora_network, context, p.height, p.width, steps=p.steps, seed=seed, cfg=p.cfg,
+                                  negative=negative, device=self.device,
+                                  on_step=lambda done, total: (setattr(bar, "total", total), bar.update(done - bar.n)))
         image = self._preview_decoder.decode(latents)[0]
         return Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8"))
 
