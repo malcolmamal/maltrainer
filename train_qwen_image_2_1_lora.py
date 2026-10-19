@@ -155,7 +155,6 @@ class QwenImage21LoRATrainer:
             text_encoder_path,
             asset_dir=model_config.get("tokenizer_path"),
             device=self.device,
-            dtype=self.dtype,
         )
 
         unique_captions = list(set(temp_dataset.captions))

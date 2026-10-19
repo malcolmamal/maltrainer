@@ -87,7 +87,6 @@ def main() -> None:
         model_config["text_encoder_path"],
         asset_dir=model_config.get("tokenizer_path"),
         device=device,
-        dtype=dtype,
     )
     with torch.no_grad():
         embeds = [text_encoder.encode_prompts([item["caption"]], device=device).cpu() for item in items]
