@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -139,3 +140,10 @@ def test_digital_silence_or_an_empty_track_has_no_sound_to_train(
 
 def test_a_clip_without_an_audio_stream_has_no_sound(make_clip: Callable[..., Path]) -> None:
     assert read_audio(make_clip("a.avi", frames=2)) is None
+
+
+def test_without_pyav_decoding_says_how_to_install_it(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setitem(sys.modules, "av", None)
+
+    with pytest.raises(ImportError, match="pip install av"):
+        read_audio(tmp_path / "a.wav")

@@ -78,7 +78,7 @@ class KeyCommands:
                 tty.setcbreak(fd)
                 self._restore = lambda: termios.tcsetattr(fd, termios.TCSADRAIN, saved)
                 atexit.register(self.close)
-            except Exception as e:  # pragma: no cover - depends on the terminal
+            except Exception as e:
                 logger.info("Key commands unavailable: %s", e)
                 self.enabled = False
         if self.enabled:
