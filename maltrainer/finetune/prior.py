@@ -50,7 +50,7 @@ PredictFn = Callable[[torch.Tensor, torch.Tensor, str], torch.Tensor]
 
 def class_caption(caption: str, classes: Dict[str, str]) -> Optional[str]:
     """``caption`` with every trigger (a whole word, any case) replaced by its class word, or
-    None when it names no trigger. Longer triggers go first, so "anetahoppe" wins over "aneta"."""
+    None when it names no trigger. Longer triggers go first, so "annasmith" wins over "anna"."""
     out, hit = caption, False
     for trigger in sorted(classes, key=len, reverse=True):
         pattern = re.compile(rf"(?<![\w]){re.escape(trigger)}(?![\w])", re.IGNORECASE)

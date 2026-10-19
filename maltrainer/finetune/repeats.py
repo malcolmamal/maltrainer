@@ -4,7 +4,7 @@ Per-folder repeats: how often each folder's images appear in one epoch.
     dataset:
       repeats: 1                       # the default for every folder
       folder_repeats:                  # by path under dataset.path, or by the folder's own name
-        people/gosiamarek: 3           # trained worst: three times per epoch
+        people/ben: 3                  # trained worst: three times per epoch
         emmawatson: 0.5                # trained well: half of her images each epoch
 
 A repeat count can be fractional: 2.5 shows every image twice plus a random half of the folder

@@ -150,7 +150,7 @@ training. To even it out:
 ## How big
 
 What works for likeness (MOSS LoRA runs so far): **20-30 good images per person**. The
-feliciaday and aneta runs used 23 at 512 px. Variety matters more than count: different angles,
+feliciaday run used 23 at 512 px. Variety matters more than count: different angles,
 lighting, outfits, distances. A few close-ups and a few full-body shots beat 100 near-identical
 selfies.
 

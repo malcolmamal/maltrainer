@@ -108,7 +108,7 @@ datasets/finetunes/moss/
   `photo of [folder]` puts `photo of feliciaday, ` in front of every caption in the `feliciaday`
   folder.
 - **The folder name is the trigger** when you use `[folder]`. Pick names that don't share
-  tokens with each other (`anetahoppe` vs `aneta` is fine because longer triggers match first,
+  tokens with each other (`annasmith` vs `anna` is fine because longer triggers match first,
   but avoid near-identical spellings).
 - **Group shots** (two people in one image) go in a folder of their own, captioned by hand with
   both triggers and who is where.
@@ -125,7 +125,7 @@ dataset:
   repeats: 1                 # every folder not listed
   folder_repeats:
     emmawatson: 0.5          # already learned well: a random half each epoch
-    gosiamarek: 3            # learns slowly: every image three times
+    ben: 3                   # learns slowly: every image three times
 ```
 
 ### 3c. Regularisation photos (optional)

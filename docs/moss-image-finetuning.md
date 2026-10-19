@@ -182,7 +182,7 @@ Measured on an RTX 5090 (32 GB), all parameters trained:
 
 | | Peak VRAM | Step |
 |---|---|---|
-| 512 px (trainer, aneta) | 22.2 GB (nvidia-smi, includes caching) | 0.78 s |
+| 512 px (trainer, one person) | 22.2 GB (nvidia-smi, includes caching) | 0.78 s |
 | 1024 px (probe) | 16.8 GB (allocated) | 2.26 s |
 | 1536 px (probe) | 19.0 GB (allocated) | 6.47 s |
 
@@ -233,7 +233,7 @@ What remains:
 
 So a warm start is about 15-20 s for a small set and about 45 s for 10,000 images. A resume adds
 the state files, so about 1 minute. A cold cache adds the encoding: ~25 images/s and ~3
-captions/s. The measured rows come from aneta/anetalarge on the 5090 workstation (hashing:
+captions/s. The measured rows come from a one-person set and a large set on the 5090 workstation (hashing:
 270 images, 237 MB, 0.55 s).
 
 ## Per-folder repeats
@@ -246,7 +246,7 @@ dataset:
   repeats: 1                 # every folder not listed
   folder_repeats:
     emmawatson: 0.5          # trained well: a random half of her images each epoch
-    gosiamarek: 3            # trained worst: every image three times per epoch
+    ben: 3                   # trained worst: every image three times per epoch
     people/zendaya: 3        # new: catch up
 ```
 
@@ -318,7 +318,7 @@ prior:
 ```
 
 With a single `dataset.trigger`, `prior.class_word: woman` works instead of `classes`. Triggers
-match whole words, any case; longer ones go first, so `anetahoppe` wins over `aneta`. Images
+match whole words, any case; longer ones go first, so `annasmith` wins over `anna`. Images
 whose caption names no trigger get no prior term.
 
 What it costs:
