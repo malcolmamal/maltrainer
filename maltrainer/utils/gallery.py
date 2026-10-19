@@ -78,7 +78,7 @@ class Gallery:
     def run(
         self,
         step: int,
-        render_one: Callable[[str, int], Image.Image],
+        render_one: Callable[[str, int, str], Image.Image],
         weights: Callable[[], ContextManager],
         ready: Callable[[str], bool] = lambda _prompt: True,
         label: str = "",
