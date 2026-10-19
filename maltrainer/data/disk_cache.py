@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional, Union
 
@@ -85,6 +87,12 @@ class FolderCache:
     def put(self, kind: str, key: str, tensor: torch.Tensor) -> None:
         path = self._path(kind, key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        save_file({"tensor": tensor.detach().cpu().contiguous()}, str(tmp))
-        tmp.replace(path)
+        # A temp file of its own: two processes encoding the same entry must not write one file.
+        handle, tmp = tempfile.mkstemp(dir=path.parent, prefix=f"{key}.", suffix=".tmp")
+        os.close(handle)
+        try:
+            save_file({"tensor": tensor.detach().cpu().contiguous()}, tmp)
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
