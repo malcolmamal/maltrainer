@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import sys
 from typing import Any, Dict, List
 
@@ -50,7 +51,9 @@ def test_a_level_is_a_name_in_any_case_or_a_number(level: object, expected: int)
 
 @pytest.mark.parametrize("level", ["verbose", "", "basicConfig", True])
 def test_an_unknown_level_names_the_ones_there_are(level: object) -> None:
-    with pytest.raises(ValueError, match="logging.level must be one of CRITICAL, ERROR, WARNING, INFO, DEBUG"):
+    with pytest.raises(
+        ValueError, match=re.escape("logging.level must be one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
+    ):
         log_level(level)
 
 

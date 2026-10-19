@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 import torch
@@ -155,5 +156,5 @@ def test_int_mm_matches_an_integer_reference_for_small_and_large_row_counts(rows
 def test_int_mm_without_torch_support_asks_for_a_cuda_build(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delattr(torch, "_int_mm")
 
-    with pytest.raises(RuntimeError, match="requires torch._int_mm"):
+    with pytest.raises(RuntimeError, match=re.escape("requires torch._int_mm")):
         int8_convrot._int_mm(torch.zeros(2, 4, dtype=torch.int8), torch.zeros(4, 2, dtype=torch.int8))

@@ -178,7 +178,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
     def _extra_prompts(self) -> List[str]:
         gallery = self.gallery.captions
         if gallery and self.previews.cfg != 1.0:
-            gallery = gallery + [self.previews.negative]
+            gallery = [*gallery, self.previews.negative]
         return super()._extra_prompts() + sorted(set(self._prior_captions().values())) + gallery
 
     def _repeat_groups(self) -> List[tuple]:
@@ -197,7 +197,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                     Path(os.path.relpath(Path(key).parent, dataset_config["path"])).as_posix(), []
                 ).append(i)
         groups = [(indices, folder_repeats(folder, table, default)) for folder, indices in sorted(folders.items())]
-        return groups + [(reg, float(max(dataset_config.get("reg_repeats", 1), 0)))]
+        return [*groups, (reg, float(max(dataset_config.get("reg_repeats", 1), 0)))]
 
     def _epoch_order(self) -> List[int]:
         return repeat_order(self._repeat_groups())

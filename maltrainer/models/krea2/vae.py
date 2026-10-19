@@ -14,6 +14,7 @@ posterior mean with ``(z - mean) / std`` (Wan21.process_in, scale_factor 1.0).
 
 from __future__ import annotations
 
+import itertools
 import logging
 from pathlib import Path
 from typing import Union
@@ -116,12 +117,11 @@ class AttentionBlock(nn.Module):
         self.proj = nn.Conv2d(dim, dim, 1)
 
     def forward(self, x):
-        identity = x
         b, c, h, w = x.shape
         q, k, v = self.to_qkv(self.norm(x)).chunk(3, dim=1)
         q, k, v = (t.reshape(b, 1, c, h * w).transpose(-1, -2) for t in (q, k, v))
         out = F.scaled_dot_product_attention(q, k, v).transpose(-1, -2).reshape(b, c, h, w)
-        return self.proj(out) + identity
+        return self.proj(out) + x
 
 
 class Resample(nn.Module):
@@ -147,10 +147,10 @@ class WanImageEncoder(nn.Module):
         image_channels: int = 3,
     ):
         super().__init__()
-        dims = [dim * u for u in (1,) + tuple(dim_mult)]
+        dims = [dim * u for u in (1, *tuple(dim_mult))]
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
         layers = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:], strict=False)):
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             for _ in range(num_res_blocks):
                 layers.append(ResidualBlock(in_dim, out_dim))
                 in_dim = out_dim

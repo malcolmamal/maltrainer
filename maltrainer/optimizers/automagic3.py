@@ -2,7 +2,8 @@
 Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / Fizgig (MIT License).
 """
 
-from typing import List
+import itertools
+from typing import ClassVar, List
 
 import torch
 
@@ -114,7 +115,7 @@ class Automagic3(torch.optim.Optimizer):
         noise = torch.rand_like(v).sub_(0.5).mul_(ulp)
         return v.add_(noise).to(dtype)
 
-    _PACK_CONSTS: dict = {}
+    _PACK_CONSTS: ClassVar[dict] = {}
 
     @classmethod
     def _pack_consts(cls, device):
@@ -153,10 +154,9 @@ class Automagic3(torch.optim.Optimizer):
         """
         H = hist.shape[0]
         rows = [hist[(start + i) % H] for i in range(H)]
-        all_set = rows[0].clone()
-        any_set = rows[0].clone()
+        all_set, any_set = rows[0].clone(), rows[0].clone()
         alternating = rows[0] ^ rows[1]
-        for prev, cur in zip(rows[1:], rows[2:], strict=False):
+        for prev, cur in itertools.pairwise(rows[1:]):
             alternating.bitwise_and_(prev ^ cur)
         for row in rows[1:]:
             all_set.bitwise_and_(row)

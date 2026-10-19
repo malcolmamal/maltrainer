@@ -201,7 +201,7 @@ def load_config(path: Path) -> dict:
     }
 
 
-def merged_metadata(loras: list, info: dict, dtype: torch.dtype, config_file: Path = None) -> Dict[str, str]:
+def merged_metadata(loras: list, info: dict, dtype: torch.dtype, config_file: Path | None = None) -> Dict[str, str]:
     """Carry the inputs' shared ``ss_*`` identity, fix the network size, and record the recipe."""
     out: Dict[str, str] = {}
     first = loras[0]["metadata"]

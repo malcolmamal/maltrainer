@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -84,7 +85,7 @@ def test_attention_hints_in_the_file_are_reported_but_not_loaded(tmp_path: Path)
 
 
 def test_a_missing_file_is_reported_with_its_path(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="FLUX.3 transformer not found"):
+    with pytest.raises(FileNotFoundError, match=re.escape("FLUX.3 transformer not found")):
         load_flux3_transformer(tmp_path / "absent.safetensors", CPU)
 
 
@@ -92,7 +93,7 @@ def test_the_step_distilled_checkpoint_is_refused(tmp_path: Path) -> None:
     config = Flux3Config(hidden_size=128, num_heads=1, depth=1, depth_single_blocks=1, flow_map=True)
     path = write(tmp_path / "klein_sd.safetensors", plain_state(config))
 
-    with pytest.raises(ValueError, match="klein_sd.safetensors is the step-distilled FLUX.3 checkpoint"):
+    with pytest.raises(ValueError, match=re.escape("klein_sd.safetensors is the step-distilled FLUX.3 checkpoint")):
         load_flux3_transformer(path, CPU)
 
 
@@ -108,7 +109,7 @@ def test_a_checkpoint_with_a_stray_tensor_does_not_load(tmp_path: Path) -> None:
 def test_a_file_that_is_not_a_flux3_dit_is_refused(tmp_path: Path) -> None:
     path = write(tmp_path / "other.safetensors", {"unet.weight": torch.zeros(1)})
 
-    with pytest.raises(ValueError, match="Not a FLUX.3 DiT checkpoint"):
+    with pytest.raises(ValueError, match=re.escape("Not a FLUX.3 DiT checkpoint")):
         load_flux3_transformer(path, CPU)
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Callable
@@ -67,14 +68,14 @@ def test_frames_are_resized_to_the_bucket_of_the_clip(make_clip: Callable[..., P
 def test_a_file_without_video_is_an_error(make_wav: Callable[..., Path]) -> None:
     path = make_wav("a.wav", _tone(0.1))
 
-    with pytest.raises(ValueError, match="a.wav: no video stream"):
+    with pytest.raises(ValueError, match=re.escape("a.wav: no video stream")):
         read_video_frames(path, 32, 10)
 
 
 def test_a_video_stream_without_frames_is_an_error(make_clip: Callable[..., Path]) -> None:
     path = make_clip("a.avi", frames=0)
 
-    with pytest.raises(ValueError, match="a.avi: no decodable video frames"):
+    with pytest.raises(ValueError, match=re.escape("a.avi: no decodable video frames")):
         read_video_frames(path, 32, 10)
 
 

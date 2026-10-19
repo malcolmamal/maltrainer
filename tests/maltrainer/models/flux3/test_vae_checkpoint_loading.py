@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -104,7 +105,7 @@ def test_the_encoder_loader_casts_to_the_requested_dtype(tmp_path: Path) -> None
 def test_the_encoder_loader_rejects_a_vae_without_batch_norm_statistics(tmp_path: Path) -> None:
     save_file({"encoder.conv_in.weight": torch.zeros(1)}, str(tmp_path / "sd.safetensors"))
 
-    with pytest.raises(ValueError, match="FLUX.3 needs the Flux2 VAE"):
+    with pytest.raises(ValueError, match=re.escape("FLUX.3 needs the Flux2 VAE")):
         load_flux2_vae_encoder(tmp_path / "sd.safetensors", CPU)
 
 
@@ -150,7 +151,7 @@ def test_the_decoder_loader_strips_a_container_prefix(tmp_path: Path, prefix: st
 def test_the_decoder_loader_rejects_an_encoder_only_file(tmp_path: Path) -> None:
     path = _write(tmp_path / "enc.safetensors", _encoder())
 
-    with pytest.raises(ValueError, match="enc.safetensors has no decoder"):
+    with pytest.raises(ValueError, match=re.escape("enc.safetensors has no decoder")):
         load_flux2_vae_decoder(path, CPU)
 
 
@@ -163,5 +164,5 @@ def test_the_decoder_loader_rejects_a_vae_without_batch_norm_statistics(tmp_path
 
 @pytest.mark.parametrize("loader", [load_flux2_vae_decoder, load_flux2_vae_encoder])
 def test_both_loaders_name_a_missing_file(tmp_path: Path, loader) -> None:
-    with pytest.raises(FileNotFoundError, match="absent.safetensors"):
+    with pytest.raises(FileNotFoundError, match=re.escape("absent.safetensors")):
         loader(tmp_path / "absent.safetensors", CPU)

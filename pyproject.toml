@@ -14,12 +14,14 @@ include = ["*.py", "*.pyi", "**/pyproject.toml"]
 [tool.ruff.lint]
 # ruff's defaults plus import order. More families are added one at a time, each with its
 # fixes, so the gate passes on every commit.
-select = ["E4", "E501", "PTH", "BLE", "B", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
+select = ["E4", "E501", "PTH", "BLE", "B", "RUF", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
 ignore = [
     # A named result before `return` documents what a model step produces.
     "RET504",
     # safetensors' safe_open handles have keys() but no `in`; ruff cannot tell them from dicts.
     "SIM118",
+    # Strings and messages use the typographic × and – on purpose (e.g. "12 images × 70 epochs").
+    "RUF001",
 ]
 
 [tool.ruff.lint.per-file-ignores]

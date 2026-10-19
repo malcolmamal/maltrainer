@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -139,7 +140,7 @@ def test_load_config(tmp_path):
 def test_load_config_rejects(tmp_path, body):
     cfg = tmp_path / "c.yaml"
     cfg.write_text(yaml.dump(body))
-    with pytest.raises(ValueError, match="c.yaml"):
+    with pytest.raises(ValueError, match=re.escape("c.yaml")):
         merge_loras.load_config(cfg)
 
 

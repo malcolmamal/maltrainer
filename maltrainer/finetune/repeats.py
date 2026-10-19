@@ -38,8 +38,8 @@ def unknown_keys(table: Optional[Dict[str, float]], rel_folders: Sequence[str]) 
 
 
 def samples_per_epoch(count: int, repeats: float) -> int:
-    whole = int(math.floor(repeats))
-    return count * whole + int(round((repeats - whole) * count))
+    whole = math.floor(repeats)
+    return count * whole + round((repeats - whole) * count)
 
 
 def repeat_order(groups: Sequence[Tuple[Sequence[int], float]]) -> List[int]:
@@ -47,9 +47,9 @@ def repeat_order(groups: Sequence[Tuple[Sequence[int], float]]) -> List[int]:
     order: List[int] = []
     for indices, repeats in groups:
         indices = list(indices)
-        whole = int(math.floor(max(repeats, 0.0)))
+        whole = math.floor(max(repeats, 0.0))
         order += indices * whole
-        extra = int(round((max(repeats, 0.0) - whole) * len(indices)))
+        extra = round((max(repeats, 0.0) - whole) * len(indices))
         if extra:
             order += random.sample(indices, extra)
     random.shuffle(order)

@@ -95,7 +95,7 @@ class Encoder(nn.Module):
     ):
         super().__init__()
         self.conv_in = nn.Conv2d(3, ch, 3, padding=1)
-        in_mult = (1,) + tuple(ch_mult)
+        in_mult = (1, *tuple(ch_mult))
         self.down = nn.ModuleList()
         block_in = ch
         for level, mult in enumerate(ch_mult):

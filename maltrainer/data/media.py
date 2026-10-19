@@ -13,7 +13,7 @@ from maltrainer.data.minimax_dataset import AUDIO_SAMPLE_RATE, FPS, bucket_size,
 
 def _require_av():
     try:
-        import av  # noqa: F401
+        import av
     except ImportError as e:
         raise ImportError("Video and audio training items need PyAV: pip install av") from e
     return av

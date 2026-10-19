@@ -238,8 +238,8 @@ class Flux3Transformer(nn.Module):
         self.time_in = MLPEmbedder(256, h)
         if config.flow_map:
             self.ref_time_in = MLPEmbedder(256, h)
-        self.early_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in CONTENT_MODES + ("txt",)})
-        self.single_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in CONTENT_MODES + ("txt",)})
+        self.early_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in (*CONTENT_MODES, "txt")})
+        self.single_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in (*CONTENT_MODES, "txt")})
 
         def block() -> Block:
             return Block(h, config.num_heads, config.mlp_ratio, config.fused_qkv)

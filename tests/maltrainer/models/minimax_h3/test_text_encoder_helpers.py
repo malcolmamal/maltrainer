@@ -25,7 +25,7 @@ def test_an_explicit_tokenizer_directory_with_a_tokenizer_json_is_returned_as_a_
 
 
 def test_an_explicit_directory_without_tokenizer_json_is_refused_blaming_the_setting(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="No tokenizer.json in .*from model.tokenizer_path"):
+    with pytest.raises(FileNotFoundError, match=r"No tokenizer.json in .*from model.tokenizer_path"):
         _resolve_tokenizer_assets(tmp_path)
 
 

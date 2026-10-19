@@ -37,7 +37,7 @@ from typing import Any, Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from maltrainer.utils.lora_metadata import CONFIG_KEY, extract_config, read_metadata  # noqa: E402
+from maltrainer.utils.lora_metadata import CONFIG_KEY, extract_config, read_metadata
 
 # Keys worth showing first in the summary, in reading order.
 SUMMARY_ORDER = (

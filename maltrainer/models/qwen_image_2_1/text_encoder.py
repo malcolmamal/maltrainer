@@ -166,7 +166,7 @@ def load_qwen_image_2_1_text_encoder(
         model.language_model.norm = nn.Identity()
 
     logger.info("Loading INT8 ConvRot state dict for text encoder from %s...", text_encoder_path)
-    int8_state_dict, num_quant = load_comfy_int8_convrot_state_dict(str(text_encoder_path), device=torch.device("cpu"))
+    int8_state_dict, _num_quant = load_comfy_int8_convrot_state_dict(str(text_encoder_path), device=torch.device("cpu"))
 
     mapped_sd = {}
     for k, v in int8_state_dict.items():

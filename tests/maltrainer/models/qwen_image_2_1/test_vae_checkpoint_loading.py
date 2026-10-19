@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -28,7 +29,7 @@ def _checkpoint(path: Path, monkeypatch: pytest.MonkeyPatch, decoder: bool = Tru
 
 
 def test_loading_a_missing_vae_checkpoint_names_the_path(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="nope.safetensors"):
+    with pytest.raises(FileNotFoundError, match=re.escape("nope.safetensors")):
         load_qwen_image_2_1_vae(tmp_path / "nope.safetensors", device=CPU)
 
 

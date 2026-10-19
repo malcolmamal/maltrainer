@@ -363,6 +363,7 @@ class TrainingJob:
     websockets: Set[WebSocket] = field(default_factory=set)
     log_buffer: Deque[dict] = field(default_factory=lambda: deque(maxlen=2000))
     reader_task: Optional[asyncio.Task] = None
+    monitor_task: Optional[asyncio.Task] = None
 
     async def start_readers(self) -> None:
         if not self.process:
@@ -433,13 +434,7 @@ class TrainingJob:
         self.ended_at = time.time()
         self.status = "exited" if self.exit_code == 0 else "failed"
         logger.info("Job finished: %s (%s) status=%s", self.job_id, self.dataset, self.status)
-        await self.broadcast(
-            {
-                "type": "status",
-                "status": self.status,
-                "exit_code": self.exit_code,
-            }
-        )
+        await self.broadcast({"type": "status", "status": self.status, "exit_code": self.exit_code})
         await launch_next_job()
 
     async def broadcast(self, payload: dict) -> None:
@@ -646,7 +641,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
         max_steps = request.max_steps
         if not max_steps and spec.target_epochs and image_count > 0:
             wanted = spec.target_epochs * steps_per_epoch
-            rounded = int(round(wanted / 50.0)) * 50
+            rounded = round(wanted / 50.0) * 50
             max_steps = min(max(rounded, spec.min_auto_steps), spec.max_auto_steps)
             auto_steps = True
             note = f"Steps chosen automatically: {image_count} images × ~{spec.target_epochs} epochs = {wanted} steps"
@@ -780,7 +775,7 @@ async def launch_job(job: TrainingJob) -> None:
     job.started_at = time.time()
     job.process = await spawn_process(job.command)
     logger.info("Job started: %s (%s)", job.job_id, job.dataset)
-    asyncio.create_task(job.monitor())
+    job.monitor_task = asyncio.create_task(job.monitor())
 
 
 async def launch_next_job() -> None:
@@ -809,13 +804,7 @@ async def list_datasets() -> list[DatasetInfo]:
     items: list[DatasetInfo] = []
     for entry in root.iterdir():
         if entry.is_dir():
-            items.append(
-                DatasetInfo(
-                    name=entry.name,
-                    path=str(entry),
-                    image_count=count_images(entry),
-                )
-            )
+            items.append(DatasetInfo(name=entry.name, path=str(entry), image_count=count_images(entry)))
     return sorted(items, key=lambda d: d.name.lower())
 
 

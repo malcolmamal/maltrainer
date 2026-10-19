@@ -45,8 +45,17 @@ def _select_while_unread(readers: List[io.StringIO], _w: list, _x: list, _timeou
 
 @pytest.mark.parametrize(
     ("chars", "expected"),
-    [("\xe0H", "up"), ("\x00P", "down"), ("\xe0K", "left"), ("\xe0M", "right"), ("\x00;", "")]
-    + [("\r", "enter"), ("\x1b", "esc"), (" ", "space"), ("Q", "q")],
+    [
+        ("àH", "up"),
+        ("\x00P", "down"),
+        ("àK", "left"),
+        ("àM", "right"),
+        ("\x00;", ""),
+        ("\r", "enter"),
+        ("\x1b", "esc"),
+        (" ", "space"),
+        ("Q", "q"),
+    ],
 )
 def test_windows_keys_are_named(monkeypatch: pytest.MonkeyPatch, chars: str, expected: str) -> None:
     _on(monkeypatch, "nt", None)
@@ -57,8 +66,17 @@ def test_windows_keys_are_named(monkeypatch: pytest.MonkeyPatch, chars: str, exp
 
 @pytest.mark.parametrize(
     ("chars", "expected"),
-    [("\x1b[A", "up"), ("\x1b[B", "down"), ("\x1b[C", "right"), ("\x1b[D", "left"), ("\x1b[Z", "")]
-    + [("\x1b", "esc"), ("\x1bO", "esc"), ("\n", "enter"), ("S", "s")],
+    [
+        ("\x1b[A", "up"),
+        ("\x1b[B", "down"),
+        ("\x1b[C", "right"),
+        ("\x1b[D", "left"),
+        ("\x1b[Z", ""),
+        ("\x1b", "esc"),
+        ("\x1bO", "esc"),
+        ("\n", "enter"),
+        ("S", "s"),
+    ],
 )
 def test_terminal_escape_sequences_are_named(monkeypatch: pytest.MonkeyPatch, chars: str, expected: str) -> None:
     _on(monkeypatch, "posix", io.StringIO(chars))

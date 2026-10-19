@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Callable, Dict, List
 
 import pytest
@@ -41,7 +42,7 @@ def test_selection_by_preset_never_includes_the_text_side(
 
 
 def test_selection_rejects_an_unknown_preset() -> None:
-    with pytest.raises(ValueError, match="lora.targets must be one of"):
+    with pytest.raises(ValueError, match=re.escape("lora.targets must be one of")):
         selected("layers.0.proj.q", "text")
 
     assert TARGET_PRESETS == ("blocks", "attn", "all")

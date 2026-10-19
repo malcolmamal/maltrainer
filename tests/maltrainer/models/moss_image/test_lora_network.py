@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Callable, List
 
 import pytest
@@ -119,7 +120,7 @@ def test_an_unknown_target_preset_is_rejected_before_anything_is_wrapped(make_mo
     model = make_model()
     before = _run(model)
 
-    with pytest.raises(ValueError, match="lora.targets must be one of"):
+    with pytest.raises(ValueError, match=re.escape("lora.targets must be one of")):
         MOSSImageLoRANetwork(model, targets="everything")
 
     assert not any("forward" in vars(m) for m in model.modules())

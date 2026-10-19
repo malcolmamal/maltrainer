@@ -82,7 +82,7 @@ def test_dropped_share_is_reported(checkpoints):
 
 
 def test_shape_and_key_checks(checkpoints, tmp_path):
-    base, tuned = checkpoints
+    base, _tuned = checkpoints
     save_file(
         {"layer.weight": torch.zeros(OUT + 1, IN), "other.weight": BASE_W, "layer.bias": torch.zeros(OUT)},
         str(tmp_path / "bad_shape.safetensors"),

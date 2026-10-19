@@ -171,7 +171,7 @@ class SupraDiT(nn.Module):
     def _position_embed(self, grid_h: int, grid_w: int) -> torch.Tensor:
         """Learned 16x16 positions, bicubic-resized when the latent grid is not 256px."""
         pos = self.pos_embed
-        side = int(math.isqrt(pos.shape[1]))
+        side = math.isqrt(pos.shape[1])
         if grid_h == side and grid_w == side:
             return pos
         weight = pos.reshape(1, side, side, pos.shape[-1]).permute(0, 3, 1, 2).float()

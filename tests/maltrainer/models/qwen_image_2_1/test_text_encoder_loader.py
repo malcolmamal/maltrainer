@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -77,7 +78,7 @@ def _checkpoint(path: Path) -> dict[str, torch.Tensor]:
 
 
 def test_a_missing_checkpoint_raises_file_not_found_before_touching_any_asset(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="missing.safetensors"):
+    with pytest.raises(FileNotFoundError, match=re.escape("missing.safetensors")):
         te.load_qwen_image_2_1_text_encoder(tmp_path / "missing.safetensors", device=CPU)
 
 

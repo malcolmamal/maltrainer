@@ -31,8 +31,8 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from maltrainer.finetune.extract import GENERIC, MODES, extract, strip_prefix  # noqa: E402
-from maltrainer.models.moss_image.finetune import EXTRACT_PROFILE as MOSS_IMAGE  # noqa: E402
+from maltrainer.finetune.extract import GENERIC, MODES, extract, strip_prefix
+from maltrainer.models.moss_image.finetune import EXTRACT_PROFILE as MOSS_IMAGE
 
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 PROFILES = {"moss_image": MOSS_IMAGE, "generic": GENERIC}

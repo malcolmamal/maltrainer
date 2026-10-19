@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -97,7 +98,7 @@ def test_a_missing_checkpoint_is_reported_by_path(tmp_path: Path) -> None:
 def test_a_checkpoint_that_is_not_a_qwen35_text_encoder_is_refused_before_building(tmp_path: Path) -> None:
     path = write_text_checkpoint({"layers.0.foo": torch.zeros(1)}, tmp_path / "other.safetensors")
 
-    with pytest.raises(ValueError, match="Not a Qwen3.5 text encoder"):
+    with pytest.raises(ValueError, match=re.escape("Not a Qwen3.5 text encoder")):
         _load(path)
 
 
@@ -106,7 +107,7 @@ def test_a_checkpoint_with_an_unknown_extra_tensor_is_refused_naming_it(tmp_path
     tensors["layers.0.surprise.weight"] = torch.zeros(1)
     path = write_text_checkpoint(tensors, tmp_path / "te.safetensors")
 
-    with pytest.raises(ValueError, match="does not look like a Qwen3.5 text encoder.*surprise"):
+    with pytest.raises(ValueError, match=r"does not look like a Qwen3.5 text encoder.*surprise"):
         _load(path)
 
 

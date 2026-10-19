@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Dict, Optional
 
 import pytest
@@ -48,5 +49,5 @@ def test_the_dataset_trigger_takes_the_class_word_when_no_classes_are_given() ->
     ],
 )
 def test_a_prior_without_any_class_is_an_error(config: dict, trigger: Optional[str]) -> None:
-    with pytest.raises(ValueError, match="prior.weight > 0 needs prior.classes"):
+    with pytest.raises(ValueError, match=re.escape("prior.weight > 0 needs prior.classes")):
         resolve_classes(config, trigger)

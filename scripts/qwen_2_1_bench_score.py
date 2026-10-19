@@ -346,7 +346,7 @@ def main() -> None:
         "reference": {
             "likeness_floor_base": floor,
             "likeness_ceiling_real": ceiling,
-            "training_faces": int(len(train_faces)),
+            "training_faces": len(train_faces),
             "training_pairwise_clip": train_pairwise,
         },
         "rows": rows,

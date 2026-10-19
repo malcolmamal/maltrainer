@@ -6,8 +6,10 @@ Building the real model is out of reach on CPU in a unit test (and ``load_state_
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 import torch
@@ -32,7 +34,7 @@ class Rotary(nn.Module):
 
 
 class FakeVLModel(nn.Module):
-    built: list = []
+    built: ClassVar[list] = []
 
     def __init__(self, config) -> None:
         super().__init__()
@@ -58,7 +60,7 @@ class FakeTokenizer:
 
 class FakeAutoTokenizer:
     pad_token: str | None = None
-    loaded_from: list = []
+    loaded_from: ClassVar[list] = []
 
     @classmethod
     def from_pretrained(cls, path: str, **kwargs) -> FakeTokenizer:
@@ -157,7 +159,7 @@ def test_the_tokenizer_comes_from_the_bundled_assets_unless_a_directory_is_given
 
 
 def test_a_missing_tokenizer_json_stops_the_load_before_any_model_is_built(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="No tokenizer.json"):
+    with pytest.raises(FileNotFoundError, match=re.escape("No tokenizer.json")):
         load_minimax_h3_text_encoder(_plain_checkpoint(tmp_path), tokenizer_path=tmp_path / "nowhere", device="cpu")
 
     assert FakeVLModel.built == []

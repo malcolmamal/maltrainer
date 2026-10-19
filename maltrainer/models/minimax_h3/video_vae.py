@@ -286,7 +286,7 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
             spatial_padding_mode=spatial_padding_mode,
         )
 
-        block_in_channels = (block_out_channels[0],) + tuple(block_out_channels[:-1])
+        block_in_channels = (block_out_channels[0], *tuple(block_out_channels[:-1]))
         self.down_blocks = nn.ModuleList(
             [
                 MiniMaxH3VideoDownBlock3d(

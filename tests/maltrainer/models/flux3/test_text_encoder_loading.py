@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -73,7 +74,7 @@ def _load(path: Path, **kwargs: object) -> te.Flux3TextEncoder:
 
 
 def test_a_missing_checkpoint_names_the_path(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="gone.safetensors"):
+    with pytest.raises(FileNotFoundError, match=re.escape("gone.safetensors")):
         _load(tmp_path / "gone.safetensors")
 
 

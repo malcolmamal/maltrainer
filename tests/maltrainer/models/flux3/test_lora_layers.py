@@ -32,7 +32,7 @@ def test_a_linear_is_adapted_when_its_name_is_in_the_preset(name: str, preset: s
 
 
 def test_an_unknown_preset_is_refused_with_the_list_of_valid_ones() -> None:
-    with pytest.raises(ValueError, match="lora.targets must be one of .*'blocks', 'single', 'all'"):
+    with pytest.raises(ValueError, match=r"lora.targets must be one of .*'blocks', 'single', 'all'"):
         selected("single_blocks.0.q_proj", "everything")
 
 

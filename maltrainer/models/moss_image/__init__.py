@@ -9,9 +9,9 @@ from maltrainer.models.moss_image.text_encoder import MOSSImageTextEncoder, load
 
 __all__ = [
     "MOSSImageConfig",
-    "MOSSImageTransformer",
     "MOSSImageLoRANetwork",
     "MOSSImageTextEncoder",
-    "load_moss_image_transformer",
+    "MOSSImageTransformer",
     "load_moss_image_text_encoder",
+    "load_moss_image_transformer",
 ]

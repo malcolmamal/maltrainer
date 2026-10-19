@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -44,7 +45,7 @@ def test_the_config_is_read_back_off_the_weights_it_was_built_for() -> None:
 def test_a_state_dict_without_linear_attention_markers_is_not_a_qwen35_text_encoder() -> None:
     state = {k: v for k, v in tiny_text_model().state_dict().items() if "A_log" not in k}
 
-    with pytest.raises(ValueError, match="Not a Qwen3.5 text encoder"):
+    with pytest.raises(ValueError, match=re.escape("Not a Qwen3.5 text encoder")):
         Qwen35TextConfig.from_state_dict(state)
 
 

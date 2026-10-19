@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 import torch
 
@@ -20,7 +22,7 @@ def test_each_target_preset_wraps_its_documented_set_of_linears(preset):
 
 
 def test_unknown_target_preset_is_refused():
-    with pytest.raises(ValueError, match="lora.targets must be one of"):
+    with pytest.raises(ValueError, match=re.escape("lora.targets must be one of")):
         Krea2LoRANetwork(tiny_model(), targets="everything")
 
 

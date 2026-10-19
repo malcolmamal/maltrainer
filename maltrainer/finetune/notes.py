@@ -67,7 +67,7 @@ def step_notes(config: dict) -> List[str]:
     try:
         classes = {k.lower() for k in resolve_classes(prior_config, dataset_config.get("trigger"))}
     except ValueError as error:
-        return notes + [str(error)]
+        return [*notes, str(error)]
 
     people = {
         folder.name.lower(): Path(os.path.relpath(folder, root)).as_posix()

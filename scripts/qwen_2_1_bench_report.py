@@ -196,7 +196,7 @@ def main() -> None:
     # ---- comparison grids ---------------------------------------------------------------------
     for prompt in manifest["prompts"]:
         pid = prompt["id"]
-        cols = ["base"] + args.grid_steps
+        cols = ["base", *args.grid_steps]
         cell, pad, head, left = 256, 6, 24, 110
         sheet = Image.new("RGB", (left + len(cols) * (cell + pad), head + len(runs) * (cell + pad)), "white")
         draw = ImageDraw.Draw(sheet)
