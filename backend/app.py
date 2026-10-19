@@ -618,7 +618,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, dict[str, Any], M
     notes: list[str] = []
     if spec.square_only:
         image_count, non_square, example = scan_images(dataset_path)
-        if non_square:
+        if non_square and example is not None:
             resolution = int(dataset_cfg.get("resolution", 512) or 512)
             warnings.append(
                 f"{non_square} of {image_count} images are not square (e.g. {example[0]}×{example[1]}). "

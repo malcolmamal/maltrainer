@@ -53,7 +53,8 @@ def boost_file(source: Path, target: Path, factor: float) -> None:
             f"{source.name}: no text-fusion block adapters (txtfusion.layerwise_blocks / refiner_blocks); "
             "was it trained with lora.targets attn-mlp, or is it not a Krea 2 LoRA?"
         )
-    blocks = sorted({"txtfusion.{}_blocks.{}".format(*TEXT_FUSION_BLOCK.search(key).groups()) for key in boosted})
+    matches = (TEXT_FUSION_BLOCK.search(key) for key in boosted)
+    blocks = sorted({"txtfusion.{}_blocks.{}".format(*m.groups()) for m in matches if m})
 
     meta = dict(metadata)
     meta["maltrainer_text_fusion_boost"] = json.dumps(

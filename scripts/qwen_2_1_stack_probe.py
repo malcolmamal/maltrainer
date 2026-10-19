@@ -29,6 +29,7 @@ import gc
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 from tqdm import tqdm
@@ -69,7 +70,7 @@ def main() -> None:
         default_caption=dataset_config.get("default_caption", ""),
         repeats=1,
     )
-    items = [dataset[i] for i in range(min(args.samples, len(dataset)))]
+    items: list[dict[str, Any]] = [dataset[i] for i in range(min(args.samples, len(dataset)))]
     print(f"probing {len(items)} images at {dataset.height}x{dataset.width}")
 
     vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype)

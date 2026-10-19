@@ -5,7 +5,7 @@ import torch
 from safetensors import SafetensorError
 
 
-def check_weights(path):
+def check_weights(path: str) -> None:
     try:
         tensors = safetensors.load_file(path)
         print(f"Checking statistics for {path}...")

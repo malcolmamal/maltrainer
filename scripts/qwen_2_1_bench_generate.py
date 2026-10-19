@@ -30,6 +30,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 from PIL import Image
@@ -53,7 +54,7 @@ from qwen_2_1_sweep_checkpoints import (
 # `prompt` is what the model sees. `checks` are yes/no questions a VLM judge asks about the
 # result to score prompt adherence -- phrased without the trigger word, which the judge has
 # never heard of. Two of the three are deliberately far from the studio-portrait training set.
-DEFAULT_PROMPTS = [
+DEFAULT_PROMPTS: list[dict[str, Any]] = [
     {
         "id": "portrait",
         "prompt": "feliciaday a photo of feliciaday, studio portrait, dark background",

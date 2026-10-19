@@ -24,6 +24,7 @@ import math
 import random
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 from accelerate import Accelerator
@@ -33,7 +34,7 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 from maltrainer.data.flux3_dataset import load_flux3_image
-from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
+from maltrainer.data.minimax_dataset import MediaSource, count_media_files, scan_media_sources
 from maltrainer.models.flux3.loading import load_flux3_transformer
 from maltrainer.models.flux3.lora import Flux3LoRANetwork
 from maltrainer.models.flux3.text_encoder import load_flux3_text_encoder
@@ -67,7 +68,7 @@ class Flux3KleinLoRATrainer:
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
         self.last_saved_path: str | None = None
-        self.lr_scheduler = None
+        self.lr_scheduler: Any = None
         self.ema: ParameterEMA | None = None
         self.run_metadata: dict[str, object] = {
             "model_type": "flux3_klein",
@@ -111,7 +112,7 @@ class Flux3KleinLoRATrainer:
 
     # ------------------------------------------------------------------ caching
 
-    def _sources(self):
+    def _sources(self) -> list[MediaSource]:
         dataset_config = self.config["dataset"]
         return scan_media_sources(
             dataset_config["path"],
@@ -120,7 +121,7 @@ class Flux3KleinLoRATrainer:
             default_caption=dataset_config.get("default_caption", ""),
         )
 
-    def precache_dataset(self):
+    def precache_dataset(self) -> None:
         model_config = self.config["model"]
         dataset_config = self.config["dataset"]
         train_config = self.config.get("train", {})
@@ -163,18 +164,17 @@ class Flux3KleinLoRATrainer:
         del encoder
         gc.collect()
         torch.cuda.empty_cache()
-        windows = sorted({embeds.shape[0] for embeds in self.text_cache.values()})
         print("Text embeddings pre-cached and Text Encoder unloaded from VRAM.", flush=True)
         logger.info(
             "Pre-cached %d images and %d prompt embeddings (text windows: %s tokens).",
             len(self.samples),
             len(self.text_cache),
-            windows,
+            sorted({embeds.shape[0] for embeds in self.text_cache.values()}),
         )
 
     # ------------------------------------------------------------------ model
 
-    def load_transformer_and_lora(self):
+    def load_transformer_and_lora(self) -> None:
         print("=== Step 2/2: Loading FLUX.3 [klein] DiT ===", flush=True)
         model_config = self.config["model"]
         lora_config = self.config.get("lora", {})
@@ -207,7 +207,7 @@ class Flux3KleinLoRATrainer:
         )
         logger.info("LoRA: %.1fM trainable parameters in %s", trainable / 1e6, self.lora_dtype)
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         train_config = self.config["train"]
         name = str(train_config.get("optimizer", "automagic3")).lower()
         weight_decay = float(train_config.get("weight_decay", 0.0))
@@ -219,7 +219,7 @@ class Flux3KleinLoRATrainer:
             # As for Krea 2: attention, MLP and I/O each adapt their own rate, over a 16-step
             # sign window, which suits batch-1 gradients better than 8.
             groups = self.lora_network.param_groups(bool(train_config.get("automagic_param_groups", True)))
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "lr": lr,
                 "min_lr": float(train_config.get("automagic_min_lr", 1e-8)),
                 "max_lr": float(train_config.get("automagic_max_lr", 1e3)),
@@ -230,7 +230,7 @@ class Flux3KleinLoRATrainer:
                 "polarity_history": int(train_config.get("automagic_polarity_history", 16)),
                 "fused": bool(train_config.get("automagic_fused", False)),
             }
-            self.optimizer = Automagic3(groups, **kwargs)
+            self.optimizer: Any = Automagic3(groups, **kwargs)
             self.run_metadata["optimizer_resolved"] = {
                 "name": "automagic3",
                 "groups": [g["name"] for g in groups],
@@ -324,7 +324,7 @@ class Flux3KleinLoRATrainer:
         strength = float(train_config.get("loss_weight_strength", 1.0))
         return loss * strength if strength != 1.0 else loss
 
-    def train(self):
+    def train(self) -> None:
         train_config = self.config["train"]
         save_every = int(train_config.get("save_every", 250) or 0)
         self.lora_network, self.optimizer = self.accelerator.prepare(self.lora_network, self.optimizer)
@@ -393,7 +393,7 @@ class Flux3KleinLoRATrainer:
         self.save_checkpoint("final")
         logger.info("FLUX.3 [klein] LoRA training completed!")
 
-    def _log_step(self, step, total, loss, epoch, num_epochs):
+    def _log_step(self, step: int, total: int, loss: torch.Tensor, epoch: int, num_epochs: int) -> None:
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
         prefix = (
@@ -413,7 +413,7 @@ class Flux3KleinLoRATrainer:
         else:
             self.progress_logger.info("%sLR: %.2e", prefix, group["lr"])
 
-    def save_checkpoint(self, step):
+    def save_checkpoint(self, step: int | str) -> None:
         if not self.is_main_process:
             return
         output_config = self.config.get("output", {})
@@ -443,7 +443,7 @@ class Flux3KleinLoRATrainer:
 
     # ------------------------------------------------------------------ dry run / entry
 
-    def simulate(self):
+    def simulate(self) -> None:
         """Plan from the real dataset folder and tick through the steps without loading models."""
         dataset_config = self.config["dataset"]
         repeats = max(int(dataset_config.get("repeats", 1) or 1), 1)
@@ -470,7 +470,7 @@ class Flux3KleinLoRATrainer:
                 )
         logger.info("Dry run complete: would save final checkpoint at step %d", total_steps)
 
-    def run(self):
+    def run(self) -> None:
         try:
             set_seed(self.config.get("seed", 42))
             if self.dry_run:
@@ -488,7 +488,7 @@ class Flux3KleinLoRATrainer:
             raise
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Train a FLUX.3 [klein] LoRA in maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")

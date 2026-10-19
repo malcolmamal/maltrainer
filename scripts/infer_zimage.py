@@ -21,6 +21,7 @@ import argparse
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import safetensors.torch as safetensors
 import torch
@@ -31,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>"):
+def load_textual_inversion_embedding(pipeline: Any, embedding_path: str, token_string: str = "<*>") -> None:
     """Load textual inversion embedding and add to tokenizer/text_encoder."""
     logger.info(f"Loading textual inversion from {embedding_path}")
 
@@ -58,7 +59,7 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
     # For Z-Image, we need to load Qwen components separately since the pipeline might not expose them properly
     model_id = "Tongyi-MAI/Z-Image"
     tokenizer = Qwen2Tokenizer.from_pretrained(model_id, subfolder="tokenizer")
-    text_encoder = Qwen3ForCausalLM.from_pretrained(model_id, subfolder="text_encoder", torch_dtype=torch.bfloat16)
+    text_encoder: Any = Qwen3ForCausalLM.from_pretrained(model_id, subfolder="text_encoder", torch_dtype=torch.bfloat16)
     text_encoder.to(pipeline.device)
 
     # Add token if not present
@@ -83,7 +84,7 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
     pipeline.text_encoder = text_encoder
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Z-Image inference with LoRA and Textual Inversion support")
     parser.add_argument("--prompt", type=str, required=True, help="Text prompt for image generation")
     parser.add_argument("--output_path", type=str, default="output.png", help="Path to save generated image")
@@ -126,7 +127,7 @@ def main():
         ext = ".png"
 
     # Use provided seed or generate random one
-    initial_seed = args.seed if args.seed is not None else torch.randint(0, 2**32, (1,)).item()
+    initial_seed = args.seed if args.seed is not None else int(torch.randint(0, 2**32, (1,)).item())
 
     for i in range(args.num_images):
         current_seed = initial_seed + i

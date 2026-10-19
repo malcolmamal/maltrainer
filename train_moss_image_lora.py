@@ -26,7 +26,9 @@ import math
 import random
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import torch
 from accelerate import Accelerator
@@ -38,7 +40,7 @@ from tqdm import tqdm
 
 from maltrainer.data.disk_cache import FolderCache, cache_key, content_hash, model_identity
 from maltrainer.data.flux3_dataset import load_flux3_image
-from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
+from maltrainer.data.minimax_dataset import MediaSource, count_media_files, scan_media_sources
 from maltrainer.models.flux3.vae import load_flux2_vae_decoder, load_flux2_vae_encoder
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.models.moss_image.lora import DEFAULT_SKIP_BLOCKS, MOSSImageLoRANetwork
@@ -47,7 +49,7 @@ from maltrainer.models.moss_image.text_encoder import MAX_SEQUENCE_LENGTH, TEMPL
 from maltrainer.utils.compile import compile_blocks
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.console_keys import read_key
-from maltrainer.utils.ema import ParameterEMA
+from maltrainer.utils.ema import OffloadedParameterEMA, ParameterEMA
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.logging_utils import setup_logging
 from maltrainer.utils.lora_metadata import build_metadata, git_commit
@@ -81,13 +83,13 @@ def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int,
 
 
 class MOSSImageLoRATrainer:
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025) -> None:
         self.config = config
-        self.dry_run = dry_run
-        self.dry_run_step_time = dry_run_step_time
+        self.dry_run, self.dry_run_step_time = dry_run, dry_run_step_time
         self.last_saved_path: str | None = None
-        self.lr_scheduler = None
-        self.ema: ParameterEMA | None = None
+        self.lr_scheduler: Any = None
+        self.optimizer: Any = None
+        self.ema: ParameterEMA | OffloadedParameterEMA | None = None
         self.run_metadata: dict[str, object] = {
             "model_type": "moss_image",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -101,11 +103,11 @@ class MOSSImageLoRATrainer:
         self.text_cache: dict[str, torch.Tensor] = {}
         # sample: previews of fixed prompts every N steps, rendered with the weights in training
         self.previews = Previews(config.get("sample"), Path(config.get("output", {}).get("path", "./output")))
-        self._preview_decoder = None
+        self._preview_decoder: Any = None
         # The config file, watched for edits to its sample: section while training runs (set by main)
         self.config_path: Path | None = None
         self._config_mtime: float | None = None
-        self._cpu_encoder = None
+        self._cpu_encoder: Any = None
         self._encoding: threading.Thread | None = None
 
         train_config = config.get("train", {})
@@ -139,7 +141,7 @@ class MOSSImageLoRATrainer:
 
     # ------------------------------------------------------------------ caching
 
-    def _sources(self):
+    def _sources(self) -> list[MediaSource]:
         dataset_config = self.config["dataset"]
         return scan_media_sources(
             dataset_config["path"],
@@ -148,9 +150,8 @@ class MOSSImageLoRATrainer:
             default_caption=dataset_config.get("default_caption", ""),
         )
 
-    def precache_dataset(self):
-        model_config = self.config["model"]
-        dataset_config = self.config["dataset"]
+    def precache_dataset(self) -> None:
+        model_config, dataset_config = self.config["model"], self.config["dataset"]
         train_config = self.config.get("train", {})
         sources = self._sources()
         if not sources:
@@ -173,7 +174,7 @@ class MOSSImageLoRATrainer:
                 if use_disk
                 else None
             )
-            latent = folder.get("latents", key) if use_disk else None
+            latent = folder.get("latents", key) if use_disk and key is not None else None
             if latent is None:
                 pending.append((source, folder, key))
             else:
@@ -286,6 +287,11 @@ class MOSSImageLoRATrainer:
         context = self.text_cache[prompt].to(self.device, self.dtype)
         negative = self.text_cache[p.negative].to(self.device, self.dtype) if p.cfg != 1.0 else None
         with tqdm(total=p.steps, desc=f"Sampling ({p.current})", leave=False, disable=not self.is_main_process) as bar:
+
+            def on_step(done: int, total: int) -> None:
+                bar.total = total
+                bar.update(done - bar.n)
+
             latents = moss_sample(
                 self.lora_network,
                 context,
@@ -296,7 +302,7 @@ class MOSSImageLoRATrainer:
                 cfg=p.cfg,
                 negative=negative,
                 device=self.device,
-                on_step=lambda done, total: (setattr(bar, "total", total), bar.update(done - bar.n)),
+                on_step=on_step,
             )
         image = self._preview_decoder.decode(latents)[0]
         return Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8"))
@@ -350,7 +356,7 @@ class MOSSImageLoRATrainer:
         if not missing or (self._encoding is not None and self._encoding.is_alive()):
             return
 
-        def work():
+        def work() -> None:
             try:
                 if self._cpu_encoder is None:
                     model_config = self.config["model"]
@@ -384,7 +390,7 @@ class MOSSImageLoRATrainer:
         p = self.previews
         return prompt in self.text_cache and (p.cfg == 1.0 or p.negative in self.text_cache)
 
-    def _preview_variants(self):
+    def _preview_variants(self) -> list[tuple[str, Callable[[], contextlib.AbstractContextManager[Any]]]]:
         """(label, weights context) per row of the preview strip. LoRA checkpoints save the EMA
         average, so the previews show it."""
         if self.ema is not None and hasattr(self.ema, "applied"):
@@ -408,7 +414,7 @@ class MOSSImageLoRATrainer:
 
     # ------------------------------------------------------------------ model
 
-    def load_transformer_and_lora(self):
+    def load_transformer_and_lora(self) -> None:
         print("=== Step 2/2: Loading MOSS-Image DiT ===", flush=True)
         model_config = self.config["model"]
         lora_config = self.config.get("lora", {})
@@ -434,17 +440,15 @@ class MOSSImageLoRATrainer:
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
         trainable = sum(p.numel() for p in self.lora_network.trainable_parameters())
         self.run_metadata.update(
-            {
-                "lora_layers": len(self.lora_network.lora_layers),
-                "trainable_parameters": trainable,
-                "lora_dtype": str(self.lora_dtype).replace("torch.", ""),
-                "lora_skip_blocks": list(self.lora_network.skip_blocks),
-            }
+            lora_layers=len(self.lora_network.lora_layers),
+            trainable_parameters=trainable,
+            lora_dtype=str(self.lora_dtype).replace("torch.", ""),
+            lora_skip_blocks=list(self.lora_network.skip_blocks),
         )
         logger.info("LoRA: %.1fM trainable parameters in %s", trainable / 1e6, self.lora_dtype)
         self._maybe_compile()
 
-    def _maybe_compile(self):
+    def _maybe_compile(self) -> None:
         """train.compile: torch.compile each of the 42 blocks (after the LoRA wraps their Linears)."""
         train_config = self.config.get("train", {})
         if not bool(train_config.get("compile", False)):
@@ -454,7 +458,7 @@ class MOSSImageLoRATrainer:
             self.transformer.layers, self.device, mode=train_config.get("compile_mode") or None
         )
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         train_config = self.config["train"]
         name = str(train_config.get("optimizer", "automagic3")).lower()
         weight_decay = float(train_config.get("weight_decay", 0.0))
@@ -466,7 +470,7 @@ class MOSSImageLoRATrainer:
             # Attention, MLP and I/O each adapt their own rate. The sign window is 8 steps: on
             # FLUX.3 a 16-step window left the rate stuck near 3e-5 with batch-1 gradients.
             groups = self.lora_network.param_groups(bool(train_config.get("automagic_param_groups", True)))
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "lr": lr,
                 "min_lr": float(train_config.get("automagic_min_lr", 1e-8)),
                 "max_lr": float(train_config.get("automagic_max_lr", 1e3)),
@@ -591,7 +595,7 @@ class MOSSImageLoRATrainer:
         strength = float(train_config.get("loss_weight_strength", 1.0))
         return loss * strength if strength != 1.0 else loss
 
-    def train(self):
+    def train(self) -> None:
         train_config = self.config["train"]
         save_every = int(train_config.get("save_every", 250) or 0)
         self.lora_network, self.optimizer = self.accelerator.prepare(self.lora_network, self.optimizer)
@@ -607,11 +611,7 @@ class MOSSImageLoRATrainer:
 
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(len(self._epoch_order()), train_config)
         self.run_metadata.update(
-            {
-                "steps_per_epoch": steps_per_epoch,
-                "planned_total_steps": total_steps,
-                "dataset_samples": len(self.samples),
-            }
+            steps_per_epoch=steps_per_epoch, planned_total_steps=total_steps, dataset_samples=len(self.samples)
         )
         self.run_metadata["resolved_sigma_shift"] = float(train_config.get("timestep_shift", 1.0))
         logger.info(
@@ -625,8 +625,7 @@ class MOSSImageLoRATrainer:
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
         keys = KeyCommands(menu=self._preview_menu) if self.is_main_process else None
         monitor = TrainMonitor(every=int(train_config.get("monitor_every", 100) or 100))
-        stopped = False
-        global_step = 0
+        stopped, global_step = False, 0
         loss = None
         monitor.exclude(self._maybe_preview(0, total_steps))
         for epoch in range(num_epochs):
@@ -678,7 +677,7 @@ class MOSSImageLoRATrainer:
         self.save_checkpoint("final")
         logger.info("MOSS-Image LoRA training completed!")
 
-    def _log_step(self, step, total, loss, epoch, num_epochs):
+    def _log_step(self, step: int, total: int, loss: torch.Tensor, epoch: int, num_epochs: int) -> None:
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
         prefix = (
@@ -699,9 +698,9 @@ class MOSSImageLoRATrainer:
         else:
             self.progress_logger.info("%sLR: %.2e", prefix, group["lr"])
 
-    def save_checkpoint(self, step):
+    def save_checkpoint(self, step: int | str) -> bool | None:
         if not self.is_main_process:
-            return
+            return None
         output_config = self.config.get("output", {})
         output_dir = Path(output_config["path"])
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -726,6 +725,7 @@ class MOSSImageLoRATrainer:
         save_file(state_dict, str(save_path), metadata=metadata)
         self.last_saved_path = str(save_path)
         logger.info("Saved LoRA checkpoint to %s", save_path)
+        return None
 
     # ------------------------------------------------------------------ dry run / entry
 
@@ -750,7 +750,7 @@ class MOSSImageLoRATrainer:
     def suggest_steps(cls, config: dict, epochs: float) -> str:
         return step_report(cls.step_groups(config), config.get("train", {}), epochs, cls.step_notes(config))
 
-    def simulate(self):
+    def simulate(self) -> None:
         """Plan from the real dataset folder and tick through the steps without loading models."""
         samples = self._dry_run_samples()
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(samples, self.config["train"])
@@ -775,7 +775,7 @@ class MOSSImageLoRATrainer:
                 )
         logger.info("Dry run complete: would save final checkpoint at step %d", total_steps)
 
-    def run(self):
+    def run(self) -> None:
         try:
             set_seed(self.config.get("seed", 42))
             if self.dry_run:
@@ -793,7 +793,7 @@ class MOSSImageLoRATrainer:
             raise
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Train a MOSS-Image LoRA in maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")

@@ -1,11 +1,12 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 import safetensors.torch as safetensors
 from safetensors import SafetensorError
 
 
-def analyze_lora(path):
+def analyze_lora(path: str) -> dict[str, Any] | None:
     if not Path(path).exists():
         print(f"File not found: {path}")
         return None
@@ -78,7 +79,7 @@ def analyze_lora(path):
     }
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 3:
         print("Usage: python compare_loras.py <good_lora> <my_lora>")
         return

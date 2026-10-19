@@ -31,14 +31,14 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from maltrainer.finetune.extract import GENERIC, MODES, extract, strip_prefix
+from maltrainer.finetune.extract import GENERIC, MODES, ExtractProfile, extract, strip_prefix
 from maltrainer.models.moss_image.finetune import EXTRACT_PROFILE as MOSS_IMAGE
 
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 PROFILES = {"moss_image": MOSS_IMAGE, "generic": GENERIC}
 
 
-def detect_profile(path: Path):
+def detect_profile(path: Path) -> ExtractProfile:
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
     prefix = strip_prefix(keys)

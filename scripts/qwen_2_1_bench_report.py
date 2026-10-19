@@ -200,20 +200,20 @@ def main() -> None:
         cell, pad, head, left = 256, 6, 24, 110
         sheet = Image.new("RGB", (left + len(cols) * (cell + pad), head + len(runs) * (cell + pad)), "white")
         draw = ImageDraw.Draw(sheet)
-        for c, step in enumerate(cols):
+        for ci, step in enumerate(cols):
             draw.text(
-                (left + c * (cell + pad) + 4, 6), "base (no LoRA)" if step == "base" else f"step {step}", fill="black"
+                (left + ci * (cell + pad) + 4, 6), "base (no LoRA)" if step == "base" else f"step {step}", fill="black"
             )
         for r, name in enumerate(runs):
             y = head + r * (cell + pad)
             draw.text((6, y + cell // 2), name, fill="black")
-            for c, step in enumerate(cols):
+            for ci, step in enumerate(cols):
                 rel = (Path("base") if step == "base" else Path(name) / step) / f"{pid}_s{args.grid_seed}.png"
                 path = bench / rel
                 if path.exists():
                     sheet.paste(
-                        Image.open(path).convert("RGB").resize((cell, cell), Image.LANCZOS),
-                        (left + c * (cell + pad), y),
+                        Image.open(path).convert("RGB").resize((cell, cell), Image.Resampling.LANCZOS),
+                        (left + ci * (cell + pad), y),
                     )
         sheet.save(out / f"grid_{pid}.png")
 

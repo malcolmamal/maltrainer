@@ -4,7 +4,7 @@ import safetensors.torch as safetensors
 from safetensors import SafetensorError
 
 
-def inspect_lora(path):
+def inspect_lora(path: str) -> None:
     try:
         tensors = safetensors.load_file(path)
         print(f"Total keys: {len(tensors)}")

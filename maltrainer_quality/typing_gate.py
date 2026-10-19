@@ -19,9 +19,26 @@ from pathlib import Path
 
 from maltrainer_quality import ratchet
 
-TARGETS = ("maltrainer", "maltrainer_quality")
+# Directories and root-level files; globs are expanded against the root.
+TARGETS = (
+    "maltrainer",
+    "maltrainer_quality",
+    "backend",
+    "scripts",
+    "train_*.py",
+    "check_weights.py",
+    "compare_loras.py",
+    "inspect_lora.py",
+)
 BASELINE = Path("maltrainer_quality/baselines/types.json")
 ERROR = re.compile(r"^(?P<path>.+?):\d+(?::\d+)?: error: ")
+
+
+def targets(root: Path) -> list[str]:
+    found: list[str] = []
+    for target in TARGETS:
+        found += sorted(path.name for path in root.glob(target)) if "*" in target else [target]
+    return found
 
 
 def mypy_output(root: Path) -> str:
@@ -36,7 +53,7 @@ def mypy_output(root: Path) -> str:
             "--no-error-summary",
             "--config-file",
             "pyproject.toml",
-            *TARGETS,
+            *targets(root),
         ],
         cwd=root,
         check=False,

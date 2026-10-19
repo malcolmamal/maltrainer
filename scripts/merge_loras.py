@@ -118,7 +118,7 @@ def sha256_prefix(path: Path, length: int = 12) -> str:
 def merge(
     inputs: list[tuple[Path, float]], dtype: torch.dtype, verify: bool
 ) -> tuple[dict[str, torch.Tensor], dict, list]:
-    loras = []
+    loras: list[dict] = []
     for path, strength in inputs:
         modules, metadata, layout = read_lora(path)
         ranks = sorted({down.shape[0] for down, _, _ in modules.values()})
