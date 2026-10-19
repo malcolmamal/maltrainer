@@ -18,7 +18,8 @@ This is the check that would have caught the missing VAE quant_conv / stage shor
 before that fix the base model scored at baseline across the board.
 
 Usage:
-    venv\\Scripts\\python.exe scripts\\qwen_2_1_stack_probe.py --config config\\train_qwen_image_2_1_feliciaday_adamw.yaml
+    venv\\Scripts\\python.exe scripts\\qwen_2_1_stack_probe.py ^
+        --config config\\train_qwen_image_2_1_feliciaday_adamw.yaml
 """
 
 from __future__ import annotations

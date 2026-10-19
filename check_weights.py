@@ -21,10 +21,12 @@ def check_weights(path):
         all_down = torch.cat([w.flatten() for w in down_weights])
 
         print(
-            f"UP/B Weights - Mean: {all_up.mean().item():.6f}, Std: {all_up.std().item():.6f}, Max: {all_up.max().item():.6f}"
+            f"UP/B Weights - Mean: {all_up.mean().item():.6f}, Std: {all_up.std().item():.6f}, "
+            f"Max: {all_up.max().item():.6f}"
         )
         print(
-            f"DOWN/A Weights - Mean: {all_down.mean().item():.6f}, Std: {all_down.std().item():.6f}, Max: {all_down.max().item():.6f}"
+            f"DOWN/A Weights - Mean: {all_down.mean().item():.6f}, Std: {all_down.std().item():.6f}, "
+            f"Max: {all_down.max().item():.6f}"
         )
 
         # Check for zeros

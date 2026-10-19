@@ -63,7 +63,10 @@ def main() -> int:
         "--value",
         type=float,
         default=None,
-        help="fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; threshold: absolute",
+        help=(
+            "fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; "
+            "threshold: absolute"
+        ),
     )
     parser.add_argument(
         "--model", choices=["auto", *PROFILES], default="auto", help="checkpoint layout (default: detected)"
@@ -141,7 +144,8 @@ def main() -> int:
         }
         save_file(states[rank], str(target), metadata=metadata)
         print(
-            f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} (mean {info['rank_mean']:.1f}), "
+            f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} "
+            f"(mean {info['rank_mean']:.1f}), "
             f"dropped norm per layer: mean {info['dropped_mean']:.1%}, worst {info['dropped_worst']:.1%}"
         )
         print(f"       wrote {target} ({target.stat().st_size / 1024**2:.0f} MB)")

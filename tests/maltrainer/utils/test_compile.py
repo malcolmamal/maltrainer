@@ -64,7 +64,8 @@ def test_blocks_stay_eager_when_compiling_is_unavailable(
     assert compiled is False
     assert [block.modes for block in blocks] == [[], []]
     assert caplog.messages == [
-        "train.compile is on but the blocks stay eager: Triton is not installed (on Windows: pip install triton-windows)"
+        "train.compile is on but the blocks stay eager: Triton is not installed "
+        "(on Windows: pip install triton-windows)"
     ]
 
 

@@ -50,7 +50,7 @@ def unswizzle_nvfp4_scales(scales: torch.Tensor, rows: int, columns: int) -> tor
     expected_elements = padded_rows * padded_columns
     if scales.numel() != expected_elements:
         raise ValueError(
-            f"Invalid NVFP4 scale tensor: expected {expected_elements} elements for {rows}x{columns}, got {scales.numel()}"
+            f"Bad NVFP4 scale tensor: expected {expected_elements} elements for {rows}x{columns}, got {scales.numel()}"
         )
     values = scales.reshape(-1, 32, 16)
     values = values.reshape(-1, 32, 4, 4).transpose(1, 2)

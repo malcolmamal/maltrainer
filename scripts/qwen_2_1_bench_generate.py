@@ -157,7 +157,8 @@ def main() -> None:
                 done += 1
         rate = (time.time() - started) / done
         print(
-            f"  {name:>11s} {step:>5s}  {done}/{total}  ({rate:.1f}s/sample, ~{rate * (total - done) / 60:.0f} min left)"
+            f"  {name:>11s} {step:>5s}  {done}/{total}  "
+            f"({rate:.1f}s/sample, ~{rate * (total - done) / 60:.0f} min left)"
         )
 
     del transformer, network

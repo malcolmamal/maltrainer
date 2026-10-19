@@ -1003,12 +1003,12 @@ class ZImageLoRATrainer:
                     global_step += 1
                     progress_bar.update(1)
 
-                    # Log progress to file
-                    if global_step % 1 == 0:  # Log every step
-                        current_lr = self.optimizer.param_groups[0]["lr"]
-                        self.progress_logger.info(
-                            f"Step: {global_step}/{total_steps} [{int(global_step / total_steps * 100)}%], Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, LR: {current_lr:.2e}"
-                        )
+                    # Log progress to file, every step
+                    current_lr = self.optimizer.param_groups[0]["lr"]
+                    self.progress_logger.info(
+                        f"Step: {global_step}/{total_steps} [{int(global_step / total_steps * 100)}%], "
+                        f"Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, LR: {current_lr:.2e}"
+                    )
 
                     # Save checkpoint
                     if global_step % save_every == 0:

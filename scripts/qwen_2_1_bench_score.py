@@ -361,14 +361,13 @@ def main() -> None:
         f"\nlikeness floor (base) {floor:.4f}  ceiling (real photos) {ceiling:.4f}  "
         f"training pairwise CLIP {train_pairwise:.4f}\n"
     )
-    print(
-        f"{'run':>11} {'step':>5} {'face%':>6} {'likeness':>9} {'norm':>6} {'judge':>6} {'adhere':>7} {'divers':>7} {'memo':>6}"
-    )
+    print("        run  step  face%  likeness   norm  judge  adhere  divers   memo")
     for row in rows:
         print(
             f"{row['run']:>11} {row['step']:>5} {row['face_rate'] * 100:5.0f}% {fmt(row['likeness'], '{:9.4f}')} "
-            f"{fmt(row['likeness_norm'], '{:6.2f}')} {fmt(row['judge'], '{:6.3f}')} {fmt(row['adherence'], '{:+7.3f}')} "
-            f"{fmt(row['diversity'], '{:7.4f}')} {fmt(row['memorization'], '{:6.4f}')}"
+            f"{fmt(row['likeness_norm'], '{:6.2f}')} {fmt(row['judge'], '{:6.3f}')} "
+            f"{fmt(row['adherence'], '{:+7.3f}')} {fmt(row['diversity'], '{:7.4f}')} "
+            f"{fmt(row['memorization'], '{:6.4f}')}"
         )
 
 

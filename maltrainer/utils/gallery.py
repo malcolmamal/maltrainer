@@ -35,19 +35,26 @@ logger = logging.getLogger(__name__)
 DEFAULT_PROMPTS: Dict[str, List[str]] = {
     "woman": [
         "photo of {trigger}, a woman smiling slightly, close-up with face visible, soft natural light from a window",
-        "photo of {trigger}, a woman sitting in a cozy cafe, medium close-up from the chest up, wearing a casual knit sweater, warm afternoon light",
-        "photo of {trigger}, a woman standing on a city street at dusk, medium shot from the waist up, wearing a dark wool coat, blurred city lights behind her",
-        "photo of {trigger}, a woman laughing outdoors in a sunlit park, close-up with face visible, golden hour light, shallow depth of field",
+        "photo of {trigger}, a woman sitting in a cozy cafe"
+        ", medium close-up from the chest up, wearing a casual knit sweater, warm afternoon light",
+        "photo of {trigger}, a woman standing on a city street at dusk"
+        ", medium shot from the waist up, wearing a dark wool coat, blurred city lights behind her",
+        "photo of {trigger}, a woman laughing outdoors in a sunlit park"
+        ", close-up with face visible, golden hour light, shallow depth of field",
     ],
     "man": [
         "photo of {trigger}, a man smiling slightly, close-up with face visible, soft natural light from a window",
-        "photo of {trigger}, a man sitting in a cozy cafe, medium close-up from the chest up, wearing a casual button-up shirt, warm afternoon light",
-        "photo of {trigger}, a man standing on a city street at dusk, medium shot from the waist up, wearing a dark wool coat, blurred city lights behind him",
-        "photo of {trigger}, a man laughing outdoors in a sunlit park, close-up with face visible, golden hour light, shallow depth of field",
+        "photo of {trigger}, a man sitting in a cozy cafe"
+        ", medium close-up from the chest up, wearing a casual button-up shirt, warm afternoon light",
+        "photo of {trigger}, a man standing on a city street at dusk"
+        ", medium shot from the waist up, wearing a dark wool coat, blurred city lights behind him",
+        "photo of {trigger}, a man laughing outdoors in a sunlit park"
+        ", close-up with face visible, golden hour light, shallow depth of field",
     ],
     "default": [
         "photo of {trigger}, a {class} smiling slightly, close-up with face visible, soft natural light from a window",
-        "photo of {trigger}, a {class} standing on a city street at dusk, medium shot from the waist up, blurred city lights behind",
+        "photo of {trigger}, a {class} standing on a city street at dusk"
+        ", medium shot from the waist up, blurred city lights behind",
     ],
 }
 

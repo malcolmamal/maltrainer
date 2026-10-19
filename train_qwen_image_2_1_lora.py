@@ -113,7 +113,7 @@ class QwenImage21LoRATrainer:
         self.progress_logger.propagate = False
 
     def precache_dataset(self):
-        """Pre-cache VAE latents and Qwen3-VL text embeddings into memory, then unload VAE & Text Encoder to free VRAM."""
+        """Pre-cache VAE latents and Qwen3-VL text embeddings, then unload the VAE and text encoder to free VRAM."""
         model_config = self.config.get("model", {})
         vae_path = model_config["vae_path"]
         text_encoder_path = model_config["text_encoder_path"]

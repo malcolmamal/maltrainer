@@ -94,7 +94,8 @@ def save_full_model(
     missing = set(live) - {key[len(prefix) :] for key in keys}
     if missing:
         raise ValueError(
-            f"{Path(layout_path).name} has no entry for {sorted(missing)[:5]}; save against the file the model was loaded from"
+            f"{Path(layout_path).name} has no entry for {sorted(missing)[:5]}; "
+            "save against the file the model was loaded from"
         )
     tmp = Path(str(out_path) + ".tmp")
     save_file(out, str(tmp), metadata=metadata)

@@ -75,7 +75,10 @@ class Qwen3VLTextEncoder(nn.Module):
         self.tokenizer = tokenizer
         self.system_prompt = system_prompt
         self.drop_idx = drop_idx
-        self.template = f"<|im_start|>system\n{self.system_prompt}<|im_end|>\n<|im_start|>user\n{{}}<|im_end|>\n<|im_start|>assistant\n"
+        self.template = (
+            f"<|im_start|>system\n{self.system_prompt}<|im_end|>\n"
+            "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
+        )
 
     def format_prompt(self, prompt: str) -> str:
         return self.template.format(prompt)
@@ -112,10 +115,7 @@ class Qwen3VLTextEncoder(nn.Module):
             input_ids = input_ids.to(dev)
             attention_mask = attention_mask.to(dev)
 
-        outputs = self.model.language_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
+        outputs = self.model.language_model(input_ids=input_ids, attention_mask=attention_mask)
 
         hidden_states = outputs.last_hidden_state
         # Drop system prompt tokens

@@ -13,7 +13,8 @@ Usage examples:
    python scripts/infer_zimage.py --prompt "a <trigger> cat in a hat" --embedding_path path/to/embedding.safetensors
 
 4. With both:
-   python scripts/infer_zimage.py --prompt "a <trigger> cat in a hat" --lora_path path/to/lora.safetensors --embedding_path path/to/embedding.safetensors
+   python scripts/infer_zimage.py --prompt "a <trigger> cat in a hat" --lora_path path/to/lora.safetensors \
+       --embedding_path path/to/embedding.safetensors
 """
 
 import argparse
