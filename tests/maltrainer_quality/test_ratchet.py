@@ -23,11 +23,11 @@ def test_an_offender_at_its_baseline_passes() -> None:
 
 
 def test_an_offender_past_its_baseline_grew() -> None:
-    assert ratchet.judge({"a.py": 251}, {"a.py": 250}).grew == {"a.py": (251, 250)}
+    assert ratchet.judge({"a.py": 251}, {"a.py": 250}).grew == {"a.py": (250, 251)}
 
 
 def test_an_offender_below_its_baseline_is_loose() -> None:
-    assert ratchet.judge({"a.py": 240}, {"a.py": 250}).loose == {"a.py": (240, 250)}
+    assert ratchet.judge({"a.py": 240}, {"a.py": 250}).loose == {"a.py": (250, 240)}
 
 
 def test_an_entry_with_no_offender_is_loose() -> None:
@@ -58,7 +58,7 @@ def test_a_saved_baseline_is_sorted_and_loads_back(tmp_path: Path) -> None:
 
 
 def test_the_report_names_every_problem(capsys: pytest.CaptureFixture[str]) -> None:
-    verdict = ratchet.Verdict(new={"n.py": 300}, grew={"g.py": (260, 250)}, loose={"l.py": (250, None)})
+    verdict = ratchet.Verdict(new={"n.py": 300}, grew={"g.py": (250, 260)}, loose={"l.py": (250, None)})
 
     ratchet.report(verdict, unit="lines", limit=200, command="gate")
 
@@ -91,3 +91,15 @@ def test_tightening_does_not_excuse_a_new_offender(tmp_path: Path) -> None:
 
     assert ratchet.enforce({"new.py": 300}, path, tighten=True, unit="lines", limit=200, command="gate") == 1
     assert ratchet.load(path) == {}
+
+
+def test_enforce_reports_what_judge_found(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = tmp_path / "baseline.json"
+    ratchet.save(path, {"grown.py": 250, "shrunk.py": 250})
+
+    ratchet.enforce({"grown.py": 260, "shrunk.py": 240}, path, tighten=False, unit="lines", limit=200, command="g")
+
+    assert capsys.readouterr().out.splitlines()[:2] == [
+        "grown.py: 260 lines, grew past its baseline of 250 (limit 200)",
+        "shrunk.py: baseline 250 is loose, now 240 lines",
+    ]

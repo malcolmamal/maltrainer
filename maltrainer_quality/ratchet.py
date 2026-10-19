@@ -16,8 +16,11 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Verdict:
+    # key -> value now
     new: dict[str, int] = field(default_factory=dict)
+    # key -> (baseline, value now)
     grew: dict[str, tuple[int, int]] = field(default_factory=dict)
+    # key -> (baseline, value now), with None for one that is now within the limit or gone
     loose: dict[str, tuple[int, int | None]] = field(default_factory=dict)
 
     @property
@@ -33,9 +36,9 @@ def judge(over: Mapping[str, int], baseline: Mapping[str, int]) -> Verdict:
         if allowed is None:
             verdict.new[key] = value
         elif value > allowed:
-            verdict.grew[key] = (value, allowed)
+            verdict.grew[key] = (allowed, value)
         elif value < allowed:
-            verdict.loose[key] = (value, allowed)
+            verdict.loose[key] = (allowed, value)
     for key, allowed in baseline.items():
         if key not in over:
             verdict.loose[key] = (allowed, None)
@@ -62,7 +65,7 @@ def save(path: Path, entries: Mapping[str, int]) -> None:
 def report(verdict: Verdict, *, unit: str, limit: int, command: str) -> None:
     for key, value in sorted(verdict.new.items()):
         print(f"{key}: {value} {unit} (limit {limit})")
-    for key, (value, allowed) in sorted(verdict.grew.items()):
+    for key, (allowed, value) in sorted(verdict.grew.items()):
         print(f"{key}: {value} {unit}, grew past its baseline of {allowed} (limit {limit})")
     for key, (allowed, value) in sorted(verdict.loose.items()):
         now = "within the limit" if value is None else f"now {value} {unit}"
