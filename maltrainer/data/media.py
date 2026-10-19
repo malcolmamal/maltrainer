@@ -19,6 +19,16 @@ def _require_av():
     return av
 
 
+def _on_grid(time: float, frame_duration: float, snap: float) -> float:
+    """``time`` moved onto the clip's constant frame grid when it is within ``snap`` of it.
+
+    Containers round timestamps to their time base: MKV / WebM keep whole milliseconds, so 1/24 s
+    is stored as 42 ms, past the 24 fps tick it belongs to. A frame far from the grid (variable
+    frame rate) keeps its own time."""
+    grid = round(time / frame_duration) * frame_duration
+    return grid if abs(time - grid) <= snap else time
+
+
 def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarray:
     """Up to ``max_frames`` frames resampled to 24 fps, as uint8 [T, H, W, 3].
 
@@ -35,6 +45,7 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
         stream.thread_type = "AUTO"
         rate = stream.average_rate
         frame_duration = 1.0 / float(rate) if rate else 1.0 / FPS
+        snap = min(float(stream.time_base or 0.0), frame_duration / 4)
 
         size: Optional[Tuple[int, int]] = None
         origin: Optional[float] = None
@@ -54,7 +65,7 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
             time = frame.time if frame.time is not None else decoded * frame_duration
             if origin is None:
                 origin = time
-            time -= origin
+            time = _on_grid(time - origin, frame_duration, snap)
             # every 24 fps tick strictly before this frame belongs to the previous one
             while last_frame is not None and target < max_frames and target / FPS < time - 1e-6:
                 if last_array is None:
