@@ -324,16 +324,25 @@ output/
 
 ## Quality gate
 
-One command runs every check, and CI will run the same one:
+One command runs every check, and CI will run the same one. The tests need no GPU, so they run in
+a separate CPU-only environment, `.venv`. That keeps CPU torch out of the training `venv/`:
 
 ```bash
-pip install -r requirements-dev.txt
-python -m maltrainer_quality      # or quality.bat / ./quality.sh, which prefer venv/
+python -m venv .venv
+.venv/Scripts/python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+.venv/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt
+```
+
+(`.venv/bin/python` on Linux and macOS.) Then:
+
+```bash
+.venv/Scripts/python -m maltrainer_quality      # or quality.bat / ./quality.sh, which pick .venv
 ```
 
 It runs lint and formatting (ruff), the complexity and file-length limits, the tests (pytest),
-and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can. Every gate runs even after one fails; the failed ones are listed at the end. A tool
-that isn't installed in the interpreter you launched it with fails its gate.
+and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can.
+Every gate runs even after one fails; the failed ones are listed at the end. A tool that isn't
+installed in the interpreter you launched it with fails its gate.
 
 **Limits:** at most 200 lines per Python or shell file, and complexity 10 per function. Code
 written before the gate existed is listed in `maltrainer_quality/baselines/` at its size then. A
