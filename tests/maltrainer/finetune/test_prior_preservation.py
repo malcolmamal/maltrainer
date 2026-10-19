@@ -134,3 +134,30 @@ def test_a_saved_prior_loads_back_into_a_fresh_one(tmp_path: Path) -> None:
         assert torch.equal(loaded.sigmas[key], prior.sigmas[key])
         assert torch.equal(loaded.seeds[key], prior.seeds[key])
         assert loaded.seeds[key].dtype == torch.int64
+
+
+def test_loading_a_prior_recorded_with_another_sample_count_warns_and_keeps_the_config(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "prior.safetensors"
+    _built(samples=2).save(path)
+    loaded = PriorPreservation(samples_per_image=4)
+
+    with caplog.at_level("WARNING", logger="maltrainer.finetune.prior"):
+        loaded.load(path)
+
+    assert loaded.samples_per_image == 4
+    assert "has 2 inputs per image; new images get 4" in caplog.text
+    assert loaded.targets["a"].shape[0] == 2
+
+
+def test_loading_a_prior_recorded_with_the_same_sample_count_does_not_warn(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "prior.safetensors"
+    _built(samples=2).save(path)
+
+    with caplog.at_level("WARNING", logger="maltrainer.finetune.prior"):
+        PriorPreservation(samples_per_image=2).load(path)
+
+    assert caplog.text == ""

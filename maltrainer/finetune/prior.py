@@ -33,7 +33,6 @@ import contextlib
 import json
 import logging
 import random
-import re
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
@@ -42,39 +41,13 @@ from safetensors import safe_open
 from safetensors.torch import save_file
 from tqdm import tqdm
 
+# Re-exported: train_moss_image_finetune.py imports them from here.
+from maltrainer.finetune.classes import class_caption, resolve_classes  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 # (x_t [1, ...] on device, sigma [1] on device, class caption) -> prediction [1, ...]
 PredictFn = Callable[[torch.Tensor, torch.Tensor, str], torch.Tensor]
-
-
-def class_caption(caption: str, classes: Dict[str, str]) -> Optional[str]:
-    """``caption`` with every trigger (a whole word, any case) replaced by its class word, or
-    None when it names no trigger. Longer triggers go first, so "annasmith" wins over "anna".
-
-    One pass over the caption: an inserted class word is never itself replaced (bob -> man,
-    man -> person leaves "man"), and it is inserted as written, backslashes included."""
-    triggers = sorted(classes, key=len, reverse=True)
-    if not triggers:
-        return None
-    alternatives = "|".join(f"(?P<t{i}>{re.escape(trigger)})" for i, trigger in enumerate(triggers))
-    pattern = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])", re.IGNORECASE)
-    out, count = pattern.subn(lambda match: classes[triggers[int(match.lastgroup[1:])]], caption)
-    return out if count else None
-
-
-def resolve_classes(prior_config: dict, trigger: Optional[str]) -> Dict[str, str]:
-    """``prior.classes`` (trigger -> class word), or ``dataset.trigger`` -> ``prior.class_word``."""
-    classes = {str(k).strip(): str(v).strip() for k, v in (prior_config.get("classes") or {}).items() if str(k).strip()}
-    word = str(prior_config.get("class_word") or "").strip()
-    if not classes and trigger and word:
-        classes = {trigger.strip(): word}
-    if not classes:
-        raise ValueError(
-            "prior.weight > 0 needs prior.classes (trigger: class word, e.g. {feliciaday: woman}) "
-            "or dataset.trigger with prior.class_word"
-        )
-    return classes
 
 
 CONTAINER_PREFIXES = ("", "diffusion_model.", "model.diffusion_model.")
@@ -210,6 +183,11 @@ class PriorPreservation:
     def load(self, path: Union[str, Path]) -> None:
         with safe_open(str(path), framework="pt", device="cpu") as handle:
             info = json.loads(handle.metadata()["maltrainer_prior"])
+            saved = int(info.get("samples_per_image", self.samples_per_image))
+            if saved != self.samples_per_image:
+                logger.warning(
+                    "Prior: %s has %d inputs per image; new images get %d", path, saved, self.samples_per_image
+                )
             for i, (key, caption) in enumerate(zip(info["keys"], info["captions"])):
                 self.captions[key] = caption
                 self.targets[key] = handle.get_tensor(f"{i}.target")

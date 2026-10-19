@@ -8,7 +8,7 @@ import random
 import re
 from typing import Dict, Optional
 
-from maltrainer.finetune.prior import class_caption
+from maltrainer.finetune.classes import class_caption
 
 TRIGGERS = ["anna", "annasmith", "anna smith", "bob", "Bob", "ohwx", "sks", "feliciaday", "x7", "rhea"]
 CLASS_WORDS = ["woman", "man", "person", "young woman", "dog", "", "Lady"]

@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 import pytest
 
-from maltrainer.finetune.prior import class_caption, resolve_classes
+from maltrainer.finetune.classes import class_caption, resolve_classes
 
 
 @pytest.mark.parametrize(

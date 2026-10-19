@@ -1,7 +1,6 @@
 {
   "backend/app.py": 1005,
   "maltrainer/data/minimax_dataset.py": 386,
-  "maltrainer/finetune/prior.py": 217,
   "maltrainer/finetune/rotation.py": 206,
   "maltrainer/models/comfy_fp8.py": 213,
   "maltrainer/models/flux3/model.py": 307,
