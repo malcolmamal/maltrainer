@@ -24,8 +24,8 @@ def plain_state(config: Flux3Config = TINY, dtype: torch.dtype = torch.float32) 
     """The module state dict, with the QK-norm weights spelt ``*_norm.scale`` as BFL's files do."""
     state = {}
     for key, value in tiny_transformer(config).state_dict().items():
-        key = key[: -len(".weight")] + ".scale" if key.endswith("_norm.weight") else key
-        state[key] = value.detach().clone().to(dtype)
+        name = key[: -len(".weight")] + ".scale" if key.endswith("_norm.weight") else key
+        state[name] = value.detach().clone().to(dtype)
     return state
 
 

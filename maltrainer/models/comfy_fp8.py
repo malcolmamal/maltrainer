@@ -70,9 +70,8 @@ def read_comfy_checkpoint(path: str | Path) -> tuple[dict[str, torch.Tensor], di
             if key.endswith((".scale_input", ".input_scale")):
                 continue  # activation scales only matter to fp8 matmul kernels, not to dequant
             tensor = handle.get_tensor(key)
-            if key.endswith(".scale_weight"):
-                key = key[: -len(".scale_weight")] + ".weight_scale"
-            tensors[key] = tensor
+            name = key[: -len(".scale_weight")] + ".weight_scale" if key.endswith(".scale_weight") else key
+            tensors[name] = tensor
 
     for prefix, config in layers.items():
         fmt = config.get("format")

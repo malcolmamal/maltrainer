@@ -118,8 +118,8 @@ def main() -> None:
 
     # ---- training dynamics --------------------------------------------------------------
     dynamics = {}
-    for name, run_dir in runs.items():
-        run_dir = Path(run_dir)
+    for name, raw_dir in runs.items():
+        run_dir = Path(raw_dir)
         log = parse_log(run_dir / "training.log")
         ckpts = sorted(
             run_dir.glob("*.safetensors"),

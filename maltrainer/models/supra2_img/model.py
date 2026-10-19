@@ -11,10 +11,10 @@ import math
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from safetensors import safe_open
 from safetensors.torch import load_file
+from torch import nn
 
 IMG_SIZE = 256
 LATENT_SIZE = 32

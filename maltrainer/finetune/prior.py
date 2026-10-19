@@ -117,8 +117,8 @@ class PriorPreservation:
         class caption); call this before the first training step."""
         items = list(items)
         rng = random.Random(self.seed)
-        for key, x0, caption in tqdm(items, desc="Prior: the original model's predictions"):
-            x0 = x0.to(device, torch.float32).unsqueeze(0)
+        for key, cpu_x0, caption in tqdm(items, desc="Prior: the original model's predictions"):
+            x0 = cpu_x0.to(device, torch.float32).unsqueeze(0)
             sigmas, seeds, preds = [], [], []
             for _ in range(self.samples_per_image):
                 sigma = sample_sigma().reshape(1).to(device, torch.float32)

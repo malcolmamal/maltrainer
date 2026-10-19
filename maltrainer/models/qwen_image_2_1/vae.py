@@ -10,8 +10,8 @@ from pathlib import Path
 
 import safetensors.torch
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 logger = logging.getLogger(__name__)
 

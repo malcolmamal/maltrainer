@@ -46,8 +46,9 @@ from maltrainer.models.moss_image.sampling import sample as moss_sample
 from maltrainer.models.moss_image.text_encoder import MAX_SEQUENCE_LENGTH, TEMPLATE, load_moss_image_text_encoder
 from maltrainer.utils.compile import compile_blocks
 from maltrainer.utils.config import load_config, save_config_to_output
+from maltrainer.utils.console_keys import read_key
 from maltrainer.utils.ema import ParameterEMA
-from maltrainer.utils.keyboard import KeyCommands, read_key
+from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.logging_utils import setup_logging
 from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.preview_menu import run_menu
@@ -322,9 +323,7 @@ class MOSSImageLoRATrainer:
             fresh = load_config(str(self.config_path))
         except (OSError, ValueError) as error:  # e.g. a half-edited YAML file
             logger.warning(
-                "[sample] %s changed but could not be read (%s); the previous settings stay",
-                self.config_path.name,
-                error,
+                "[sample] %s could not be read (%s); the previous settings stay", self.config_path.name, error
             )
             return
         ignored = sorted(

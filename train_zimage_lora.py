@@ -115,9 +115,9 @@ class ZImageLoRATrainer:
             scale = (alpha / rank) * float(merge_weight)
 
             with torch.no_grad():
-                lora_a = lora_a.to(device=module.weight.device, dtype=module.weight.dtype)
-                lora_b = lora_b.to(device=module.weight.device, dtype=module.weight.dtype)
-                module.weight.add_(torch.matmul(lora_b, lora_a) * scale)
+                a_dev = lora_a.to(device=module.weight.device, dtype=module.weight.dtype)
+                b_dev = lora_b.to(device=module.weight.device, dtype=module.weight.dtype)
+                module.weight.add_(torch.matmul(b_dev, a_dev) * scale)
             merged += 1
         return merged
 

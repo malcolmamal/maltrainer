@@ -5,7 +5,7 @@ LoRA (Low-Rank Adaptation) implementation for Z-Image transformers.
 import logging
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 logger = logging.getLogger(__name__)
 

@@ -22,8 +22,6 @@ import sys
 import time
 from collections.abc import Callable
 
-from maltrainer.utils.console_keys import read_key as read_key  # re-exported: the trainers import it from here
-
 logger = logging.getLogger(__name__)
 
 SAVE, QUIT, PAUSE, MENU, GALLERY, HELP = "s", "q", "p", "e", "g", "h"

@@ -55,6 +55,7 @@ def git_commit(repo_root: Path | None = None) -> str | None:
             ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
             capture_output=True,
             text=True,
+            check=False,
             timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
@@ -69,6 +70,7 @@ def git_commit(repo_root: Path | None = None) -> str | None:
             ["git", "-C", str(root), "status", "--porcelain"],
             capture_output=True,
             text=True,
+            check=False,
             timeout=10,
         )
         if dirty.returncode == 0 and dirty.stdout.strip():

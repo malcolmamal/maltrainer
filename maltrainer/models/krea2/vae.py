@@ -150,9 +150,7 @@ class WanImageEncoder(nn.Module):
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
         layers = []
         for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
-            for _ in range(num_res_blocks):
-                layers.append(ResidualBlock(in_dim, out_dim))
-                in_dim = out_dim
+            layers += [ResidualBlock(in_dim if j == 0 else out_dim, out_dim) for j in range(num_res_blocks)]
             if i != len(dim_mult) - 1:
                 layers.append(Resample(out_dim, temporal_downsample[i]))
         self.downsamples = nn.Sequential(*layers)

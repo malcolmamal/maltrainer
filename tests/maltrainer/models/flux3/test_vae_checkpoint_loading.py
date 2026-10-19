@@ -44,11 +44,12 @@ def _write(path: Path, *models: torch.nn.Module, nested: bool = False, prefix: s
     tensors: dict[str, torch.Tensor] = {}
     for model in models:
         for key, value in model.state_dict().items():
+            name = key
             if key.startswith("bn_running_"):
-                key = "bn.running_" + key[len("bn_running_") :]
+                name = "bn.running_" + key[len("bn_running_") :]
             elif nested and key.startswith(("quant_conv.", "post_quant_conv.")):
-                key = ("encoder." if key.startswith("quant") else "decoder.") + key
-            tensors[prefix + key] = value.clone()
+                name = ("encoder." if key.startswith("quant") else "decoder.") + key
+            tensors[prefix + name] = value.clone()
     save_file(tensors, str(path))
     return path
 

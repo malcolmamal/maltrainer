@@ -66,9 +66,8 @@ def _to_module_names(state_dict: dict[str, torch.Tensor]) -> tuple[dict[str, tor
                 methods = "unreadable"
             attention[methods] = attention.get(methods, 0) + 1
             continue
-        if key.endswith("_norm.scale"):
-            key = key[: -len(".scale")] + ".weight"
-        out[key] = value
+        name = key[: -len(".scale")] + ".weight" if key.endswith("_norm.scale") else key
+        out[name] = value
     return out, {method: f"{count} blocks" for method, count in attention.items()}
 
 

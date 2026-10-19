@@ -177,9 +177,8 @@ def load_config(path: Path) -> dict:
     if not isinstance(config, dict) or not isinstance(config.get("loras"), list) or not config["loras"]:
         raise ValueError(f"{path}: needs a non-empty 'loras:' list")
     inputs = []
-    for i, entry in enumerate(config["loras"]):
-        if isinstance(entry, str):
-            entry = {"path": entry}
+    for i, raw in enumerate(config["loras"]):
+        entry = {"path": raw} if isinstance(raw, str) else raw
         if not isinstance(entry, dict) or "path" not in entry:
             raise ValueError(f"{path}: loras[{i}] needs a 'path'")
         unknown = set(entry) - {"path", "strength"}

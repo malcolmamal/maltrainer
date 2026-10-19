@@ -21,7 +21,7 @@ def names_its_folder(root: str, folder: Path, captions: list[str]) -> bool:
         prefix = current / "prefix.txt"
         if prefix.exists():
             return "[folder]" in prefix.read_text(encoding="utf-8")
-        if current == stop or current.parent == current:
+        if current in (stop, current.parent):
             break
         current = current.parent
     # no prefix.txt: a person only if the captions spell the folder's name out

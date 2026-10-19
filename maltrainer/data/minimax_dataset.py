@@ -148,7 +148,7 @@ def _prefix_for(folder: Path, data_root: Path, templates: dict[Path, str | None]
             templates[current] = _read_text(path, one_line=True) if path.exists() else None
         if templates[current] is not None:
             return templates[current].replace("[folder]", folder.name)
-        if current == stop or current.parent == current:
+        if current in (stop, current.parent):
             return ""
         current = current.parent
 

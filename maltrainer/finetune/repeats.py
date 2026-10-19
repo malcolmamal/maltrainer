@@ -45,8 +45,8 @@ def samples_per_epoch(count: int, repeats: float) -> int:
 def repeat_order(groups: Sequence[tuple[Sequence[int], float]]) -> list[int]:
     """One epoch's shuffled sample indices from (indices, repeats) groups."""
     order: list[int] = []
-    for indices, repeats in groups:
-        indices = list(indices)
+    for members, repeats in groups:
+        indices = list(members)
         whole = math.floor(max(repeats, 0.0))
         order += indices * whole
         extra = round((max(repeats, 0.0) - whole) * len(indices))

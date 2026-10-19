@@ -9,8 +9,8 @@ import logging
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 from accelerate import init_empty_weights
+from torch import nn
 from transformers import AutoTokenizer, Qwen3VLConfig, Qwen3VLModel
 
 from maltrainer.models.minimax_h3.int8_convrot import (

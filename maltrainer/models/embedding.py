@@ -5,7 +5,7 @@ Textual Inversion embedding implementation for Z-Image.
 from collections.abc import Iterator
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class TextualInversionEmbedding(nn.Module):
