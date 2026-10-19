@@ -2,10 +2,13 @@
 LoRA (Low-Rank Adaptation) implementation for Z-Image transformers.
 """
 
+import logging
 from typing import List, Optional
 
 import torch
 import torch.nn as nn
+
+logger = logging.getLogger(__name__)
 
 
 class LoRALayer(nn.Module):
@@ -101,39 +104,43 @@ class LoRANetwork(nn.Module):
         return state_dict
 
     def load_state_dict(self, state_dict: dict):
-        """Load LoRA weights from state dict."""
+        """Load LoRA weights from a state dict: kohya's lora_down / lora_up names or the lora_A /
+        lora_B ones get_state_dict writes, by dot or safe name, with or without a prefix."""
+        missing = []
         for safe_name, lora_layer in self.lora_layers.items():
-            name = self.name_map[safe_name]
-            # Try dot name first, then safe name, then check for prefixes
-            keys_to_check = [name, safe_name]
-
-            loaded = False
-            for k in keys_to_check:
-                if f"{k}.lora_down.weight" in state_dict:
-                    lora_layer.lora_down.weight.data = state_dict[f"{k}.lora_down.weight"]
-                    lora_layer.lora_up.weight.data = state_dict[f"{k}.lora_up.weight"]
-                    if f"{k}.alpha" in state_dict:
-                        lora_layer.set_alpha(float(state_dict[f"{k}.alpha"]))
-                    loaded = True
-                    break
-
-            if not loaded:
-                # Handle potential prefixes like diffusion_model.
-                for k in state_dict:
-                    if k.endswith((f"{name}.lora_down.weight", f"{safe_name}.lora_down.weight")):
-                        prefix = k.replace(f"{name}.lora_down.weight", "").replace(f"{safe_name}.lora_down.weight", "")
-                        lora_layer.lora_down.weight.data = state_dict[
-                            f"{prefix}{name}.lora_down.weight"
-                            if f"{prefix}{name}.lora_down.weight" in state_dict
-                            else f"{prefix}{safe_name}.lora_down.weight"
-                        ]
-                        lora_layer.lora_up.weight.data = state_dict[
-                            f"{prefix}{name}.lora_up.weight"
-                            if f"{prefix}{name}.lora_up.weight" in state_dict
-                            else f"{prefix}{safe_name}.lora_up.weight"
-                        ]
-                        break
+            keys = _layer_keys(state_dict, (self.name_map[safe_name], safe_name))
+            if keys is None:
+                missing.append(self.name_map[safe_name])
+                continue
+            down, up, alpha = keys
+            lora_layer.lora_down.weight.data = state_dict[down]
+            lora_layer.lora_up.weight.data = state_dict[up]
+            if alpha in state_dict:
+                lora_layer.set_alpha(float(state_dict[alpha]))
+        if missing:
+            logger.warning(
+                "LoRA: %d of %d layers not in the state dict, e.g. %s", len(missing), len(self.lora_layers), missing[:3]
+            )
 
     def forward(self, *args, **kwargs):
         """Forward pass through transformer with LoRA."""
         return self.transformer(*args, **kwargs)
+
+
+# (down, up) key suffixes: kohya's names, then the PEFT / AI-Toolkit ones get_state_dict writes
+LORA_SUFFIXES = ((".lora_down.weight", ".lora_up.weight"), (".lora_A.weight", ".lora_B.weight"))
+
+
+def _layer_keys(state_dict: dict, names: tuple) -> Optional[tuple]:
+    """(down, up, alpha) keys of the first of ``names`` in ``state_dict``: an exact key first, then
+    one behind a prefix ending in "." or "_" ("diffusion_model.", "lora_unet_")."""
+    for down, up in LORA_SUFFIXES:
+        for name in names:
+            if f"{name}{down}" in state_dict:
+                return f"{name}{down}", f"{name}{up}", f"{name}.alpha"
+    for down, up in LORA_SUFFIXES:
+        for key in state_dict:
+            stem = key[: -len(down)] if key.endswith(down) else None
+            if stem and any(stem.endswith((f".{name}", f"_{name}")) for name in names):
+                return key, f"{stem}{up}", f"{stem}.alpha"
+    return None

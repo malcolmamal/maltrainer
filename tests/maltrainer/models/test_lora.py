@@ -144,3 +144,42 @@ def test_weights_under_an_unknown_prefix_are_found_by_suffix(key: str) -> None:
     torch.testing.assert_close(layer.lora_down.weight.detach(), down)
     torch.testing.assert_close(layer.lora_up.weight.detach(), up)
     torch.testing.assert_close(network.lora_layers["blocks_0_to_q"].lora_down.weight.detach(), untouched)
+
+
+def test_the_network_loads_what_it_saves() -> None:
+    saved = _network()
+    for layer in saved.lora_layers.values():
+        torch.nn.init.normal_(layer.lora_up.weight)
+        layer.set_alpha(1.0)
+    saved.prefix = "diffusion_model."
+    loaded = _network()
+
+    loaded.load_state_dict({key: value.detach().clone() for key, value in saved.get_state_dict().items()})
+
+    for safe_name, layer in loaded.lora_layers.items():
+        torch.testing.assert_close(layer.lora_up.weight.detach(), saved.lora_layers[safe_name].lora_up.weight.detach())
+        assert layer.scale == saved.lora_layers[safe_name].scale
+
+
+def test_an_alpha_behind_a_prefix_is_loaded_with_its_weights() -> None:
+    network = _network()
+    key = "diffusion_model.blocks.0.to_q"
+
+    network.load_state_dict(
+        {f"{key}.lora_down.weight": torch.ones(2, 4), f"{key}.lora_up.weight": torch.ones(4, 2), f"{key}.alpha": 8.0}
+    )
+
+    assert network.lora_layers["blocks_0_to_q"].scale == 4.0
+
+
+def test_a_name_inside_another_modules_name_is_not_taken_for_it(caplog: pytest.LogCaptureFixture) -> None:
+    network = _network()
+    before = network.lora_layers["blocks_0_to_q"].lora_down.weight.detach().clone()
+
+    with caplog.at_level("WARNING", logger="maltrainer.models.lora"):
+        network.load_state_dict(
+            {"xblocks.0.to_q.lora_down.weight": torch.ones(2, 4), "xblocks.0.to_q.lora_up.weight": torch.ones(4, 2)}
+        )
+
+    torch.testing.assert_close(network.lora_layers["blocks_0_to_q"].lora_down.weight.detach(), before)
+    assert "4 of 4 layers not in the state dict" in caplog.text
