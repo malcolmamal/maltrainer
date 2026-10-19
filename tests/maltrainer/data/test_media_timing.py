@@ -4,8 +4,8 @@ lost frames 1 and 4, and a 12 fps one decoded 13 frames instead of 12."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List
 
 import numpy as np
 import pytest
@@ -13,7 +13,7 @@ import pytest
 from maltrainer.data.media import _on_grid, read_video_frames
 
 
-def _greys(frames: np.ndarray) -> List[int]:
+def _greys(frames: np.ndarray) -> list[int]:
     return [int(frame[0, 0, 0]) for frame in frames]
 
 
@@ -27,7 +27,7 @@ def _greys(frames: np.ndarray) -> List[int]:
     ],
 )
 def test_an_mkv_decodes_like_the_same_clip_in_avi(
-    make_clip: Callable[..., Path], fps: int, frames: int, expected: List[int]
+    make_clip: Callable[..., Path], fps: int, frames: int, expected: list[int]
 ) -> None:
     avi = read_video_frames(make_clip("a.avi", frames=frames, fps=fps), 32, 100)
     mkv = read_video_frames(make_clip("a.mkv", frames=frames, fps=fps), 32, 100)

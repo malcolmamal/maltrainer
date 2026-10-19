@@ -42,7 +42,19 @@ def test_a_submodule_counts_as_installed_when_its_package_is() -> None:
 def test_the_table_runs_every_gate_in_order() -> None:
     names = [gate.name for gate in gates.gates(None)]
 
-    assert names == ["lint", "format", "complexity", "file length", "tests", "coverage"]
+    assert names == [
+        "lint",
+        "format",
+        "complexity",
+        "file length",
+        "types",
+        "dead code",
+        "tests",
+        "coverage",
+        "lock",
+        "requirements",
+        "audit",
+    ]
 
 
 def test_junit_output_goes_to_the_named_folder(tmp_path: Path) -> None:

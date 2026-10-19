@@ -9,7 +9,7 @@ import json
 import logging
 import math
 from types import MethodType
-from typing import Dict, Tuple
+from typing import Any, cast
 
 import torch
 from safetensors import safe_open
@@ -18,7 +18,8 @@ from torch.nn import functional as F
 
 logger = logging.getLogger(__name__)
 
-_HADAMARD_CACHE: Dict[Tuple[int, str, torch.dtype], torch.Tensor] = {}
+_T = torch.Tensor
+_HADAMARD_CACHE: dict[tuple[int, str, torch.dtype], torch.Tensor] = {}
 
 
 def parse_comfy_quant_marker(marker: torch.Tensor) -> dict:
@@ -47,11 +48,7 @@ def _hadamard(size: int, device: torch.device, dtype: torch.dtype) -> torch.Tens
     cached = _HADAMARD_CACHE.get(key)
     if cached is not None:
         return cached
-    base = torch.tensor(
-        ((1, 1, 1, -1), (1, 1, -1, 1), (1, -1, 1, 1), (-1, 1, 1, 1)),
-        device=device,
-        dtype=dtype,
-    )
+    base = torch.tensor(((1, 1, 1, -1), (1, 1, -1, 1), (1, -1, 1, 1), (-1, 1, 1, 1)), device=device, dtype=dtype)
     matrix = base
     current = 4
     while current < size:
@@ -70,7 +67,7 @@ def rotate_activation(value: torch.Tensor, group_size: int) -> torch.Tensor:
     return torch.matmul(grouped, matrix).reshape(value.shape)
 
 
-def _quantize_rows(value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def _quantize_rows(value: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     scale = (value.float().abs().amax(dim=-1, keepdim=True) / 127.0).clamp(min=1e-30)
     quantized = (value.float() / scale).round().clamp(-127, 127).to(torch.int8)
     return quantized, scale
@@ -110,7 +107,9 @@ def _resolve_grad_precision(value: str | None) -> str:
 
 class _Int8ConvRotFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision):
+    def forward(
+        ctx: Any, inputs: _T, weight: _T, scale: _T, bias: _T | None, group_size: int, grad_precision: str
+    ) -> _T:
         group_size = int(group_size)
         rotated = rotate_activation(inputs, group_size)
         flat = rotated.reshape(-1, rotated.shape[-1])
@@ -127,7 +126,7 @@ class _Int8ConvRotFunction(torch.autograd.Function):
         return output.to(inputs.dtype).reshape(*inputs.shape[:-1], weight.shape[0])
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: _T) -> tuple[_T | None, ...]:
         weight, scale = ctx.saved_tensors
         precision = ctx.grad_precision
 
@@ -155,7 +154,9 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
     """Eager fallback for CPU or builds without torch._int_mm. Always computes in float."""
 
     @staticmethod
-    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision=None):  # noqa: ARG004 - same as the int_mm path
+    def forward(
+        ctx: Any, inputs: _T, weight: _T, scale: _T, bias: _T | None, group_size: int, _grad_precision: object = None
+    ) -> _T:
         group_size = int(group_size)
         rotated = rotate_activation(inputs, group_size)
         dense_weight = (weight.float() * scale.float()).to(inputs.dtype)
@@ -167,7 +168,7 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
         return output
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: _T) -> tuple[_T | None, ...]:
         weight, scale = ctx.saved_tensors
         dense_weight = weight.float() * scale.float()
         grad_input = grad_output.reshape(-1, grad_output.shape[-1]).float() @ dense_weight
@@ -176,17 +177,15 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
 
 
 def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tensor:
-    group_size = int(module.int8_convrot_groupsize.item())
+    group_size = int(cast(torch.Tensor, module.int8_convrot_groupsize).item())
     operation = _Int8ConvRotFunction if inputs.is_cuda and hasattr(torch, "_int_mm") else _TransientInt8ConvRotFunction
     grad_precision = getattr(module, "int8_convrot_grad_precision", DEFAULT_GRAD_PRECISION)
     return operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size, grad_precision)
 
 
-def load_comfy_int8_convrot_state_dict(
-    checkpoint_path: str, *, device: torch.device
-) -> Tuple[Dict[str, torch.Tensor], int]:
-    state_dict: Dict[str, torch.Tensor] = {}
-    marker_config: Dict[str, dict] = {}
+def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.device) -> tuple[dict[str, _T], int]:
+    state_dict: dict[str, torch.Tensor] = {}
+    marker_config: dict[str, dict] = {}
     with safe_open(str(checkpoint_path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
         for key in keys:
@@ -228,7 +227,7 @@ def load_comfy_int8_convrot_state_dict(
     return state_dict, len(marker_config)
 
 
-def prepare_int8_convrot_modules(model: nn.Module, state_dict: Dict[str, torch.Tensor]) -> int:
+def prepare_int8_convrot_modules(model: nn.Module, state_dict: dict[str, torch.Tensor]) -> int:
     scale_shapes = {
         key[: -len(".scale_weight")]: tuple(value.shape)
         for key, value in state_dict.items()
@@ -262,19 +261,15 @@ def enable_int8_convrot(model: nn.Module, grad_precision: str | None = None) -> 
             continue
         if module.weight.dtype is not torch.int8:
             raise TypeError("INT8 ConvRot scale is attached to a non-INT8 Linear weight")
-        group_size = int(module.int8_convrot_groupsize.item())
+        group_size = int(cast(torch.Tensor, module.int8_convrot_groupsize).item())
         if module.weight.shape[1] % group_size:
             raise ValueError(
                 f"INT8 ConvRot group size {group_size} does not divide {module.weight.shape[1]} input features"
             )
-        module.int8_convrot_grad_precision = precision
-        module.forward = MethodType(_int8_linear_forward, module)
+        cast(Any, module).int8_convrot_grad_precision = precision
+        cast(Any, module).forward = MethodType(_int8_linear_forward, module)
         patched += 1
-    logger.info(
-        "Enabled H3 INT8 ConvRot runtime on %d Linear layers (backward precision: %s)",
-        patched,
-        precision,
-    )
+    logger.info("Enabled H3 INT8 ConvRot runtime on %d Linear layers (backward precision: %s)", patched, precision)
     if precision == "int8":
         logger.warning(
             "INT8 backward re-quantizes the gradient in every one of the %d layers; expect "

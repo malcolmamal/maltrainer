@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, Sequence
 
 import pytest
 import torch
@@ -25,7 +25,7 @@ def tiny_config(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _rotator(tmp_path: Path, windows: Sequence[Window] = DEFAULT_WINDOWS) -> WindowRotator:
-    master: Dict[str, torch.Tensor] = {}
+    master: dict[str, torch.Tensor] = {}
     model, _ = load_krea2_transformer(write(tmp_path / "src.safetensors", SOURCE), CPU, torch.float32, master=master)
     return WindowRotator(model, master, windows, CPU, torch.float32, lambda params, _: torch.optim.SGD(params, lr=0.1))
 

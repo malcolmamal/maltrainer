@@ -1,16 +1,17 @@
 import sys
 
 import safetensors.torch as safetensors
+from safetensors import SafetensorError
 
 
-def inspect_lora(path):
+def inspect_lora(path: str) -> None:
     try:
         tensors = safetensors.load_file(path)
         print(f"Total keys: {len(tensors)}")
         print("First 10 keys:")
         for k in list(tensors.keys())[:10]:
             print(k)
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, KeyError, SafetensorError) as e:
         print(f"Error reading {path}: {e}")
 
 

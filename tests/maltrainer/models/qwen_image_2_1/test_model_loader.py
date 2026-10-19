@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -102,7 +103,7 @@ def test_a_checkpoint_missing_a_parameter_fails_the_strict_load(tmp_path: Path) 
     path = tmp_path / "broken.safetensors"
     int8_checkpoint(path, broken, {"img_in": 4})
 
-    with pytest.raises(RuntimeError, match="proj_out.weight"):
+    with pytest.raises(RuntimeError, match=re.escape("proj_out.weight")):
         load_qwen_image_2_1_transformer(path, device=CPU)
 
 

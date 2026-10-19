@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 
 import pytest
@@ -156,11 +157,12 @@ def test_min_lr_above_max_lr_is_rejected() -> None:
         Automagic3([nn.Parameter(torch.zeros(1))], min_lr=1.0, max_lr=0.5)
 
 
-def test_construction_reports_the_parameter_count_and_a_high_start_rate(capsys: pytest.CaptureFixture[str]) -> None:
+def test_construction_reports_the_parameter_count_and_a_high_start_rate(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
     Automagic3([nn.Parameter(torch.zeros(1000)), nn.Parameter(torch.zeros(2, 3))], lr=1e-3)
-    quiet = capsys.readouterr().out
+    quiet = list(caplog.messages)
+    caplog.clear()
     Automagic3([nn.Parameter(torch.zeros(1))], lr=1e-2)
-    loud = capsys.readouterr().out
 
-    assert quiet == "Total training parameters: 1,006\n"
-    assert "start lr 0.01 is high" in loud
+    assert quiet == ["Total training parameters: 1,006"]
+    assert any("start lr 0.01 is high" in message for message in caplog.messages)

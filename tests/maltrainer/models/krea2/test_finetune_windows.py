@@ -75,5 +75,5 @@ def test_a_linear_holding_fp8_weights_cannot_be_always_on() -> None:
     model.add_module("txt", nn.Sequential(nn.Linear(2, 2)))
     model.txt[0].weight = nn.Parameter(torch.zeros(2, 2).to(torch.float8_e4m3fn), requires_grad=False)
 
-    with pytest.raises(ValueError, match="txt.0 is fp8; always-on modules must be bf16"):
+    with pytest.raises(ValueError, match=r"txt\.0 is fp8; always-on modules must be bf16"):
         always_on_linears(model, ["txt"])

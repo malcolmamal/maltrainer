@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Any, cast
 
 import torch
-import torch.nn as nn
 from accelerate import init_empty_weights
-from transformers import AutoTokenizer, Qwen3VLConfig, Qwen3VLModel
+from torch import nn
+from transformers import AutoTokenizer, PreTrainedTokenizerBase, Qwen3VLConfig, Qwen3VLModel
 
 from maltrainer.models.minimax_h3.int8_convrot import (
     enable_int8_convrot,
@@ -52,9 +52,9 @@ class Int8Embedding(nn.Module):
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         w = torch.embedding(self.weight, input_ids)
-        scale = torch.embedding(self.scale_weight, input_ids)
+        scale = torch.embedding(self.get_buffer("scale_weight"), input_ids)
         embeds = w.float() * scale
-        group_size = int(self.int8_convrot_groupsize.item())
+        group_size = int(self.get_buffer("int8_convrot_groupsize").item())
         if group_size:
             embeds = rotate_activation(embeds, group_size)
         return embeds.to(self.out_dtype)
@@ -66,7 +66,7 @@ class Qwen3VLTextEncoder(nn.Module):
     def __init__(
         self,
         model: Qwen3VLModel,
-        tokenizer: AutoTokenizer,
+        tokenizer: PreTrainedTokenizerBase,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         drop_idx: int = DEFAULT_DROP_IDX,
     ):
@@ -75,7 +75,10 @@ class Qwen3VLTextEncoder(nn.Module):
         self.tokenizer = tokenizer
         self.system_prompt = system_prompt
         self.drop_idx = drop_idx
-        self.template = f"<|im_start|>system\n{self.system_prompt}<|im_end|>\n<|im_start|>user\n{{}}<|im_end|>\n<|im_start|>assistant\n"
+        self.template = (
+            f"<|im_start|>system\n{self.system_prompt}<|im_end|>\n"
+            "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
+        )
 
     def format_prompt(self, prompt: str) -> str:
         return self.template.format(prompt)
@@ -83,9 +86,9 @@ class Qwen3VLTextEncoder(nn.Module):
     @torch.no_grad()
     def encode_prompts(
         self,
-        prompts: Union[str, List[str]],
+        prompts: str | list[str],
         max_length: int = 512,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> torch.Tensor:
         """Encode a list of text prompts into Qwen-Image-2.1 text embeddings [B, S, 4096]."""
         if isinstance(prompts, str):
@@ -112,10 +115,7 @@ class Qwen3VLTextEncoder(nn.Module):
             input_ids = input_ids.to(dev)
             attention_mask = attention_mask.to(dev)
 
-        outputs = self.model.language_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
+        outputs = self.model.language_model(input_ids=input_ids, attention_mask=attention_mask)
 
         hidden_states = outputs.last_hidden_state
         # Drop system prompt tokens
@@ -134,9 +134,9 @@ def _map_te_key(k: str) -> str:
 
 
 def load_qwen_image_2_1_text_encoder(
-    text_encoder_path: Union[str, Path],
-    asset_dir: Optional[Union[str, Path]] = None,
-    device: torch.device = torch.device("cuda"),
+    text_encoder_path: str | Path,
+    asset_dir: str | Path | None = None,
+    device: str | torch.device = "cuda",
     grad_precision: str = "bf16",
 ) -> Qwen3VLTextEncoder:
     """Load Qwen3-VL 8B text encoder from INT8 ConvRot safetensors (no dtype: the file fixes it)."""
@@ -152,7 +152,7 @@ def load_qwen_image_2_1_text_encoder(
     logger.info("Loading tokenizer from %s...", asset_dir)
     tokenizer = AutoTokenizer.from_pretrained(str(asset_dir), trust_remote_code=True)
 
-    config = Qwen3VLConfig.from_pretrained(str(asset_dir))
+    config = cast(Any, Qwen3VLConfig.from_pretrained(str(asset_dir)))  # typed as a dict|config|None union
     config.text_config.num_hidden_layers = 36
     config.text_config.hidden_size = 4096
     config.text_config.intermediate_size = 12288
@@ -166,7 +166,7 @@ def load_qwen_image_2_1_text_encoder(
         model.language_model.norm = nn.Identity()
 
     logger.info("Loading INT8 ConvRot state dict for text encoder from %s...", text_encoder_path)
-    int8_state_dict, num_quant = load_comfy_int8_convrot_state_dict(str(text_encoder_path), device=torch.device("cpu"))
+    int8_state_dict, _num_quant = load_comfy_int8_convrot_state_dict(str(text_encoder_path), device=torch.device("cpu"))
 
     mapped_sd = {}
     for k, v in int8_state_dict.items():
@@ -181,7 +181,7 @@ def load_qwen_image_2_1_text_encoder(
         group_size=embed_group_size,
     )
     embed_tokens.weight.data.copy_(mapped_sd["language_model.embed_tokens.weight"])
-    embed_tokens.scale_weight.data.copy_(mapped_sd["language_model.embed_tokens.scale_weight"])
+    embed_tokens.get_buffer("scale_weight").data.copy_(mapped_sd["language_model.embed_tokens.scale_weight"])
     model.language_model.embed_tokens = embed_tokens
     logger.info("Embedding table: INT8 ConvRot, un-rotating with group size %d", embed_group_size)
 
@@ -193,14 +193,11 @@ def load_qwen_image_2_1_text_encoder(
 
     vision_config = config.vision_config
     vision_head_dim = vision_config.hidden_size // vision_config.num_heads
-    model.visual.rotary_pos_emb = type(model.visual.rotary_pos_emb)(vision_head_dim // 2).to(device)
-    model.language_model.rotary_emb = type(model.language_model.rotary_emb)(
-        config.text_config,
-        device=device,
-    )
+    model.visual.rotary_pos_emb = type(cast(Any, model.visual.rotary_pos_emb))(vision_head_dim // 2).to(device)
+    model.language_model.rotary_emb = type(model.language_model.rotary_emb)(config.text_config, device=device)
 
     model.requires_grad_(False)
-    model.to(device=device)
+    model.to(device=device)  # type: ignore[call-arg]  # transformers' wrapped .to breaks the stub
     model.eval()
 
     logger.info("Loaded Qwen3-VL 8B Text Encoder successfully on %s", device)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
 
 import pytest
 import torch
@@ -31,7 +30,7 @@ def tiny_qwen(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(te, "TAP_LAYERS", (1, 2, 3))
 
 
-def _state(seed: int = 0) -> Dict[str, torch.Tensor]:
+def _state(seed: int = 0) -> dict[str, torch.Tensor]:
     config = Qwen3VLConfig.from_pretrained(str(te.TOKENIZER_ASSETS)).text_config
     for name, value in TINY_TEXT.items():
         setattr(config, name, value)
@@ -40,7 +39,7 @@ def _state(seed: int = 0) -> Dict[str, torch.Tensor]:
     return {k: v.detach().clone() for k, v in Qwen3VLTextModel(config).state_dict().items()}
 
 
-def _int8_state() -> Dict[str, torch.Tensor]:
+def _int8_state() -> dict[str, torch.Tensor]:
     generator = torch.Generator().manual_seed(4)
     state = {k: v.to(torch.bfloat16) for k, v in _state().items()}
     for key in [k for k in state if k.endswith(("_proj.weight", "embed_tokens.weight"))]:
@@ -51,7 +50,7 @@ def _int8_state() -> Dict[str, torch.Tensor]:
     return state
 
 
-def _file(tmp_path: Path, state: Dict[str, torch.Tensor], prefix: str = PREFIX) -> Path:
+def _file(tmp_path: Path, state: dict[str, torch.Tensor], prefix: str = PREFIX) -> Path:
     return write(tmp_path / "qwen.safetensors", state, prefix=prefix)
 
 

@@ -118,8 +118,8 @@ def main() -> None:
 
     # ---- training dynamics --------------------------------------------------------------
     dynamics = {}
-    for name, run_dir in runs.items():
-        run_dir = Path(run_dir)
+    for name, raw_dir in runs.items():
+        run_dir = Path(raw_dir)
         log = parse_log(run_dir / "training.log")
         ckpts = sorted(
             run_dir.glob("*.safetensors"),
@@ -145,7 +145,7 @@ def main() -> None:
         c = color(name)
         axes[0].plot(d["step"], ema(d["loss"]), color=c, label=name, lw=1.6)
         axes[1].plot(d["step"], d["lr"], color=c, label=name, lw=1.6)
-        xs, ys = zip(*d["dw"])
+        xs, ys = zip(*d["dw"], strict=False)
         axes[2].plot(xs, ys, "o-", color=c, label=name, lw=1.6, ms=4)
     axes[0].set(title="Training loss (EMA, alpha 0.02)", xlabel="step", ylabel="MSE")
     axes[1].set(title="Effective learning rate", xlabel="step", ylabel="LR", yscale="log")
@@ -173,7 +173,7 @@ def main() -> None:
         ),
     ]
     fig, axes = plt.subplots(1, 4, figsize=(21, 4.6))
-    for ax, (key, title, refs) in zip(axes, panels):
+    for ax, (key, title, refs) in zip(axes, panels, strict=False):
         for name in runs:
             pts = sorted(
                 (step_num(r["step"], final_steps[name]), r[key])
@@ -181,7 +181,7 @@ def main() -> None:
                 if r["run"] == name and r.get(key) is not None
             )
             if pts:
-                ax.plot(*zip(*pts), "o-", color=color(name), label=name, lw=1.6, ms=4)
+                ax.plot(*zip(*pts, strict=False), "o-", color=color(name), label=name, lw=1.6, ms=4)
         for y, label in refs:
             if y is not None:
                 ax.axhline(y, color="#adb5bd", ls="--", lw=1)
@@ -196,24 +196,24 @@ def main() -> None:
     # ---- comparison grids ---------------------------------------------------------------------
     for prompt in manifest["prompts"]:
         pid = prompt["id"]
-        cols = ["base"] + args.grid_steps
+        cols = ["base", *args.grid_steps]
         cell, pad, head, left = 256, 6, 24, 110
         sheet = Image.new("RGB", (left + len(cols) * (cell + pad), head + len(runs) * (cell + pad)), "white")
         draw = ImageDraw.Draw(sheet)
-        for c, step in enumerate(cols):
+        for ci, step in enumerate(cols):
             draw.text(
-                (left + c * (cell + pad) + 4, 6), "base (no LoRA)" if step == "base" else f"step {step}", fill="black"
+                (left + ci * (cell + pad) + 4, 6), "base (no LoRA)" if step == "base" else f"step {step}", fill="black"
             )
         for r, name in enumerate(runs):
             y = head + r * (cell + pad)
             draw.text((6, y + cell // 2), name, fill="black")
-            for c, step in enumerate(cols):
+            for ci, step in enumerate(cols):
                 rel = (Path("base") if step == "base" else Path(name) / step) / f"{pid}_s{args.grid_seed}.png"
                 path = bench / rel
                 if path.exists():
                     sheet.paste(
-                        Image.open(path).convert("RGB").resize((cell, cell), Image.LANCZOS),
-                        (left + c * (cell + pad), y),
+                        Image.open(path).convert("RGB").resize((cell, cell), Image.Resampling.LANCZOS),
+                        (left + ci * (cell + pad), y),
                     )
         sheet.save(out / f"grid_{pid}.png")
 

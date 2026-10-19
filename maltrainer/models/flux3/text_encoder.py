@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Any, cast
 
 import torch
 from accelerate import init_empty_weights
@@ -60,7 +60,7 @@ QWEN3VL_4B_TEXT = {
 }
 
 
-def _text_key(key: str) -> Optional[str]:
+def _text_key(key: str) -> str | None:
     for prefix in (
         "text_encoders.qwen3vl_4b.transformer.",
         "model.language_model.",
@@ -77,16 +77,16 @@ def _text_key(key: str) -> Optional[str]:
 
 
 class Flux3TextEncoder(nn.Module):
-    def __init__(self, model: nn.Module, tokenizer):
+    def __init__(self, model: Any, tokenizer: Any) -> None:
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
-        self._captured: Dict[int, torch.Tensor] = {}
+        self._captured: dict[int, torch.Tensor] = {}
         for k in TAP_LAYERS[:-1]:
             model.layers[k].register_forward_pre_hook(self._capture(k), with_kwargs=True)
 
-    def _capture(self, index: int):
-        def hook(_module, args, kwargs):
+    def _capture(self, index: int) -> Any:
+        def hook(_module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
             hidden = args[0] if args else kwargs["hidden_states"]
             self._captured[index] = hidden.detach()
 
@@ -116,10 +116,10 @@ class Flux3TextEncoder(nn.Module):
 
 
 def load_flux3_text_encoder(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
-    tokenizer_path: Union[str, Path, None] = None,
+    tokenizer_path: str | Path | None = None,
     grad_precision: str = "bf16",
 ) -> Flux3TextEncoder:
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
@@ -131,9 +131,9 @@ def load_flux3_text_encoder(
         str(Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS), trust_remote_code=True
     )
 
-    config = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
-    for name, value in QWEN3VL_4B_TEXT.items():
-        setattr(config, name, value)
+    config: Any = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
+    for name, setting in QWEN3VL_4B_TEXT.items():
+        setattr(config, name, setting)
     config.num_hidden_layers = TAP_LAYERS[-1]
     config.use_cache = False
 
@@ -152,7 +152,7 @@ def load_flux3_text_encoder(
         state[target] = value
 
     with init_empty_weights(include_buffers=False):
-        model = Qwen3VLTextModel(config)
+        model: Any = Qwen3VLTextModel(config)
     model.norm = nn.Identity()
 
     if quantized and "embed_tokens.int8_convrot_groupsize" in state:
@@ -161,7 +161,7 @@ def load_flux3_text_encoder(
             config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item())
         )
         embed.weight.data.copy_(state.pop("embed_tokens.weight"))
-        embed.scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
+        cast("torch.Tensor", embed.scale_weight).data.copy_(state.pop("embed_tokens.scale_weight"))
         state.pop("embed_tokens.int8_convrot_groupsize")
         model.embed_tokens = embed
     if quantized:

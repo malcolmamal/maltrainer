@@ -18,26 +18,27 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from safetensors import safe_open
-from torch import nn
+from torch import Tensor, nn
 
 logger = logging.getLogger(__name__)
 
 FP8_FORMATS = {"float8_e4m3fn": torch.float8_e4m3fn, "float8_e5m2": torch.float8_e5m2}
 
 
-def _layer_configs(handle, keys) -> Dict[str, dict]:
+def _layer_configs(handle: Any, keys: Iterable[str]) -> dict[str, dict]:
     """prefix -> per-layer quant config, from whichever marker style the file uses."""
     metadata = handle.metadata() or {}
     if "_quantization_metadata" in metadata:
         return dict(json.loads(metadata["_quantization_metadata"]).get("layers", {}))
 
-    configs: Dict[str, dict] = {}
+    configs: dict[str, dict] = {}
     for key in keys:
         if key.endswith(".comfy_quant"):
             blob = handle.get_tensor(key)
@@ -53,14 +54,14 @@ def _layer_configs(handle, keys) -> Dict[str, dict]:
     return configs
 
 
-def read_comfy_checkpoint(path: str | Path) -> Tuple[Dict[str, torch.Tensor], Dict[str, dict]]:
+def read_comfy_checkpoint(path: str | Path) -> tuple[dict[str, torch.Tensor], dict[str, dict]]:
     """All tensors of a ComfyUI checkpoint plus its quantized-layer table.
 
     Marker tensors (``comfy_quant``, ``scaled_fp8``) are dropped; legacy ``scale_weight``
     is renamed to ``weight_scale``. fp8 weights stored as raw uint8 are viewed as fp8.
     """
     path = Path(path)
-    tensors: Dict[str, torch.Tensor] = {}
+    tensors: dict[str, torch.Tensor] = {}
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
         layers = _layer_configs(handle, keys)
@@ -69,10 +70,8 @@ def read_comfy_checkpoint(path: str | Path) -> Tuple[Dict[str, torch.Tensor], Di
                 continue
             if key.endswith((".scale_input", ".input_scale")):
                 continue  # activation scales only matter to fp8 matmul kernels, not to dequant
-            tensor = handle.get_tensor(key)
-            if key.endswith(".scale_weight"):
-                key = key[: -len(".scale_weight")] + ".weight_scale"
-            tensors[key] = tensor
+            name = key[: -len(".scale_weight")] + ".weight_scale" if key.endswith(".scale_weight") else key
+            tensors[name] = handle.get_tensor(key)
 
     for prefix, config in layers.items():
         fmt = config.get("format")
@@ -90,7 +89,7 @@ def read_comfy_checkpoint(path: str | Path) -> Tuple[Dict[str, torch.Tensor], Di
 CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
 
 
-def container_prefix(keys, candidates=CONTAINER_PREFIXES) -> str:
+def container_prefix(keys: Iterable[str], candidates: Iterable[str] = CONTAINER_PREFIXES) -> str:
     """The ComfyUI container prefix every key carries ("" if none), so a save can write it back."""
     keys = list(keys)
     for prefix in candidates:
@@ -99,7 +98,9 @@ def container_prefix(keys, candidates=CONTAINER_PREFIXES) -> str:
     return ""
 
 
-def strip_prefix(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], candidates=CONTAINER_PREFIXES):
+def strip_prefix(
+    tensors: dict[str, torch.Tensor], layers: dict[str, dict], candidates: Iterable[str] = CONTAINER_PREFIXES
+) -> tuple[dict[str, torch.Tensor], dict[str, dict]]:
     """Drop a ComfyUI container prefix if every key carries it."""
     prefix = container_prefix(tensors, candidates)
     if prefix:
@@ -111,7 +112,7 @@ def strip_prefix(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], cand
 FP8_MAX = float(torch.finfo(torch.float8_e4m3fn).max)  # 448
 
 
-def quantize_rows(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def quantize_rows(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """bf16/fp32 weight -> (fp8 e4m3, per-output-row fp32 scale [out, 1])."""
     w = weight.float()
     scale = (w.abs().amax(dim=1, keepdim=True) / FP8_MAX).clamp(min=1e-12)
@@ -123,9 +124,7 @@ def dequantize(weight: torch.Tensor, scale: torch.Tensor, dtype: torch.dtype) ->
     return (weight.float() * scale.float()).to(dtype)
 
 
-def dequantize_checkpoint(
-    tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], dtype: torch.dtype
-) -> Dict[str, torch.Tensor]:
+def dequantize_checkpoint(tensors: dict[str, Tensor], layers: dict[str, dict], dtype: torch.dtype) -> dict[str, Tensor]:
     """Plain state dict with every fp8 layer dequantized (for small frozen encoders)."""
     out = dict(tensors)
     for prefix in layers:
@@ -143,15 +142,15 @@ class _Fp8LinearFunction(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, x, weight, scale, bias, compute_dtype):
-        w = dequantize(weight, scale, compute_dtype)
+    def forward(ctx: Any, x: Tensor, weight: Tensor, scale: Tensor, bias: Tensor | None, dtype: torch.dtype) -> Tensor:
+        w = dequantize(weight, scale, dtype)
         ctx.save_for_backward(weight, scale)
-        ctx.compute_dtype = compute_dtype
+        ctx.compute_dtype = dtype
         ctx.input_dtype = x.dtype
-        return F.linear(x.to(compute_dtype), w, None if bias is None else bias.to(compute_dtype))
+        return F.linear(x.to(dtype), w, None if bias is None else bias.to(dtype))
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: Tensor) -> tuple[Tensor | None, ...]:
         weight, scale = ctx.saved_tensors
         grad_input = None
         if ctx.needs_input_grad[0]:
@@ -184,10 +183,10 @@ class Fp8ScaledLinear(nn.Module):
 
 def swap_in_fp8_linears(
     model: nn.Module,
-    layers: Dict[str, dict],
+    layers: dict[str, dict],
     compute_dtype: torch.dtype,
-    key_map: Optional[Callable[[str], str]] = None,
-    tensors: Optional[Dict[str, torch.Tensor]] = None,
+    key_map: Callable[[str], str] | None = None,
+    tensors: dict[str, torch.Tensor] | None = None,
 ) -> int:
     """Replace every nn.Linear named in ``layers`` with an Fp8ScaledLinear of the same shape.
 

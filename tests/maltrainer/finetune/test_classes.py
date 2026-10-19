@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
+import re
 
 import pytest
 
@@ -18,7 +18,7 @@ from maltrainer.finetune.classes import class_caption, resolve_classes
         ("photo of c.j", {"c.j": "man"}, "photo of man"),
     ],
 )
-def test_every_trigger_becomes_its_class_word(caption: str, classes: Dict[str, str], expected: str) -> None:
+def test_every_trigger_becomes_its_class_word(caption: str, classes: dict[str, str], expected: str) -> None:
     assert class_caption(caption, classes) == expected
 
 
@@ -47,6 +47,6 @@ def test_the_dataset_trigger_takes_the_class_word_when_no_classes_are_given() ->
         ({"classes": {" ": "woman"}}, None),
     ],
 )
-def test_a_prior_without_any_class_is_an_error(config: dict, trigger: Optional[str]) -> None:
-    with pytest.raises(ValueError, match="prior.weight > 0 needs prior.classes"):
+def test_a_prior_without_any_class_is_an_error(config: dict, trigger: str | None) -> None:
+    with pytest.raises(ValueError, match=re.escape("prior.weight > 0 needs prior.classes")):
         resolve_classes(config, trigger)

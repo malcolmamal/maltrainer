@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Union
 
 import torch
 from accelerate import init_empty_weights
@@ -36,19 +35,19 @@ logger = logging.getLogger(__name__)
 CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
 
 
-def is_int8_convrot(path: Union[str, Path]) -> bool:
+def is_int8_convrot(path: str | Path) -> bool:
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         return any(key.endswith(".comfy_quant") for key in handle.keys())
 
 
-def _strip_container_prefix(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def _strip_container_prefix(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     for prefix in CONTAINER_PREFIXES:
         if state_dict and all(key.startswith(prefix) for key in state_dict):
             return {key[len(prefix) :]: value for key, value in state_dict.items()}
     return state_dict
 
 
-def _to_module_names(state_dict: Dict[str, torch.Tensor]) -> Tuple[Dict[str, torch.Tensor], Dict[str, str]]:
+def _to_module_names(state_dict: dict[str, torch.Tensor]) -> tuple[dict[str, torch.Tensor], dict[str, str]]:
     """BFL's key spellings -> the module names, as ComfyUI's Flux.process_unet_state_dict does.
 
     - QK-norm weights are stored as ``*_norm.scale``.
@@ -56,7 +55,8 @@ def _to_module_names(state_dict: Dict[str, torch.Tensor]) -> Tuple[Dict[str, tor
       inference may use (comfy-kitchen int8 / SOL). It holds no weights; training runs plain
       SDPA, so it is dropped and only reported.
     """
-    out, attention = {}, {}
+    out: dict[str, torch.Tensor] = {}
+    attention: dict[str, int] = {}
     for key, value in state_dict.items():
         if key.endswith(".comfy_attention.config"):
             try:
@@ -67,18 +67,17 @@ def _to_module_names(state_dict: Dict[str, torch.Tensor]) -> Tuple[Dict[str, tor
                 methods = "unreadable"
             attention[methods] = attention.get(methods, 0) + 1
             continue
-        if key.endswith("_norm.scale"):
-            key = key[: -len(".scale")] + ".weight"
-        out[key] = value
+        name = key[: -len(".scale")] + ".weight" if key.endswith("_norm.scale") else key
+        out[name] = value
     return out, {method: f"{count} blocks" for method, count in attention.items()}
 
 
 def load_flux3_transformer(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
     grad_precision: str = "bf16",
-) -> Tuple[Flux3Transformer, dict]:
+) -> tuple[Flux3Transformer, dict]:
     """The frozen DiT on ``device``, plus a small summary for the checkpoint metadata."""
     path = Path(path)
     if not path.exists():

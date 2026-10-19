@@ -29,11 +29,11 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import cast
 
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import Tensor, nn
 from torch.utils.checkpoint import checkpoint
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class Flux3Config:
     mlp_ratio: float = 3.0
 
     @classmethod
-    def from_state_dict(cls, state_dict: Dict[str, torch.Tensor]) -> "Flux3Config":
+    def from_state_dict(cls, state_dict: dict[str, torch.Tensor]) -> Flux3Config:
         """comfy/model_detection.py's FLUX.3 branch."""
         keys = state_dict.keys()
         if (
@@ -116,7 +116,7 @@ def apply_rope(x: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
     return out.reshape(*x.shape).type_as(x)
 
 
-def image_ids(h: int, w: int, index: int, device) -> torch.Tensor:
+def image_ids(h: int, w: int, index: int, device: torch.device | str) -> torch.Tensor:
     ids = torch.zeros(h, w, 4, device=device, dtype=torch.float32)
     ids[..., 1] = torch.arange(h, device=device, dtype=torch.float32)[:, None] * IMAGE_ROPE_SCALE
     ids[..., 2] = torch.arange(w, device=device, dtype=torch.float32)[None, :] * IMAGE_ROPE_SCALE
@@ -124,7 +124,7 @@ def image_ids(h: int, w: int, index: int, device) -> torch.Tensor:
     return ids.flatten(0, 1)
 
 
-def text_ids(length: int, device) -> torch.Tensor:
+def text_ids(length: int, device: torch.device | str) -> torch.Tensor:
     ids = torch.zeros(length, 4, device=device, dtype=torch.float32)
     ids[:, 3] = torch.arange(length, device=device, dtype=torch.float32)
     return ids
@@ -168,7 +168,7 @@ class Modulation(nn.Module):
         super().__init__()
         self.lin = nn.Linear(dim, 3 * dim, bias=False)
 
-    def forward(self, vec: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, vec: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         shift, scale, gate = self.lin(F.silu(vec[:, None, :])).chunk(3, dim=-1)
         return shift, scale, gate
 
@@ -229,17 +229,17 @@ class LastLayer(nn.Module):
 
 
 class Flux3Transformer(nn.Module):
-    def __init__(self, config: Flux3Config = Flux3Config()):
+    def __init__(self, config: Flux3Config | None = None):
         super().__init__()
-        self.config = config
+        self.config = config = config or Flux3Config()
         h = config.hidden_size
         self.emb_in = nn.ModuleDict({m: nn.Linear(LATENT_CHANNELS, h, bias=False) for m in CONTENT_MODES})
         self.txt_in = nn.Linear(CONTEXT_DIM, h, bias=False)
         self.time_in = MLPEmbedder(256, h)
         if config.flow_map:
             self.ref_time_in = MLPEmbedder(256, h)
-        self.early_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in CONTENT_MODES + ("txt",)})
-        self.single_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in CONTENT_MODES + ("txt",)})
+        self.early_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in (*CONTENT_MODES, "txt")})
+        self.single_stream_modulations = nn.ModuleDict({m: Modulation(h) for m in (*CONTENT_MODES, "txt")})
 
         def block() -> Block:
             return Block(h, config.num_heads, config.mlp_ratio, config.fused_qkv)
@@ -258,7 +258,7 @@ class Flux3Transformer(nn.Module):
     def enable_gradient_checkpointing(self) -> None:
         self.gradient_checkpointing = True
 
-    def _run(self, block: Block, x, shift, scale, gate, pe):
+    def _run(self, block: nn.Module, x: Tensor, shift: Tensor, scale: Tensor, gate: Tensor, pe: Tensor) -> Tensor:
         if self.gradient_checkpointing and torch.is_grad_enabled():
             return checkpoint(block, x, shift, scale, gate, pe, use_reentrant=False)
         return block(x, shift, scale, gate, pe)
@@ -289,17 +289,15 @@ class Flux3Transformer(nn.Module):
         pe = rope_from_ids(torch.cat([img_ids, text_ids(txt.shape[1], device)]))
         n_img = H * W
         shift, scale, gate = self.early_stream_modulations["image"](vec_img)
-        for block in self.content_mode_blocks["image"]:
+        for block in cast("nn.ModuleList", self.content_mode_blocks["image"]):
             img = self._run(block, img, shift, scale, gate, pe[:, :, :n_img])
 
         # joint [image | text]: every row modulated by its own mode
         joint = torch.cat([img, txt], dim=1)
         img_mod = self.single_stream_modulations["image"](vec_img)
         txt_mod = self.single_stream_modulations["txt"](vec_zero)
-        n_txt = txt.shape[1]
-        shift, scale, gate = (
-            torch.cat([i.expand(B, n_img, -1), t.expand(B, n_txt, -1)], dim=1) for i, t in zip(img_mod, txt_mod)
-        )
+        n_txt, pairs = txt.shape[1], zip(img_mod, txt_mod, strict=False)
+        shift, scale, gate = (torch.cat([i.expand(B, n_img, -1), t.expand(B, n_txt, -1)], dim=1) for i, t in pairs)
         for block in self.single_blocks:
             joint = self._run(block, joint, shift, scale, gate, pe)
 

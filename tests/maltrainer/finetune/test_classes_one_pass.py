@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import random
 import re
-from typing import Dict, Optional
 
 from maltrainer.finetune.classes import class_caption
 
@@ -16,7 +15,7 @@ FILLER = ["photo", "of", "a", "with", "and", "annabelle", "bobby", "smith", "sks
 SEPARATORS = [" ", " ", ", ", ". ", "-", "'s ", "\n", "(", ")"]
 
 
-def one_trigger_at_a_time(caption: str, classes: Dict[str, str]) -> Optional[str]:
+def one_trigger_at_a_time(caption: str, classes: dict[str, str]) -> str | None:
     out, hit = caption, False
     for trigger in sorted(classes, key=len, reverse=True):
         pattern = re.compile(rf"(?<![\w]){re.escape(trigger)}(?![\w])", re.IGNORECASE)

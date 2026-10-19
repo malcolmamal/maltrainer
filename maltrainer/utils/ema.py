@@ -5,8 +5,8 @@ Exponential moving average of trainable weights: adapters on the GPU, whole mode
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 
@@ -20,7 +20,7 @@ class ParameterEMA:
     """
 
     def __init__(self, parameters: Iterable[torch.nn.Parameter], decay: float = 0.98, warmup: bool = True):
-        self.parameters: List[torch.nn.Parameter] = [p for p in parameters if p.requires_grad]
+        self.parameters: list[torch.nn.Parameter] = [p for p in parameters if p.requires_grad]
         self.decay = float(decay)
         self.warmup = bool(warmup)
         self.updates = 0
@@ -34,7 +34,7 @@ class ParameterEMA:
     @torch.no_grad()
     def update(self) -> None:
         weight = 1.0 - self.current_decay()
-        for shadow, param in zip(self.shadow, self.parameters):
+        for shadow, param in zip(self.shadow, self.parameters, strict=False):
             shadow.lerp_(param.detach().float(), weight)
         self.updates += 1
 
@@ -43,13 +43,13 @@ class ParameterEMA:
         """Temporarily load the averaged weights into the live parameters."""
         with torch.no_grad():
             backup = [param.detach().clone() for param in self.parameters]
-            for shadow, param in zip(self.shadow, self.parameters):
+            for shadow, param in zip(self.shadow, self.parameters, strict=False):
                 param.copy_(shadow.to(param.dtype))
         try:
             yield
         finally:
             with torch.no_grad():
-                for saved, param in zip(backup, self.parameters):
+                for saved, param in zip(backup, self.parameters, strict=False):
                     param.copy_(saved)
 
 
@@ -64,14 +64,14 @@ class OffloadedParameterEMA:
 
     def __init__(
         self,
-        named_parameters: Iterable[Tuple[str, torch.nn.Parameter]],
+        named_parameters: Iterable[tuple[str, torch.nn.Parameter]],
         decay: float = 0.999,
         warmup: bool = True,
         every: int = 1,
     ):
         named = [(name, p) for name, p in named_parameters if p.requires_grad]
-        self.names: List[str] = [name for name, _ in named]
-        self.parameters: List[torch.nn.Parameter] = [p for _, p in named]
+        self.names: list[str] = [name for name, _ in named]
+        self.parameters: list[torch.nn.Parameter] = [p for _, p in named]
         self.decay = float(decay)
         self.warmup = bool(warmup)
         self.every = max(int(every), 1)
@@ -82,7 +82,7 @@ class OffloadedParameterEMA:
         # "average" would then be the live weights.
         self.shadow = [p.detach().to("cpu", torch.float32, copy=True) for p in self.parameters]
         self.staging = [torch.empty(p.shape, dtype=p.dtype, pin_memory=pin) for p in self.parameters]
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     def current_decay(self) -> float:
         decay = self.decay if not self.warmup else min(self.decay, (1.0 + self.updates) / (10.0 + self.updates))
@@ -99,7 +99,7 @@ class OffloadedParameterEMA:
         if self.calls % self.every:
             return
         self.wait()
-        for staged, param in zip(self.staging, self.parameters):
+        for staged, param in zip(self.staging, self.parameters, strict=False):
             staged.copy_(param.detach(), non_blocking=True)
         if torch.cuda.is_available():
             torch.cuda.current_stream().synchronize()  # staged before the next step moves the weights
@@ -112,15 +112,15 @@ class OffloadedParameterEMA:
         # Chunked so the fp32 copy of the staged bf16 stays in cache: 1.1 s for 5.08B on a
         # 9800X3D, against 2.9 s converting whole tensors (it is memory-bound either way).
         with torch.no_grad():
-            for shadow, staged in zip(self.shadow, self.staging):
+            for shadow, staged in zip(self.shadow, self.staging, strict=False):
                 flat_shadow, flat_staged = shadow.view(-1), staged.view(-1)
                 for i in range(0, flat_shadow.numel(), chunk):
                     flat_shadow[i : i + chunk].lerp_(flat_staged[i : i + chunk].float(), weight)
 
-    def averaged(self) -> Dict[str, torch.Tensor]:
+    def averaged(self) -> dict[str, torch.Tensor]:
         """name -> fp32 CPU average (the live shadow tensors; do not modify)."""
         self.wait()
-        return dict(zip(self.names, self.shadow))
+        return dict(zip(self.names, self.shadow, strict=False))
 
     @contextmanager
     def applied(self) -> Iterator[None]:
@@ -129,30 +129,30 @@ class OffloadedParameterEMA:
         free between updates, so this needs no extra memory; it moves the model over PCIe twice."""
         self.wait()
         with torch.no_grad():
-            for staged, param, shadow in zip(self.staging, self.parameters, self.shadow):
+            for staged, param, _shadow in zip(self.staging, self.parameters, self.shadow, strict=False):
                 staged.copy_(param.detach(), non_blocking=True)
             if torch.cuda.is_available():
                 torch.cuda.current_stream().synchronize()
-            for param, shadow in zip(self.parameters, self.shadow):
+            for param, shadow in zip(self.parameters, self.shadow, strict=False):
                 param.copy_(shadow.to(param.device, non_blocking=True))
         try:
             yield
         finally:
             with torch.no_grad():
-                for staged, param in zip(self.staging, self.parameters):
+                for staged, param in zip(self.staging, self.parameters, strict=False):
                     param.copy_(staged.to(param.device, non_blocking=True))
                 if torch.cuda.is_available():
                     torch.cuda.current_stream().synchronize()
 
-    def state(self) -> Tuple[Dict[str, torch.Tensor], Dict[str, int]]:
+    def state(self) -> tuple[dict[str, torch.Tensor], dict[str, int]]:
         return self.averaged(), {"updates": self.updates, "calls": self.calls}
 
-    def load_state(self, tensors: Dict[str, torch.Tensor], counters: Dict[str, int]) -> None:
+    def load_state(self, tensors: dict[str, torch.Tensor], counters: dict[str, int]) -> None:
         self.wait()
         missing = [name for name in self.names if name not in tensors]
         if missing:
             raise ValueError(f"EMA state lacks {len(missing)} trained parameters, e.g. {missing[:3]}")
-        for name, shadow in zip(self.names, self.shadow):
+        for name, shadow in zip(self.names, self.shadow, strict=False):
             shadow.copy_(tensors[name])
         self.updates = int(counters.get("updates", 0))
         self.calls = int(counters.get("calls", 0))

@@ -14,9 +14,9 @@ posterior mean with ``(z - mean) / std`` (Wan21.process_in, scale_factor 1.0).
 
 from __future__ import annotations
 
+import itertools
 import logging
 from pathlib import Path
-from typing import Union
 
 import torch
 import torch.nn.functional as F
@@ -104,7 +104,7 @@ class ResidualBlock(nn.Module):
         )
         self.shortcut = CausalConv2d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.residual(x) + self.shortcut(x)
 
 
@@ -115,13 +115,12 @@ class AttentionBlock(nn.Module):
         self.to_qkv = nn.Conv2d(dim, dim * 3, 1)
         self.proj = nn.Conv2d(dim, dim, 1)
 
-    def forward(self, x):
-        identity = x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, h, w = x.shape
         q, k, v = self.to_qkv(self.norm(x)).chunk(3, dim=1)
         q, k, v = (t.reshape(b, 1, c, h * w).transpose(-1, -2) for t in (q, k, v))
         out = F.scaled_dot_product_attention(q, k, v).transpose(-1, -2).reshape(b, c, h, w)
-        return self.proj(out) + identity
+        return self.proj(out) + x
 
 
 class Resample(nn.Module):
@@ -132,7 +131,7 @@ class Resample(nn.Module):
         self.resample = nn.Sequential(nn.ZeroPad2d((0, 1, 0, 1)), nn.Conv2d(dim, dim, 3, stride=2))
         self.temporal = temporal
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.resample(x)
 
 
@@ -141,19 +140,17 @@ class WanImageEncoder(nn.Module):
         self,
         dim: int = 96,
         z_dim: int = 16,
-        dim_mult=(1, 2, 4, 4),
+        dim_mult: tuple[int, ...] = (1, 2, 4, 4),
         num_res_blocks: int = 2,
-        temporal_downsample=(False, True, True),
+        temporal_downsample: tuple[bool, ...] = (False, True, True),
         image_channels: int = 3,
-    ):
+    ) -> None:
         super().__init__()
-        dims = [dim * u for u in (1,) + tuple(dim_mult)]
+        dims = [dim * u for u in (1, *tuple(dim_mult))]
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
-        layers = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
-            for _ in range(num_res_blocks):
-                layers.append(ResidualBlock(in_dim, out_dim))
-                in_dim = out_dim
+        layers: list[nn.Module] = []
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
+            layers += [ResidualBlock(in_dim if j == 0 else out_dim, out_dim) for j in range(num_res_blocks)]
             if i != len(dim_mult) - 1:
                 layers.append(Resample(out_dim, temporal_downsample[i]))
         self.downsamples = nn.Sequential(*layers)
@@ -164,7 +161,7 @@ class WanImageEncoder(nn.Module):
             RMSNorm(out_dim, images=False), nn.SiLU(), CausalConv2d(out_dim, z_dim * 2, 3, padding=1)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.middle(self.downsamples(self.conv1(x))))
 
 
@@ -187,7 +184,7 @@ class Krea2VAE(nn.Module):
         return (mu - self.latents_mean.to(mu.device)) / self.latents_std.to(mu.device)
 
 
-def load_krea2_vae(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32) -> Krea2VAE:
+def load_krea2_vae(path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32) -> Krea2VAE:
     """Load the encoder from ComfyUI's wan_2.1_vae.safetensors (decoder tensors are ignored)."""
     state = load_file(str(path))
     dim = int(state["encoder.conv1.weight"].shape[0]) if "encoder.conv1.weight" in state else 96

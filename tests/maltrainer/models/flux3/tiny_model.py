@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 
 from maltrainer.models.flux3.model import CONTEXT_DIM, LATENT_CHANNELS, Flux3Config, Flux3Transformer
@@ -18,7 +16,7 @@ def tiny_transformer(config: Flux3Config = TINY, seed: int = 0) -> Flux3Transfor
     return model.eval()
 
 
-def tiny_inputs(batch: int = 2, h: int = 2, w: int = 3, length: int = 4) -> Tuple[torch.Tensor, ...]:
+def tiny_inputs(batch: int = 2, h: int = 2, w: int = 3, length: int = 4) -> tuple[torch.Tensor, ...]:
     generator = torch.Generator().manual_seed(7)
     x = torch.randn(batch, LATENT_CHANNELS, h, w, generator=generator)
     sigma = torch.linspace(0.25, 0.75, batch)

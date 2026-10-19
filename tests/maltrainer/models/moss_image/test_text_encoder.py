@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-from typing import List
 
 import pytest
 import torch
@@ -23,7 +22,7 @@ class FakeTokenizer:
 
     def __init__(self, count: int | None = None) -> None:
         self.count = count
-        self.seen: List[tuple] = []
+        self.seen: list[tuple] = []
 
     def __call__(self, text: str, add_special_tokens: bool = True):
         self.seen.append((text, add_special_tokens))
@@ -33,7 +32,7 @@ class FakeTokenizer:
 class IdsToFeatures(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.calls: List[torch.Tensor] = []
+        self.calls: list[torch.Tensor] = []
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         self.calls.append(input_ids)

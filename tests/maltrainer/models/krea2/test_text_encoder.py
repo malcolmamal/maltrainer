@@ -1,193 +1,106 @@
-from __future__ import annotations
+"""Krea 2 text conditioning: the 12-layer hidden-state tap and the checkpoint loader, on a tiny Qwen3-VL."""
 
-import re
-from types import SimpleNamespace
+from __future__ import annotations
 
 import pytest
 import torch
-from torch import nn
+from safetensors.torch import save_file
+from transformers import AutoTokenizer
 
 from maltrainer.models.krea2 import text_encoder as te
-from maltrainer.models.krea2.text_encoder import (
-    IM_START,
-    NEWLINE,
-    TAP_LAYERS,
-    TEMPLATE,
-    USER,
-    Krea2TextEncoder,
-    _prefix_end,
-    _text_key,
-)
+from maltrainer.models.krea2.text_encoder import Krea2TextEncoder, _prefix_end, load_krea2_text_encoder
 
-CPU = torch.device("cpu")
-IM_END = 151645
-SPECIAL = {"<|im_start|>": IM_START, "<|im_end|>": IM_END, "user": USER, "\n": NEWLINE}
+from .tiny import CPU
+from .tiny_text import TAPS, TINY_TEXT, tiny_text_model
 
 
-class AddOne(nn.Module):
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return hidden_states + 1.0
+@pytest.fixture(autouse=True)
+def tiny_encoder_settings(monkeypatch):
+    monkeypatch.setattr(te, "TAP_LAYERS", TAPS)
+    monkeypatch.setattr(te, "QWEN3VL_4B_TEXT", TINY_TEXT)
 
 
-class StubModel(nn.Module):
-    """35 layers that each add one to a two-wide copy of the token id, so every tap is known by hand."""
-
-    def __init__(self, as_tuple: bool = False) -> None:
-        super().__init__()
-        self.layers = nn.ModuleList([AddOne() for _ in range(35)])
-        self.as_tuple = as_tuple
-        self.calls: list = []
-
-    def forward(self, **kwargs: torch.Tensor) -> object:
-        self.calls.append(kwargs)
-        h = kwargs["input_ids"].float()[..., None].repeat(1, 1, 2)
-        for layer in self.layers:
-            h = layer(h)
-        return (h,) if self.as_tuple else SimpleNamespace(last_hidden_state=h)
+@pytest.fixture(scope="module")
+def tokenizer():
+    return AutoTokenizer.from_pretrained(str(te.TOKENIZER_ASSETS), trust_remote_code=True)
 
 
-class FakeTokenizer:
-    """Chat-template tokens get their real ids, every other character its code point."""
-
-    def __init__(self) -> None:
-        self.texts: list = []
-        self.decoded: list = []
-
-    def __call__(self, text: str, add_special_tokens: bool) -> SimpleNamespace:
-        assert add_special_tokens is False
-        self.texts.append(text)
-        pieces = re.split(r"(<\|im_start\|>|<\|im_end\|>|\n|user)", text)
-        ids = [SPECIAL[p] if p in SPECIAL else ord(c) for p in pieces for c in ([p] if p in SPECIAL else p)]
-        return SimpleNamespace(input_ids=ids)
-
-    def decode(self, ids: list) -> str:
-        self.decoded.append(ids)
-        return "".join(chr(i) for i in ids)
-
-
-def _encoder(**kwargs: object) -> Krea2TextEncoder:
-    return Krea2TextEncoder(StubModel(**kwargs), FakeTokenizer())
-
-
-@pytest.mark.parametrize(
-    ("ids", "expected"),
-    [
-        ([IM_START, 1, 2, IM_START, USER, NEWLINE, 7, 8], 6),
-        ([IM_START, 1, IM_START, USER, NEWLINE, 7, IM_START, 9], 5),
-        ([IM_START, USER, NEWLINE, 7], 3),
-        ([IM_START, 1, IM_START, 5, 6, 7], 2),
-        ([IM_START, 1, IM_START, USER, NEWLINE], 2),
-        ([1, 2, 3], 0),
-        ([], 0),
-    ],
-)
-def test_the_prefix_ends_after_the_second_turn_header_when_it_is_followed_by_user_and_a_newline(
-    ids: list, expected: int
-) -> None:
-    assert _prefix_end(ids) == expected
-
-
-def test_the_prefix_up_to_the_users_text_is_dropped_but_the_assistant_suffix_stays() -> None:
-    encoder = _encoder()
-
-    out = encoder.encode("ab", CPU, dtype=torch.float32)
-
-    suffix = 1 + 1 + 1 + len("assistant") + 1
-    assert out.shape == (2 + suffix, 12, 2)
-    assert out[0, 0, 0].item() == ord("a") + TAP_LAYERS[0]
-    assert out[2, 0, 0].item() == IM_END + TAP_LAYERS[0]
-
-
-def test_the_prompt_goes_through_the_image_description_system_template() -> None:
-    encoder = _encoder()
-
-    encoder.encode("a red fox", CPU)
-
-    assert encoder.tokenizer.texts[0] == "a red fox"
-    text = encoder.tokenizer.texts[-1]
-    assert text == TEMPLATE.format("a red fox")
-    assert text.startswith("<|im_start|>system\nDescribe the image by detailing the color, shape, size, texture")
-    assert text.endswith("a red fox<|im_end|>\n<|im_start|>assistant\n")
-
-
-def test_twelve_hidden_states_are_stacked_per_token_with_the_last_from_the_model_output() -> None:
-    out = _encoder().encode("a", CPU, dtype=torch.float32)
-
-    base = float(ord("a"))
-    assert out[0, :, 0].tolist() == [base + k for k in TAP_LAYERS[:-1]] + [base + 35]
-    assert [2 + 3 * i for i in range(12)] == TAP_LAYERS
-
-
-def test_a_model_that_returns_a_tuple_is_read_the_same_way() -> None:
-    plain = _encoder().encode("ab", CPU)
-
-    assert torch.equal(_encoder(as_tuple=True).encode("ab", CPU), plain)
-
-
-def test_the_model_sees_every_token_unmasked_and_the_output_defaults_to_bf16() -> None:
-    encoder = _encoder()
-
-    out = encoder.encode("ab", CPU)
-
-    call = encoder.model.calls[0]
-    assert call["attention_mask"].all() and call["use_cache"] is False
-    assert call["input_ids"].shape[0] == 1
-    assert out.dtype == torch.bfloat16
-
-
-def test_a_prompt_over_the_token_cap_is_cut_before_templating() -> None:
-    encoder = _encoder()
-
-    encoder.encode("abcdef", CPU, max_prompt_tokens=3)
-
-    assert encoder.tokenizer.decoded == [[ord("a"), ord("b"), ord("c")]]
-    assert encoder.tokenizer.texts[-1] == TEMPLATE.format("abc")
-
-
-def test_a_prompt_within_the_cap_is_not_decoded_again() -> None:
-    encoder = _encoder()
-
-    encoder.encode("abc", CPU, max_prompt_tokens=3)
-
-    assert encoder.tokenizer.decoded == []
-    assert encoder.tokenizer.texts[-1] == TEMPLATE.format("abc")
-
-
-def test_the_capture_hook_reads_the_hidden_states_from_kwargs_when_called_without_positionals() -> None:
-    encoder = _encoder()
-    hidden = torch.ones(1, 2, 2, requires_grad=True)
-
-    encoder._capture(2)(None, (), {"hidden_states": hidden})
-
-    assert not encoder._captured[2].requires_grad
-
-
-@pytest.mark.parametrize(
-    ("key", "expected"),
-    [
-        ("text_encoders.qwen3vl_4b.transformer.layers.0.mlp.up_proj.weight", "layers.0.mlp.up_proj.weight"),
-        ("model.language_model.layers.1.input_layernorm.weight", "layers.1.input_layernorm.weight"),
-        ("language_model.model.embed_tokens.weight", "embed_tokens.weight"),
-        ("language_model.layers.2.self_attn.q_norm.weight", "layers.2.self_attn.q_norm.weight"),
-        ("model.norm.weight", "norm.weight"),
-        ("layers.3.mlp.down_proj.weight", "layers.3.mlp.down_proj.weight"),
-        ("model.visual.blocks.0.attn.weight", None),
-        ("visual.blocks.0.attn.weight", None),
-        ("lm_head.weight", None),
-    ],
-)
-def test_checkpoint_key_spellings_map_to_the_text_model_or_are_dropped(key: str, expected: str | None) -> None:
-    assert _text_key(key) == expected
-
-
-def test_the_template_token_ids_match_the_vendored_qwen3_vl_tokenizer() -> None:
-    from transformers import AutoTokenizer
-
-    tokenizer = AutoTokenizer.from_pretrained(str(te.TOKENIZER_ASSETS))
-
-    ids = tokenizer(TEMPLATE.format("hi"), add_special_tokens=False).input_ids
-
+def test_encode_stacks_the_tapped_hidden_states_and_drops_only_the_template_prefix(tokenizer):
+    model = tiny_text_model()
+    encoder = Krea2TextEncoder(model, tokenizer)
+    out = encoder.encode("a cat", CPU, dtype=torch.float32)
+    ids = tokenizer(te.TEMPLATE.format("a cat"), add_special_tokens=False).input_ids
     start = _prefix_end(ids)
-    assert ids[0] == IM_START == tokenizer.convert_tokens_to_ids("<|im_start|>")
-    assert tokenizer.decode(ids[start : start + 1]) == "hi"
-    assert tokenizer.decode(ids[start - 3 : start]) == "<|im_start|>user\n"
+    with torch.no_grad():
+        hidden = model(input_ids=torch.tensor([ids]), output_hidden_states=True).hidden_states
+    assert out.shape == (len(ids) - start, 3, 16)
+    for position, layer in enumerate(TAPS):
+        assert torch.allclose(out[:, position], hidden[layer][0, start:], atol=1e-5), layer
+
+
+def test_encode_returns_the_requested_dtype(tokenizer):
+    encoder = Krea2TextEncoder(tiny_text_model(), tokenizer)
+    assert encoder.encode("a cat", CPU, dtype=torch.bfloat16).dtype == torch.bfloat16
+
+
+def test_prompt_tokens_still_attend_to_the_dropped_prefix(tokenizer):
+    model = tiny_text_model()
+    encoder = Krea2TextEncoder(model, tokenizer)
+    full = encoder.encode("a cat", CPU, dtype=torch.float32)
+    ids = tokenizer("a cat", add_special_tokens=False).input_ids
+    bare = model(input_ids=torch.tensor([ids]), use_cache=False).last_hidden_state[0]
+    assert not torch.allclose(full[: len(ids), -1], bare, atol=1e-4)
+
+
+def test_encode_is_deterministic_and_prompt_dependent(tokenizer):
+    encoder = Krea2TextEncoder(tiny_text_model(), tokenizer)
+    cat = encoder.encode("a cat", CPU, dtype=torch.float32)
+    assert torch.equal(cat, encoder.encode("a cat", CPU, dtype=torch.float32))
+    dog = encoder.encode("a dog", CPU, dtype=torch.float32)
+    assert dog.shape == cat.shape and not torch.allclose(dog, cat)
+
+
+def test_prompts_longer_than_the_cap_are_cut_to_that_many_tokens(tokenizer):
+    encoder = Krea2TextEncoder(tiny_text_model(), tokenizer)
+    prompt = "one two three four five six"
+    cut = encoder.encode(prompt, CPU, dtype=torch.float32, max_prompt_tokens=3)
+    ids = tokenizer(prompt, add_special_tokens=False).input_ids
+    expected = encoder.encode(tokenizer.decode(ids[:3]), CPU, dtype=torch.float32)
+    assert torch.equal(cut, expected)
+    assert cut.shape[0] == encoder.encode(prompt, CPU, dtype=torch.float32).shape[0] - (len(ids) - 3)
+
+
+@pytest.fixture
+def encoder_file(tmp_path):
+    model = tiny_text_model()
+    state = {f"model.{k}": v.clone() for k, v in model.state_dict().items()}
+    state["model.norm.weight"] = torch.ones(16)  # the final norm is replaced by an Identity
+    state["model.layers.3.self_attn.q_proj.weight"] = torch.zeros(2)  # beyond the truncated depth
+    state["model.visual.blocks.0.attn.qkv.weight"] = torch.zeros(2)
+    state["lm_head.weight"] = torch.zeros(2)
+    path = tmp_path / "qwen3vl_4b.safetensors"
+    save_file(state, str(path))
+    return model, path
+
+
+def test_loader_builds_a_truncated_encoder_that_matches_the_checkpoint_weights(encoder_file):
+    model, path = encoder_file
+    encoder = load_krea2_text_encoder(path, CPU, dtype=torch.float32)
+    assert len(encoder.model.layers) == 3 and isinstance(encoder.model.norm, torch.nn.Identity)
+    assert not any(p.requires_grad for p in encoder.model.parameters()) and not encoder.model.training
+    reference = Krea2TextEncoder(model, encoder.tokenizer).encode("a cat", CPU, dtype=torch.float32)
+    assert torch.allclose(encoder.encode("a cat", CPU, dtype=torch.float32), reference, atol=1e-5)
+
+
+def test_loader_casts_to_the_requested_dtype(encoder_file):
+    encoder = load_krea2_text_encoder(encoder_file[1], CPU, dtype=torch.bfloat16)
+    assert encoder.model.embed_tokens.weight.dtype == torch.bfloat16
+
+
+def test_loader_refuses_a_file_that_is_not_a_qwen3_vl_text_encoder(tmp_path, encoder_file):
+    model, _ = encoder_file
+    state = {f"model.{k}": v for k, v in model.state_dict().items() if "q_proj" not in k}
+    path = tmp_path / "bad.safetensors"
+    save_file({k: v.contiguous() for k, v in state.items()}, str(path))
+    with pytest.raises(ValueError, match="does not look like a Qwen3-VL-4B text encoder"):
+        load_krea2_text_encoder(path, CPU)

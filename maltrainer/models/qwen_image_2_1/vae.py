@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import cast
 
 import safetensors.torch
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ class ResBlock(nn.Module):
             CausalConv3d(out_channels, out_channels, 3, padding=1),
         )
         if in_channels != out_channels:
-            self.shortcut = CausalConv3d(in_channels, out_channels, 1)
+            self.shortcut: nn.Module = CausalConv3d(in_channels, out_channels, 1)
         else:
             self.shortcut = nn.Identity()
 
@@ -334,9 +334,9 @@ class DupUp3D(nn.Module):
 class EncoderStage(nn.Module):
     def __init__(
         self,
-        res_blocks: List[nn.Module],
-        downsample: Optional[nn.Module] = None,
-        shortcut: Optional[nn.Module] = None,
+        res_blocks: list[nn.Module],
+        downsample: nn.Module | None = None,
+        shortcut: nn.Module | None = None,
     ):
         super().__init__()
         self.downsamples = nn.ModuleList(res_blocks)
@@ -356,9 +356,9 @@ class EncoderStage(nn.Module):
 class DecoderStage(nn.Module):
     def __init__(
         self,
-        res_blocks: List[nn.Module],
-        upsample: Optional[nn.Module] = None,
-        shortcut: Optional[nn.Module] = None,
+        res_blocks: list[nn.Module],
+        upsample: nn.Module | None = None,
+        shortcut: nn.Module | None = None,
     ):
         super().__init__()
         self.upsamples = nn.ModuleList(res_blocks)
@@ -502,26 +502,22 @@ class QwenImage21VAE(nn.Module):
         self.post_quant_conv = CausalConv3d(z_dim, z_dim, 1) if include_decoder else None
 
         self.register_buffer(
-            "latents_mean",
-            torch.tensor(LATENTS_MEAN, dtype=torch.float32).view(1, -1, 1, 1),
-            persistent=False,
+            "latents_mean", torch.tensor(LATENTS_MEAN, dtype=torch.float32).view(1, -1, 1, 1), persistent=False
         )
         self.register_buffer(
-            "latents_std",
-            torch.tensor(LATENTS_STD, dtype=torch.float32).view(1, -1, 1, 1),
-            persistent=False,
+            "latents_std", torch.tensor(LATENTS_STD, dtype=torch.float32).view(1, -1, 1, 1), persistent=False
         )
 
     def normalize_latents(self, latents: torch.Tensor) -> torch.Tensor:
         """Normalize latents using channel-wise mean and std."""
-        mean = self.latents_mean.to(device=latents.device, dtype=latents.dtype)
-        std = self.latents_std.to(device=latents.device, dtype=latents.dtype)
+        mean = self.get_buffer("latents_mean").to(device=latents.device, dtype=latents.dtype)
+        std = self.get_buffer("latents_std").to(device=latents.device, dtype=latents.dtype)
         return (latents - mean) / std
 
     def unnormalize_latents(self, latents: torch.Tensor) -> torch.Tensor:
         """Unnormalize latents using channel-wise mean and std."""
-        mean = self.latents_mean.to(device=latents.device, dtype=latents.dtype)
-        std = self.latents_std.to(device=latents.device, dtype=latents.dtype)
+        mean = self.get_buffer("latents_mean").to(device=latents.device, dtype=latents.dtype)
+        std = self.get_buffer("latents_std").to(device=latents.device, dtype=latents.dtype)
         return latents * std + mean
 
     def encode(self, x: torch.Tensor, deterministic: bool = True) -> torch.Tensor:
@@ -551,7 +547,7 @@ class QwenImage21VAE(nn.Module):
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         """Decode normalized latents [B, 64, H/16, W/16] into images [B, 3, H, W] in range [0, 1]."""
-        if self.decoder is None:
+        if self.decoder is None or self.post_quant_conv is None:
             raise RuntimeError("Decoder was not loaded for this VAE instance.")
         z = self.unnormalize_latents(z)
         out = self.decoder(self.post_quant_conv(z))
@@ -563,8 +559,8 @@ class QwenImage21VAE(nn.Module):
 
 
 def load_qwen_image_2_1_vae(
-    vae_path: Union[str, Path],
-    device: torch.device = torch.device("cuda"),
+    vae_path: str | Path,
+    device: str | torch.device = "cuda",
     dtype: torch.dtype = torch.bfloat16,
     include_decoder: bool = False,
 ) -> QwenImage21VAE:
@@ -595,12 +591,12 @@ def load_qwen_image_2_1_vae(
             for k in f.keys():
                 if k.startswith("decoder."):
                     dec_sd[k[len("decoder.") :]] = f.get_tensor(k)
-            model.decoder.load_state_dict(dec_sd, strict=True)
+            cast(Qwen21VAEDecoder, model.decoder).load_state_dict(dec_sd, strict=True)
 
             post_sd = {k[len("conv2.") :]: f.get_tensor(k) for k in f.keys() if k.startswith("conv2.")}
             if not post_sd:
                 raise KeyError(f"VAE checkpoint {vae_path} has no root `conv2.*` (post_quant_conv) weights")
-            model.post_quant_conv.load_state_dict(post_sd, strict=True)
+            cast(CausalConv3d, model.post_quant_conv).load_state_dict(post_sd, strict=True)
 
     model.requires_grad_(False)
     model.to(device=device, dtype=dtype)

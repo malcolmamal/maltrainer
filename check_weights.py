@@ -2,9 +2,10 @@ import sys
 
 import safetensors.torch as safetensors
 import torch
+from safetensors import SafetensorError
 
 
-def check_weights(path):
+def check_weights(path: str) -> None:
     try:
         tensors = safetensors.load_file(path)
         print(f"Checking statistics for {path}...")
@@ -21,10 +22,12 @@ def check_weights(path):
         all_down = torch.cat([w.flatten() for w in down_weights])
 
         print(
-            f"UP/B Weights - Mean: {all_up.mean().item():.6f}, Std: {all_up.std().item():.6f}, Max: {all_up.max().item():.6f}"
+            f"UP/B Weights - Mean: {all_up.mean().item():.6f}, Std: {all_up.std().item():.6f}, "
+            f"Max: {all_up.max().item():.6f}"
         )
         print(
-            f"DOWN/A Weights - Mean: {all_down.mean().item():.6f}, Std: {all_down.std().item():.6f}, Max: {all_down.max().item():.6f}"
+            f"DOWN/A Weights - Mean: {all_down.mean().item():.6f}, Std: {all_down.std().item():.6f}, "
+            f"Max: {all_down.max().item():.6f}"
         )
 
         # Check for zeros
@@ -33,7 +36,7 @@ def check_weights(path):
         else:
             print(f"Non-zero elements in UP/B: {all_up.count_nonzero().item()} / {all_up.numel()}")
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, KeyError, SafetensorError) as e:
         print(f"Error reading {path}: {e}")
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -65,7 +66,7 @@ def test_preparing_a_linear_without_a_bias_works() -> None:
 def test_a_layer_without_its_group_size_is_an_error() -> None:
     state = {"fc.scale_weight": torch.ones(8, 1)}
 
-    with pytest.raises(ValueError, match="missing fc.int8_convrot_groupsize"):
+    with pytest.raises(ValueError, match=re.escape("missing fc.int8_convrot_groupsize")):
         prepare_int8_convrot_modules(_Net(), state)
 
 

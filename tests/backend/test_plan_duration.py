@@ -92,7 +92,8 @@ KEPT = " steps, then kept within 1000–2500 steps, the range the benchmark cove
         (
             12,
             1000,
-            "12 images × ~70 epochs = 840 steps, rounded to 850, then kept within 1000–2500 steps, the range the benchmark covered, giving 1000.",
+            "12 images × ~70 epochs = 840 steps, rounded to 850, then kept within 1000–2500 steps, "
+            "the range the benchmark covered, giving 1000.",
         ),
         (40, 2500, f"40 images × ~70 epochs = 2800{KEPT}2500."),
         (30, 2100, "30 images × ~70 epochs = 2100 steps."),

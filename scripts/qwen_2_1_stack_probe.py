@@ -18,7 +18,8 @@ This is the check that would have caught the missing VAE quant_conv / stage shor
 before that fix the base model scored at baseline across the board.
 
 Usage:
-    venv\\Scripts\\python.exe scripts\\qwen_2_1_stack_probe.py --config config\\train_qwen_image_2_1_feliciaday_adamw.yaml
+    venv\\Scripts\\python.exe scripts\\qwen_2_1_stack_probe.py ^
+        --config config\\train_qwen_image_2_1_feliciaday_adamw.yaml
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ import gc
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 from tqdm import tqdm
@@ -68,7 +70,7 @@ def main() -> None:
         default_caption=dataset_config.get("default_caption", ""),
         repeats=1,
     )
-    items = [dataset[i] for i in range(min(args.samples, len(dataset)))]
+    items: list[dict[str, Any]] = [dataset[i] for i in range(min(args.samples, len(dataset)))]
     print(f"probing {len(items)} images at {dataset.height}x{dataset.width}")
 
     vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype)
@@ -103,7 +105,9 @@ def main() -> None:
     for sigma in SIGMAS:
         totals = {"matched": 0.0, "mismatched": 0.0, "zero": 0.0, "noise": 0.0}
         count = 0
-        for latent, embed, wrong in tqdm(list(zip(latents, embeds, shuffled)), desc=f"sigma {sigma:.2f}", leave=False):
+        for latent, embed, wrong in tqdm(
+            list(zip(latents, embeds, shuffled, strict=False)), desc=f"sigma {sigma:.2f}", leave=False
+        ):
             x0 = latent.to(device, dtype)
             b, c, h, w = x0.shape
             mu = calculate_shift(h * w)

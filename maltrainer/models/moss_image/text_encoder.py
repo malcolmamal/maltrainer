@@ -27,13 +27,13 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from types import MethodType
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
 from accelerate import init_empty_weights
 from safetensors.torch import load_file
-from torch import nn
+from torch import Tensor, nn
 
 from maltrainer.models.flux3.loading import is_int8_convrot
 from maltrainer.models.minimax_h3.int8_convrot import (
@@ -79,10 +79,10 @@ class Qwen35TextConfig:
     conv_kernel_size: int = 4
     rms_norm_eps: float = 1e-6
     rope_theta: float = 10000000.0
-    full_attention_layers: Tuple[int, ...] = tuple(i for i in range(32) if (i + 1) % 4 == 0)
+    full_attention_layers: tuple[int, ...] = tuple(i for i in range(32) if (i + 1) % 4 == 0)
 
     @classmethod
-    def from_state_dict(cls, state: Dict[str, torch.Tensor]) -> "Qwen35TextConfig":
+    def from_state_dict(cls, state: dict[str, torch.Tensor]) -> Qwen35TextConfig:
         """Read the sizes off the weights, so a mis-picked file fails here and not deep in a matmul."""
         if "layers.0.linear_attn.A_log" not in state:
             raise ValueError("Not a Qwen3.5 text encoder (no layers.0.linear_attn.A_log)")
@@ -131,7 +131,7 @@ class RMSNormGated(RMSNorm):
     def __init__(self, dim: int, eps: float):
         super().__init__(dim, eps, add=False)
 
-    def forward(self, x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:  # type: ignore[override]  # gated variant: second arg by design
         return super().forward(x) * F.silu(gate.to(x.dtype))
 
 
@@ -146,7 +146,9 @@ class MLP(nn.Module):
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
 
 
-def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> torch.Tensor:
+def chunk_gated_delta_rule(
+    query: Tensor, key: Tensor, value: Tensor, g: Tensor, beta: Tensor, chunk_size: int = 64
+) -> Tensor:
     """ComfyUI's torch_chunk_gated_delta_rule from a zero state. [B, L, H, D] in, [B, L, H, Dv] out."""
     initial_dtype = query.dtype
     query = F.normalize(query, dim=-1)
@@ -158,9 +160,7 @@ def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> 
     batch_size, num_heads, sequence_length, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
     pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
-    query = F.pad(query, (0, 0, 0, pad_size))
-    key = F.pad(key, (0, 0, 0, pad_size))
-    value = F.pad(value, (0, 0, 0, pad_size))
+    query, key, value = [F.pad(x, (0, 0, 0, pad_size)) for x in (query, key, value)]
     beta = F.pad(beta, (0, pad_size))
     g = F.pad(g, (0, pad_size))
     total_sequence_length = sequence_length + pad_size
@@ -322,12 +322,12 @@ class Qwen35TextModel(nn.Module):
     def __init__(self, config: Qwen35TextConfig):
         super().__init__()
         self.config = config
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_tokens: nn.Module = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps, add=True)
         self.compute_dtype = torch.float32
 
-    def rope(self, length: int, device) -> Tuple[torch.Tensor, torch.Tensor]:
+    def rope(self, length: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
         """Text-only positions: Qwen3.5's interleaved MRoPE collapses to 1D RoPE (all three axes equal)."""
         dim = int(self.config.head_dim * self.config.partial_rotary_factor)
         inv_freq = 1.0 / (self.config.rope_theta ** (torch.arange(0, dim, 2, device=device).float() / dim))
@@ -339,7 +339,7 @@ class Qwen35TextModel(nn.Module):
         if isinstance(self.embed_tokens, nn.Embedding):
             x = F.embedding(input_ids, self.embed_tokens.weight).to(self.compute_dtype)
         else:
-            self.embed_tokens.out_dtype = self.compute_dtype
+            cast(Any, self.embed_tokens).out_dtype = self.compute_dtype
             x = self.embed_tokens(input_ids)
         cos, sin = self.rope(input_ids.shape[1], input_ids.device)
         for layer in self.layers:
@@ -351,7 +351,7 @@ class Qwen35TextModel(nn.Module):
 
 
 class MOSSImageTextEncoder(nn.Module):
-    def __init__(self, model: Qwen35TextModel, tokenizer):
+    def __init__(self, model: Qwen35TextModel, tokenizer: Any):
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
@@ -375,7 +375,7 @@ def _upcast_linear_forward(module: nn.Linear, x: torch.Tensor) -> torch.Tensor:
     return F.linear(x, module.weight.to(x.dtype), bias)
 
 
-def _text_key(key: str) -> Optional[str]:
+def _text_key(key: str) -> str | None:
     for prefix in KEY_PREFIXES:
         if key.startswith(prefix):
             key = key[len(prefix) :]
@@ -386,10 +386,10 @@ def _text_key(key: str) -> Optional[str]:
 
 
 def load_moss_image_text_encoder(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
-    tokenizer_path: Union[str, Path, None] = None,
+    tokenizer_path: str | Path | None = None,
     grad_precision: str = "bf16",
     compute_dtype: torch.dtype = torch.float32,
 ) -> MOSSImageTextEncoder:
@@ -406,11 +406,7 @@ def load_moss_image_text_encoder(
         raw, _ = load_comfy_int8_convrot_state_dict(str(path), device=torch.device("cpu"))
     else:
         raw = load_file(str(path))
-    state = {}
-    for key, value in raw.items():
-        target = _text_key(key)
-        if target is not None:
-            state[target] = value
+    state = {target: value for key, value in raw.items() if (target := _text_key(key)) is not None}
     del raw
     config = Qwen35TextConfig.from_state_dict(state)
 
@@ -423,7 +419,7 @@ def load_moss_image_text_encoder(
             config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item())
         )
         embed.weight.data.copy_(state.pop("embed_tokens.weight"))
-        embed.scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
+        cast(Any, embed).scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
         state.pop("embed_tokens.int8_convrot_groupsize")
         model.embed_tokens = embed
     if quantized:
@@ -442,7 +438,7 @@ def load_moss_image_text_encoder(
 
     for module in model.modules():
         if isinstance(module, nn.Linear) and not hasattr(module, "scale_weight"):
-            module.forward = MethodType(_upcast_linear_forward, module)
+            cast(Any, module).forward = MethodType(_upcast_linear_forward, module)
     for parameter in model.parameters():
         if parameter.is_floating_point():
             parameter.data = parameter.data.to(dtype)

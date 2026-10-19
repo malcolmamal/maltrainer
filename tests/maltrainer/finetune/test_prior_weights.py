@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -68,7 +69,7 @@ def test_a_parameter_missing_from_the_file_is_an_error_and_nothing_stays_changed
     path = _file(tmp_path, {"weight": torch.ones(2, 3)})
 
     with (
-        pytest.raises(KeyError, match="base.safetensors has no tensor for bias"),
+        pytest.raises(KeyError, match=re.escape("base.safetensors has no tensor for bias")),
         weights_from_file(list(linear.named_parameters()), path),
     ):
         pass

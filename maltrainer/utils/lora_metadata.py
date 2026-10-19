@@ -24,7 +24,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ ARCHITECTURES = {
 }
 
 
-def git_commit(repo_root: Optional[Path] = None) -> Optional[str]:
+def git_commit(repo_root: Path | None = None) -> str | None:
     """Short commit of the trainer that produced a checkpoint, if it is a git checkout.
 
     Worth recording: this trainer's numerics have changed materially between runs, so
@@ -55,6 +55,7 @@ def git_commit(repo_root: Optional[Path] = None) -> Optional[str]:
             ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
             capture_output=True,
             text=True,
+            check=False,
             timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
@@ -69,6 +70,7 @@ def git_commit(repo_root: Optional[Path] = None) -> Optional[str]:
             ["git", "-C", str(root), "status", "--porcelain"],
             capture_output=True,
             text=True,
+            check=False,
             timeout=10,
         )
         if dirty.returncode == 0 and dirty.stdout.strip():
@@ -89,12 +91,12 @@ def _flatten(value: Any) -> str:
 
 
 def build_metadata(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     *,
     step: Any,
-    runtime: Optional[Dict[str, Any]] = None,
+    runtime: dict[str, Any] | None = None,
     embed_config: bool = True,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Assemble the safetensors metadata dict for a checkpoint.
 
     ``runtime`` carries resolved values the config cannot express (total steps, the sigma
@@ -111,7 +113,7 @@ def build_metadata(
         logger.warning("Metadata: no labels for model type %r; trainer, base model and network module stay empty", arch)
     trainer_script, base_model_version, network_module = ARCHITECTURES.get(arch, ("", "", ""))
 
-    metadata: Dict[str, Any] = {
+    metadata: dict[str, Any] = {
         "maltrainer_metadata_version": SCHEMA_VERSION,
         "maltrainer_architecture": arch,
         "maltrainer_trainer": trainer_script,
@@ -159,15 +161,18 @@ def build_metadata(
     return {key: _flatten(value) for key, value in metadata.items()}
 
 
-def read_metadata(path: str | Path) -> Dict[str, str]:
+def read_metadata(path: str | Path) -> dict[str, str]:
     """Read just the metadata header of a safetensors file, without loading tensors."""
-    from safetensors import safe_open
+    from safetensors import SafetensorError, safe_open
 
-    with safe_open(str(path), framework="pt", device="cpu") as handle:
-        return dict(handle.metadata() or {})
+    try:
+        with safe_open(str(path), framework="pt", device="cpu") as handle:
+            return dict(handle.metadata() or {})
+    except SafetensorError as error:  # one type for the callers to catch with the OS and value errors
+        raise ValueError(f"not a readable safetensors file: {error}") from error
 
 
-def extract_config(metadata: Dict[str, str]) -> Optional[Dict[str, Any]]:
+def extract_config(metadata: dict[str, str]) -> dict[str, Any] | None:
     """Recover the embedded training config, or None if the file predates embedding."""
     blob = metadata.get(CONFIG_KEY)
     if not blob:

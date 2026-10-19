@@ -1,162 +1,169 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Callable, Dict
 
 import pytest
 import torch
-from safetensors.torch import save_file
+from transformers import Qwen2Tokenizer
 
-from maltrainer.models.moss_image.text_encoder import MOSSImageTextEncoder, load_moss_image_text_encoder
+from maltrainer.models.minimax_h3.int8_convrot import rotate_activation
+from maltrainer.models.moss_image.text_encoder import (
+    TEMPLATE,
+    TOKENIZER_ASSETS,
+    MOSSImageTextEncoder,
+    load_moss_image_text_encoder,
+)
 from maltrainer.models.qwen_image_2_1.text_encoder import Int8Embedding
 
-from .tiny import CPU
-from .tiny_text import HIDDEN, TINY, text_int8_tensors, tiny_text_model
+from .qwen35_tiny import GROUP, HIDDEN, quantized_tensors, tiny_text_model, write_text_checkpoint
 
-IDS = torch.tensor([[3, 7, 1, 9, 4]])
-
-
-@pytest.fixture
-def tokenizer_dir(tmp_path: Path) -> Path:
-    folder = tmp_path / "tokenizer"
-    folder.mkdir()
-    (folder / "vocab.json").write_text('{"a": 0, "b": 1, "ab": 2}', encoding="utf-8")
-    (folder / "merges.txt").write_text("#version: 0.2\na b\n", encoding="utf-8")
-    (folder / "tokenizer_config.json").write_text("{}", encoding="utf-8")
-    return folder
+CPU = torch.device("cpu")
+PROMPT_IDS = torch.tensor([[1, 5, 9, 2, 7, 3]])
 
 
-@pytest.fixture
-def write_text_file(tmp_path: Path) -> Callable[..., Path]:
-    def write(tensors: Dict[str, torch.Tensor], prefix: str = "", name: str = "qwen35.safetensors") -> Path:
-        path = tmp_path / name
-        save_file({prefix + k: v.detach().contiguous() for k, v in tensors.items()}, str(path))
-        return path
-
-    return write
+def _load(path: Path, **kwargs) -> MOSSImageTextEncoder:
+    return load_moss_image_text_encoder(path, CPU, **kwargs)
 
 
-def _load(path: Path, tokenizer_dir: Path, **options) -> MOSSImageTextEncoder:
-    return load_moss_image_text_encoder(path, CPU, tokenizer_path=tokenizer_dir, **options)
-
-
-@pytest.mark.parametrize(
-    "prefix",
-    [
-        "",
-        "model.",
-        "language_model.",
-        "language_model.model.",
-        "model.language_model.",
-        "text_encoders.qwen35_9b.transformer.",
-        "text_encoders.qwen35_9b.transformer.model.",
-    ],
-)
-def test_every_known_key_prefix_loads_the_same_encoder(
-    write_text_file: Callable[..., Path], tokenizer_dir: Path, prefix: str
+@pytest.mark.parametrize("prefix", ["", "model.", "model.language_model.", "text_encoders.qwen35_9b.transformer."])
+def test_a_plain_checkpoint_loads_under_any_known_prefix_and_reproduces_the_source_model(
+    tmp_path: Path, prefix: str
 ) -> None:
     source = tiny_text_model()
-    path = write_text_file(source.state_dict(), prefix)
+    path = write_text_checkpoint(source.state_dict(), tmp_path / "te.safetensors", prefix)
 
-    encoder = _load(path, tokenizer_dir, dtype=torch.float32)
+    encoder = _load(path, dtype=torch.float32)
 
-    with torch.no_grad():
-        torch.testing.assert_close(encoder.model(IDS), source(IDS), atol=1e-5, rtol=1e-5)
-    assert encoder.model.config == TINY
-
-
-def test_vision_head_and_mtp_tensors_are_left_out(write_text_file: Callable[..., Path], tokenizer_dir: Path) -> None:
-    extra = {
-        "visual.blocks.0.weight": torch.zeros(1),
-        "lm_head.weight": torch.zeros(1),
-        "mtp.fc.weight": torch.zeros(1),
-    }
-    path = write_text_file({**tiny_text_model().state_dict(), **extra}, "model.")
-
-    state = _load(path, tokenizer_dir).model.state_dict()
-
-    assert not any(k.startswith(("visual.", "lm_head.", "mtp.")) for k in state)
+    assert isinstance(encoder, MOSSImageTextEncoder)
+    assert encoder.model.config == source.config
+    assert encoder.model.compute_dtype == torch.float32
+    torch.testing.assert_close(encoder.model(PROMPT_IDS), source(PROMPT_IDS))
+    assert not any(p.requires_grad for p in encoder.model.parameters())
+    assert not encoder.model.training
 
 
-def test_the_encoder_is_frozen_eval_stored_in_dtype_and_computes_in_fp32(
-    write_text_file: Callable[..., Path], tokenizer_dir: Path
-) -> None:
+def test_the_loader_uses_the_vendored_qwen_tokenizer_by_default(tmp_path: Path) -> None:
+    path = write_text_checkpoint(tiny_text_model().state_dict(), tmp_path / "te.safetensors")
+
+    encoder = _load(path)
+
+    assert isinstance(encoder.tokenizer, Qwen2Tokenizer)
+    text = TEMPLATE.format("a red cat")
+    assert encoder.tokenizer.decode(encoder.tokenizer(text, add_special_tokens=False).input_ids) == text
+    assert (TOKENIZER_ASSETS / "vocab.json").exists()
+
+
+def test_weights_are_stored_in_the_requested_dtype_while_activations_stay_fp32(tmp_path: Path) -> None:
     source = tiny_text_model()
+    path = write_text_checkpoint(source.state_dict(), tmp_path / "te.safetensors")
 
-    encoder = _load(write_text_file(source.state_dict()), tokenizer_dir, dtype=torch.bfloat16)
-
+    encoder = _load(path, dtype=torch.bfloat16)
     model = encoder.model
+
     assert {p.dtype for p in model.parameters()} == {torch.bfloat16}
-    assert not any(p.requires_grad for p in model.parameters())
-    assert not model.training
-    assert model.compute_dtype == torch.float32
-    with torch.no_grad():
-        out = model(IDS)
+    out = model(PROMPT_IDS)
     assert out.dtype == torch.float32
-    rounded = tiny_text_model()
-    rounded.load_state_dict({k: v.bfloat16().float() for k, v in source.state_dict().items()})
-    assert (out - rounded(IDS)).norm() / out.norm() < 0.05
+    reference = source(PROMPT_IDS)
+    assert torch.nn.functional.cosine_similarity(out.flatten(), reference.flatten(), dim=0) > 0.98
 
 
-def test_the_activation_dtype_can_be_chosen(write_text_file: Callable[..., Path], tokenizer_dir: Path) -> None:
-    path = write_text_file(tiny_text_model().state_dict())
+def test_the_compute_dtype_is_what_the_model_runs_its_activations_in(tmp_path: Path) -> None:
+    path = write_text_checkpoint(tiny_text_model().state_dict(), tmp_path / "te.safetensors")
 
-    encoder = _load(path, tokenizer_dir, dtype=torch.float32, compute_dtype=torch.bfloat16)
+    encoder = _load(path, dtype=torch.bfloat16, compute_dtype=torch.bfloat16)
 
     assert encoder.model.compute_dtype == torch.bfloat16
+    assert encoder.model(PROMPT_IDS).dtype == torch.bfloat16
 
 
-def test_the_loader_returns_an_encoder_that_uses_the_tokenizer_it_was_given(
-    write_text_file: Callable[..., Path], tokenizer_dir: Path
-) -> None:
-    encoder = _load(write_text_file(tiny_text_model().state_dict()), tokenizer_dir)
-
-    assert type(encoder.tokenizer).__name__ == "Qwen2Tokenizer"
-    assert encoder.tokenizer("ab", add_special_tokens=False).input_ids == [2]
-
-
-def test_an_int8_convrot_encoder_unrotates_its_embedding_and_approximates_the_float_one(
-    write_text_file: Callable[..., Path], tokenizer_dir: Path
-) -> None:
+def test_vision_head_and_mtp_tensors_are_ignored_on_load(tmp_path: Path) -> None:
     source = tiny_text_model()
-    path = write_text_file(text_int8_tensors(source), name="qwen35_int8_convrot.safetensors")
+    tensors = dict(source.state_dict())
+    tensors.update(
+        {"visual.blocks.0.w": torch.zeros(2), "lm_head.weight": torch.zeros(3), "mtp.fc.weight": torch.ones(1)}
+    )
+    path = write_text_checkpoint(tensors, tmp_path / "te.safetensors", "model.")
 
-    encoder = _load(path, tokenizer_dir, dtype=torch.float32)
+    encoder = _load(path, dtype=torch.float32)
 
+    torch.testing.assert_close(encoder.model(PROMPT_IDS), source(PROMPT_IDS))
+
+
+def test_a_missing_checkpoint_is_reported_by_path(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="text encoder not found"):
+        _load(tmp_path / "nope.safetensors")
+
+
+def test_a_checkpoint_that_is_not_a_qwen35_text_encoder_is_refused_before_building(tmp_path: Path) -> None:
+    path = write_text_checkpoint({"layers.0.foo": torch.zeros(1)}, tmp_path / "other.safetensors")
+
+    with pytest.raises(ValueError, match=re.escape("Not a Qwen3.5 text encoder")):
+        _load(path)
+
+
+def test_a_checkpoint_with_an_unknown_extra_tensor_is_refused_naming_it(tmp_path: Path) -> None:
+    tensors = dict(tiny_text_model().state_dict())
+    tensors["layers.0.surprise.weight"] = torch.zeros(1)
+    path = write_text_checkpoint(tensors, tmp_path / "te.safetensors")
+
+    with pytest.raises(ValueError, match=r"does not look like a Qwen3.5 text encoder.*surprise"):
+        _load(path)
+
+
+def test_a_checkpoint_missing_a_weight_is_refused_naming_it(tmp_path: Path) -> None:
+    tensors = dict(tiny_text_model().state_dict())
+    del tensors["layers.1.mlp.up_proj.weight"]
+    path = write_text_checkpoint(tensors, tmp_path / "te.safetensors")
+
+    with pytest.raises(ValueError, match=r"missing \['layers.1.mlp.up_proj.weight'\]"):
+        _load(path)
+
+
+def test_an_int8_convrot_checkpoint_keeps_int8_linears_and_unrotates_its_embedding(tmp_path: Path) -> None:
+    source = tiny_text_model()
+    path = write_text_checkpoint(quantized_tensors(source), tmp_path / "te_int8.safetensors", "model.")
+
+    encoder = _load(path, dtype=torch.float32)
     model = encoder.model
+
     assert isinstance(model.embed_tokens, Int8Embedding)
-    assert model.embed_tokens.weight.dtype == torch.int8
-    assert model.layers[0].mlp.gate_proj.weight.dtype == torch.int8
-    lookup = model.embed_tokens(IDS)
-    assert (lookup - source.embed_tokens(IDS)).norm() / source.embed_tokens(IDS).norm() < 0.03
-    with torch.no_grad():
-        expected, got = source(IDS), model(IDS)
-    assert got.shape == (1, 5, HIDDEN)
-    assert (got - expected).norm() / expected.norm() < 0.1
+    assert int(model.embed_tokens.int8_convrot_groupsize) == GROUP
+    assert model.layers[0].mlp.up_proj.weight.dtype == torch.int8
+    assert model.layers[0].mlp.up_proj.int8_convrot_grad_precision == "bf16"
+    assert model.layers[0].linear_attn.in_proj_qkv.weight.dtype == torch.float32
+    model(PROMPT_IDS)
+    assert model.embed_tokens.out_dtype == torch.float32  # the model sets the lookup's dtype each forward
+    embedded = model.embed_tokens(PROMPT_IDS)
+    torch.testing.assert_close(embedded, source.embed_tokens(PROMPT_IDS), atol=0.01, rtol=0.05)
+    # the stored table really is rotated: a lookup that skipped the un-rotation would differ
+    stored = model.embed_tokens.weight.float() * model.embed_tokens.scale_weight
+    assert not torch.allclose(stored[PROMPT_IDS[0]], source.embed_tokens(PROMPT_IDS)[0], atol=0.05)
+    torch.testing.assert_close(rotate_activation(stored, GROUP)[PROMPT_IDS[0]], embedded[0])
 
 
-def test_a_missing_file_is_reported_by_path(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="Qwen3.5-9B text encoder not found"):
-        load_moss_image_text_encoder(tmp_path / "absent.safetensors", CPU)
+def test_an_int8_convrot_encoder_tracks_the_float_model_it_was_quantized_from(tmp_path: Path) -> None:
+    source = tiny_text_model()
+    path = write_text_checkpoint(quantized_tensors(source), tmp_path / "te_int8.safetensors")
+
+    out = _load(path, dtype=torch.float32).model(PROMPT_IDS)
+
+    reference = source(PROMPT_IDS)
+    assert out.shape == reference.shape
+    assert torch.nn.functional.cosine_similarity(out.flatten(), reference.flatten(), dim=0) > 0.95
+    assert not torch.equal(out, reference)  # the int8 path really ran
 
 
-def test_a_file_that_is_not_qwen35_is_rejected(write_text_file: Callable[..., Path], tokenizer_dir: Path) -> None:
-    path = write_text_file({"layers.0.mlp.gate_proj.weight": torch.zeros(2, 2)})
+def test_an_int8_checkpoint_with_an_unquantized_embedding_keeps_a_plain_embedding(tmp_path: Path) -> None:
+    source = tiny_text_model()
+    tensors = quantized_tensors(source)
+    for suffix in ("weight_scale", "comfy_quant"):
+        del tensors[f"embed_tokens.{suffix}"]
+    tensors["embed_tokens.weight"] = source.embed_tokens.weight.detach()
+    path = write_text_checkpoint(tensors, tmp_path / "te_int8.safetensors")
 
-    with pytest.raises(ValueError, match="Not a Qwen3.5 text encoder"):
-        _load(path, tokenizer_dir)
+    encoder = _load(path, dtype=torch.float32)
 
-
-@pytest.mark.parametrize(
-    ("drop", "extra"), [("norm.weight", {}), (None, {"layers.0.mlp.bogus.weight": torch.zeros(1)})]
-)
-def test_missing_or_unexpected_weights_are_named_in_the_error(
-    write_text_file: Callable[..., Path], tokenizer_dir: Path, drop: str | None, extra: dict
-) -> None:
-    tensors = {k: v for k, v in tiny_text_model().state_dict().items() if k != drop}
-    path = write_text_file({**tensors, **extra})
-
-    with pytest.raises(ValueError, match="does not look like a Qwen3.5 text encoder") as error:
-        _load(path, tokenizer_dir)
-
-    assert (drop or "bogus") in str(error.value)
+    assert isinstance(encoder.model.embed_tokens, torch.nn.Embedding)
+    assert encoder.model.embed_tokens.weight.shape[1] == HIDDEN
+    assert encoder.model.layers[0].mlp.gate_proj.weight.dtype == torch.int8

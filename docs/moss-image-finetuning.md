@@ -445,6 +445,15 @@ In a console window, at the next step:
   pause is left out of the monitor's s/step.
 - `e` opens the preview menu: prompts on/off, the interval, the raw/EMA rows (see
   [Previews during training](#previews-during-training)). Training waits while it is open.
+- `g` renders a gallery: 8 of the trained people at random (from `prior.classes`), each with a
+  random generic prompt for their class word, with the EMA weights (the raw ones without EMA) at
+  the preview size, steps, CFG and negative. ~24 s an image, so ~3 min at 1024 px; training waits.
+  Files go to `samples/gallery/`: `stepNNNNNN.png` (a 4 x 2 grid), one PNG per person and
+  `stepNNNNNN.txt` (who, prompt, seed). Every person x prompt is encoded at the start with the
+  training captions (4 per person; cached on disk like them), so a press never waits for the text
+  encoder, and the gallery has its own random generator, so pressing it does not change a resume.
+  Set `sample.gallery.count`, `sample.gallery.prompts` (per class word, `{trigger}` / `{class}`
+  filled in) or `sample.gallery: false` in the config; maltrainer/utils/gallery.py has the defaults.
 - `h` lists the keys.
 
 Each save of a full model takes ~10-20 s, with 10 GB per checkpoint.

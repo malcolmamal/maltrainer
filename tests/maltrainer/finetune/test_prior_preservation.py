@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
-from typing import List
 
 import pytest
 import torch
@@ -16,7 +15,7 @@ CPU = torch.device("cpu")
 class Recorder:
     def __init__(self, offset: float = 0.0) -> None:
         self.offset = offset
-        self.calls: List[tuple] = []
+        self.calls: list[tuple] = []
 
     def __call__(self, x_t: torch.Tensor, sigma: torch.Tensor, caption: str) -> torch.Tensor:
         self.calls.append((x_t.clone(), sigma.clone(), caption))
@@ -57,7 +56,7 @@ def test_noising_blends_the_image_toward_noise_by_sigma() -> None:
     ],
 )
 def test_the_prior_term_is_due_every_nth_step_while_it_has_weight(
-    weight: float, every: int, steps: List[int], expected: List[bool]
+    weight: float, every: int, steps: list[int], expected: list[bool]
 ) -> None:
     prior = PriorPreservation(weight=weight, every=every)
 

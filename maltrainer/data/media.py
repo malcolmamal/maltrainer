@@ -4,16 +4,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
 from maltrainer.data.minimax_dataset import AUDIO_SAMPLE_RATE, FPS, bucket_size, resize_and_crop
 
 
-def _require_av():
+def _require_av() -> Any:
     try:
-        import av  # noqa: F401
+        import av
     except ImportError as e:
         raise ImportError("Video and audio training items need PyAV: pip install av") from e
     return av
@@ -37,7 +37,7 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
     resized as they are decoded, so a long 4K source never sits in memory at full size.
     """
     av = _require_av()
-    frames: List[np.ndarray] = []
+    frames: list[np.ndarray] = []
     with av.open(str(path)) as container:
         if not container.streams.video:
             raise ValueError(f"{path.name}: no video stream")
@@ -47,14 +47,14 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
         frame_duration = 1.0 / float(rate) if rate else 1.0 / FPS
         snap = min(float(stream.time_base or 0.0), frame_duration / 4)
 
-        size: Optional[Tuple[int, int]] = None
-        origin: Optional[float] = None
+        size: tuple[int, int] | None = None
+        origin: float | None = None
         last_frame = None
-        last_array: Optional[np.ndarray] = None
+        last_array: np.ndarray | None = None
         last_time = 0.0
         target = 0
 
-        def convert(frame) -> np.ndarray:
+        def convert(frame: Any) -> np.ndarray:
             nonlocal size
             image = frame.to_image()
             if size is None:
@@ -90,7 +90,7 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
     return np.stack(frames)
 
 
-def read_audio(path: Path) -> Optional[np.ndarray]:
+def read_audio(path: Path) -> np.ndarray | None:
     """The first audio stream as float32 stereo [2, L] at 32 kHz in [-1, 1], or None.
 
     None means "no sound to train": no audio stream, or a track that decodes to digital
@@ -105,7 +105,7 @@ def read_audio(path: Path) -> Optional[np.ndarray]:
         # Mono stays mono here and is duplicated below: FFmpeg's mono -> stereo upmix is -3 dB.
         layout = "mono" if stream.channels == 1 else "stereo"
         resampler = av.AudioResampler(format="fltp", layout=layout, rate=AUDIO_SAMPLE_RATE)
-        chunks: List[np.ndarray] = []
+        chunks: list[np.ndarray] = []
         for frame in container.decode(stream):
             frame.pts = None  # let the resampler run on sample count, not container timestamps
             for out in resampler.resample(frame):

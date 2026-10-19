@@ -28,7 +28,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import torch
 from safetensors.torch import save_file
@@ -38,7 +37,7 @@ from merge_loras import DTYPES, read_lora, sha256_prefix
 
 def resize_module(
     down: torch.Tensor, up: torch.Tensor, alpha: float, max_rank: int, frac: float, device: str
-) -> Tuple[torch.Tensor, torch.Tensor, int, float]:
+) -> tuple[torch.Tensor, torch.Tensor, int, float]:
     """(new_down [k, in], new_up [out, k], k, relative_error) for one module, in float32."""
     factor = alpha / down.shape[0]
     q_up, r_up = torch.linalg.qr(up.to(device, torch.float32))
@@ -67,9 +66,9 @@ def resize_file(source: Path, target: Path, max_rank: int, frac: float, dtype: t
     down_name, up_name = layout.split("/")
     original = sorted({down.shape[0] for down, _, _ in modules.values()})
 
-    state: Dict[str, torch.Tensor] = {}
-    ranks: List[int] = []
-    errors: List[float] = []
+    state: dict[str, torch.Tensor] = {}
+    ranks: list[int] = []
+    errors: list[float] = []
     for name, (down, up, alpha) in modules.items():
         new_down, new_up, keep, error = resize_module(down, up, alpha, max_rank, frac, device)
         state[f"{name}.{down_name}.weight"] = new_down.to(dtype).cpu().contiguous()
@@ -128,7 +127,7 @@ def main() -> int:
         parser.error("--output works with a single input; use --suffix for several")
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-    jobs: List[Tuple[Path, Path]] = []
+    jobs: list[tuple[Path, Path]] = []
     for source in args.inputs:
         if not source.is_file():
             parser.error(f"not found: {source}")

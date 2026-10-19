@@ -21,7 +21,8 @@ import logging
 import os
 import shutil
 import sys
-from typing import Callable, List, Sequence, TextIO
+from collections.abc import Callable, Sequence
+from typing import TextIO
 
 from maltrainer.utils.previews import Previews
 
@@ -38,18 +39,20 @@ def run_menu(
     read_key: Callable[[], str],
     ready: Callable[[str], bool] = lambda _prompt: True,
     out: TextIO = sys.stdout,
-) -> List[str]:
+) -> list[str]:
     """Show the menu until Enter (apply) or Esc (cancel); returns the applied changes."""
     every = previews.every
     rows = {label: previews.rows.get(label, True) for label in row_labels}
     enabled = set(previews.enabled_prompts)
-    items = [("every", None)] + [("row", label) for label in row_labels] + [("prompt", p) for p in previews.prompts]
+    items: list[tuple[str, str]] = (
+        [("every", "")] + [("row", label) for label in row_labels] + [("prompt", p) for p in previews.prompts]
+    )
     cursor = 0
     drawn = 0
     if os.name == "nt":
         os.system("")  # turns on ANSI escape handling in the Windows console
 
-    def lines() -> List[str]:
+    def lines() -> list[str]:
         width = max(shutil.get_terminal_size((100, 20)).columns - 1, 40)
         out_lines = [HEADER]
         for i, (kind, value) in enumerate(items):

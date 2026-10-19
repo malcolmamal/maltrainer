@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnDestroy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 
@@ -17,7 +17,7 @@ interface LogMessage {
   styleUrl: './job.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class JobPage {
+export class JobPage implements OnDestroy {
   private readonly api = inject(TrainerApiService);
   private readonly route = inject(ActivatedRoute);
 

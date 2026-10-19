@@ -67,8 +67,8 @@ def report(verdict: Verdict, *, unit: str, limit: int, command: str) -> None:
         print(f"{key}: {value} {unit} (limit {limit})")
     for key, (allowed, value) in sorted(verdict.grew.items()):
         print(f"{key}: {value} {unit}, grew past its baseline of {allowed} (limit {limit})")
-    for key, (allowed, value) in sorted(verdict.loose.items()):
-        now = "within the limit" if value is None else f"now {value} {unit}"
+    for key, (allowed, measured) in sorted(verdict.loose.items()):
+        now = "within the limit" if measured is None else f"now {measured} {unit}"
         print(f"{key}: baseline {allowed} is loose, {now}")
     if verdict.loose:
         print(f"Lower the baseline with `{command} --tighten`.")

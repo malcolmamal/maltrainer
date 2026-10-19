@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 import torch
@@ -105,7 +105,7 @@ def test_a_model_with_a_weight_the_layout_lacks_is_refused_before_anything_is_wr
     layout = write_checkpoint(make_model(num_layers=1))
     out = tmp_path / "tuned.safetensors"
 
-    with pytest.raises(ValueError, match="has no entry for .*layers.1"):
+    with pytest.raises(ValueError, match=r"has no entry for .*layers\.1"):
         save_full_model(make_model(num_layers=2), layout, out)
 
     assert not out.exists()

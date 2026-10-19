@@ -13,13 +13,15 @@ Usage examples:
    python scripts/infer_zimage.py --prompt "a <trigger> cat in a hat" --embedding_path path/to/embedding.safetensors
 
 4. With both:
-   python scripts/infer_zimage.py --prompt "a <trigger> cat in a hat" --lora_path path/to/lora.safetensors --embedding_path path/to/embedding.safetensors
+   python scripts/infer_zimage.py --prompt "a <trigger> cat in a hat" --lora_path path/to/lora.safetensors \
+       --embedding_path path/to/embedding.safetensors
 """
 
 import argparse
 import logging
-import os
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 import safetensors.torch as safetensors
 import torch
@@ -30,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>"):
+def load_textual_inversion_embedding(pipeline: Any, embedding_path: str, token_string: str = "<*>") -> None:
     """Load textual inversion embedding and add to tokenizer/text_encoder."""
     logger.info(f"Loading textual inversion from {embedding_path}")
 
@@ -46,7 +48,7 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
     else:
         # Try to find the embedding tensor
         embedding_vectors = None
-        for key, tensor in embedding_data.items():
+        for _key, tensor in embedding_data.items():
             if tensor.dim() == 2 and tensor.shape[0] <= 8:  # num_vectors x dim
                 embedding_vectors = tensor
                 break
@@ -57,7 +59,7 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
     # For Z-Image, we need to load Qwen components separately since the pipeline might not expose them properly
     model_id = "Tongyi-MAI/Z-Image"
     tokenizer = Qwen2Tokenizer.from_pretrained(model_id, subfolder="tokenizer")
-    text_encoder = Qwen3ForCausalLM.from_pretrained(model_id, subfolder="text_encoder", torch_dtype=torch.bfloat16)
+    text_encoder: Any = Qwen3ForCausalLM.from_pretrained(model_id, subfolder="text_encoder", torch_dtype=torch.bfloat16)
     text_encoder.to(pipeline.device)
 
     # Add token if not present
@@ -82,7 +84,7 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
     pipeline.text_encoder = text_encoder
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Z-Image inference with LoRA and Textual Inversion support")
     parser.add_argument("--prompt", type=str, required=True, help="Text prompt for image generation")
     parser.add_argument("--output_path", type=str, default="output.png", help="Path to save generated image")
@@ -119,14 +121,13 @@ def main():
         load_textual_inversion_embedding(pipeline, args.embedding_path, args.token_string)
 
     # Generate images
-    output_dir = os.path.dirname(args.output_path) or "."
-    base_filename = os.path.basename(args.output_path)
-    base, ext = os.path.splitext(base_filename)
+    output_path = Path(args.output_path)
+    output_dir, base, ext = output_path.parent, output_path.stem, output_path.suffix
     if not ext:
         ext = ".png"
 
     # Use provided seed or generate random one
-    initial_seed = args.seed if args.seed is not None else torch.randint(0, 2**32, (1,)).item()
+    initial_seed = args.seed if args.seed is not None else int(torch.randint(0, 2**32, (1,)).item())
 
     for i in range(args.num_images):
         current_seed = initial_seed + i
@@ -147,9 +148,9 @@ def main():
         # Save image with timestamp and index
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if args.num_images > 1:
-            final_output_path = os.path.join(output_dir, f"{base}_{timestamp}_{i + 1}{ext}")
+            final_output_path = output_dir / f"{base}_{timestamp}_{i + 1}{ext}"
         else:
-            final_output_path = os.path.join(output_dir, f"{base}_{timestamp}{ext}")
+            final_output_path = output_dir / f"{base}_{timestamp}{ext}"
 
         image.save(final_output_path)
         logger.info(f"Image saved to {final_output_path}")

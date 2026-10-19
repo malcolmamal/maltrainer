@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-from typing import List
 
 
 class FakeMsvcrt:
@@ -11,7 +10,7 @@ class FakeMsvcrt:
 
     def __init__(self, *batches: str) -> None:
         self.batches = list(batches)
-        self.pending: List[str] = []
+        self.pending: list[str] = []
         self.deliver()
 
     def deliver(self) -> None:
@@ -30,7 +29,7 @@ class FakeClock:
     def __init__(self, console: FakeMsvcrt | None = None) -> None:
         self.now = 100.0
         self.console = console
-        self.sleeps: List[float] = []
+        self.sleeps: list[float] = []
 
     def time(self) -> float:
         return self.now

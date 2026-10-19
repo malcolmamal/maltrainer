@@ -7,7 +7,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Optional, Tuple
 
 import torch
 from torch import nn
@@ -33,12 +32,12 @@ class MiniMaxH3TransformerConfig:
     ffn_dim: int = 14336
     in_channels: int = 24
     audio_in_channels: int = 32
-    patch_size: Tuple[int, int, int] = (1, 2, 2)
+    patch_size: tuple[int, int, int] = (1, 2, 2)
     text_dim: int = 5120
     freq_dim: int = 256
     time_embed_hidden_dim: int = 5376
     time_embed_dim: int = 2688
-    adaln_t_table_size: Optional[int] = None
+    adaln_t_table_size: int | None = None
     rope_freq_dim: int = 16
     rope_theta: float = 10000.0
     norm_eps: float = 1e-5
@@ -68,15 +67,14 @@ def get_timestep_embedding(
     scale: float = 1,
     max_period: int = 10000,
 ) -> torch.Tensor:
-    assert len(timesteps.shape) == 1, "Timesteps should be a 1d-tensor"
+    if timesteps.dim() != 1:
+        raise ValueError("Timesteps should be a 1d-tensor")
 
     half_dim = embedding_dim // 2
     exponent = -math.log(max_period) * torch.arange(start=0, end=half_dim, dtype=torch.float32, device=timesteps.device)
     exponent = exponent / (half_dim - downscale_freq_shift)
 
-    emb = torch.exp(exponent)
-    emb = timesteps[:, None].float() * emb[None, :]
-    emb = scale * emb
+    emb = scale * (timesteps[:, None].float() * torch.exp(exponent)[None, :])
 
     emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
 
@@ -100,6 +98,8 @@ def _apply_rotary_emb(hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch
 
 
 class MiniMaxH3RotaryPosEmbed(nn.Module):
+    inv_freq: torch.Tensor
+
     def __init__(self, rope_freq_dim: int, rope_theta: float):
         super().__init__()
         inv_freq = 1.0 / (
@@ -107,7 +107,7 @@ class MiniMaxH3RotaryPosEmbed(nn.Module):
         )
         self.register_buffer("inv_freq", inv_freq, persistent=True)
 
-    def forward(self, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         frequencies = position_ids.to(torch.float32).unsqueeze(-1) * self.inv_freq.view(1, 1, -1)
         time, height, width = frequencies.unbind(dim=1)
         frequencies = torch.cat((time, height, width), dim=-1)
@@ -160,8 +160,8 @@ class MiniMaxH3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         query, key, value = self.qkv_proj(hidden_states).chunk(3, dim=-1)
         query = self.q_norm(query.unflatten(-1, (self.heads, self.head_dim)))
@@ -257,8 +257,8 @@ class MiniMaxH3TransformerBlock(nn.Module):
         hidden_states: torch.Tensor,
         timestep_embedding: torch.Tensor,
         adaln_indices: torch.Tensor,
-        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
     ) -> torch.Tensor:
         modulation = self.adaln_proj(timestep_embedding).view(-1, 6 * self.hidden_size)
         shift_attn, scale_attn, gate_attn, shift_mlp, scale_mlp, gate_mlp = modulation.chunk(6, dim=-1)
@@ -320,7 +320,7 @@ class MiniMaxH3FinalLayer(nn.Module):
 class MiniMaxH3Transformer(nn.Module):
     """Single-stream MiniMax H3 video-audio transformer."""
 
-    def __init__(self, config: Optional[MiniMaxH3TransformerConfig] = None):
+    def __init__(self, config: MiniMaxH3TransformerConfig | None = None):
         super().__init__()
         self.config = config or MiniMaxH3TransformerConfig()
         config = self.config
@@ -333,7 +333,7 @@ class MiniMaxH3Transformer(nn.Module):
         self.audio_patch_proj = nn.Linear(config.audio_in_channels, config.hidden_size)
         self.condition_proj = nn.Linear(config.text_dim, config.hidden_size)
         if config.adaln_t_table_size is None:
-            self.time_embedder = MiniMaxH3TimeEmbedder(
+            self.time_embedder: MiniMaxH3TimeEmbedder | None = MiniMaxH3TimeEmbedder(
                 config.freq_dim,
                 config.time_embed_hidden_dim,
                 config.time_embed_dim,
@@ -370,7 +370,7 @@ class MiniMaxH3Transformer(nn.Module):
     def _time_embedding(self, timestep: torch.Tensor) -> torch.Tensor:
         if self.time_embedder is not None:
             return self.time_embedder(timestep)
-        table = self.adaln_t_table.float()
+        table = self.get_buffer("adaln_t_table").float()
         position = timestep.to(device=table.device, dtype=torch.float32).clamp(0.0, 1.0) * (table.shape[0] - 1)
         lower = position.floor().long()
         upper = (lower + 1).clamp(max=table.shape[0] - 1)
@@ -390,7 +390,7 @@ class MiniMaxH3Transformer(nn.Module):
         video_indices: torch.Tensor,
         audio_indices: torch.Tensor,
         text_indices: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> MiniMaxH3TransformerOutput:
         sequence_length = position_ids.shape[0]
         rotary_emb = self.rope(position_ids)
@@ -419,12 +419,6 @@ class MiniMaxH3Transformer(nn.Module):
                     use_reentrant=False,
                 )
             else:
-                hidden_states = block(
-                    hidden_states,
-                    timestep_embedding,
-                    adaln_indices,
-                    rotary_emb,
-                    attention_mask,
-                )
+                hidden_states = block(hidden_states, timestep_embedding, adaln_indices, rotary_emb, attention_mask)
 
         return self.final_layer(hidden_states, timestep_embedding, timestep_indices, video_indices, audio_indices)

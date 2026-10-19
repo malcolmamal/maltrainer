@@ -80,7 +80,7 @@ The text encoder is the only place where the model learns what a clip should sou
 
 **Dependencies**
 
-Decoding needs PyAV (`pip install av`, listed in `requirements.txt`), which bundles FFmpeg. A
+Decoding needs PyAV (`pip install av`, listed in `requirements.lock`), which bundles FFmpeg. A
 dataset with only stills doesn't import it.
 
 ## How the audio stream is trained

@@ -21,7 +21,7 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 from accelerate import Accelerator
@@ -31,7 +31,7 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 from maltrainer.data.krea2_dataset import load_krea2_image
-from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
+from maltrainer.data.minimax_dataset import MediaSource, count_media_files, scan_media_sources
 from maltrainer.models.krea2.loading import load_krea2_transformer
 from maltrainer.models.krea2.lora import Krea2LoRANetwork
 from maltrainer.models.krea2.text_encoder import load_krea2_text_encoder
@@ -45,7 +45,7 @@ from maltrainer.utils.lora_metadata import build_metadata, git_commit
 logger = logging.getLogger(__name__)
 
 
-def plan_training_steps(num_samples: int, train_config: dict) -> Tuple[int, int, int]:
+def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
     """(steps_per_epoch, num_epochs, total_steps); ``train.max_steps`` > 0 wins over epochs."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
@@ -67,10 +67,10 @@ class Krea2LoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path: Optional[str] = None
-        self.lr_scheduler = None
-        self.ema: Optional[ParameterEMA] = None
-        self.run_metadata: Dict[str, object] = {
+        self.last_saved_path: str | None = None
+        self.lr_scheduler: Any = None
+        self.ema: ParameterEMA | None = None
+        self.run_metadata: dict[str, object] = {
             "model_type": "krea2",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
@@ -78,12 +78,12 @@ class Krea2LoRATrainer:
         }
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
-        self.samples: List[Tuple[str, str]] = []  # (key, caption)
-        self.latent_cache: Dict[str, torch.Tensor] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
-        self.dop_captions: Dict[str, str] = {}  # sample key -> its caption with the trigger replaced
+        self.samples: list[tuple[str, str]] = []  # (key, caption)
+        self.latent_cache: dict[str, torch.Tensor] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
+        self.dop_captions: dict[str, str] = {}  # sample key -> its caption with the trigger replaced
         self.micro_step = 0
-        self.last_dop_loss: Optional[float] = None
+        self.last_dop_loss: float | None = None
 
         train_config = config.get("train", {})
         self.dop = bool(train_config.get("dop", False))
@@ -121,7 +121,7 @@ class Krea2LoRATrainer:
 
     # ------------------------------------------------------------------ caching
 
-    def _sources(self):
+    def _sources(self) -> list[MediaSource]:
         dataset_config = self.config["dataset"]
         return scan_media_sources(
             dataset_config["path"],
@@ -130,10 +130,9 @@ class Krea2LoRATrainer:
             default_caption=dataset_config.get("default_caption", ""),
         )
 
-    def precache_dataset(self):
+    def precache_dataset(self) -> None:
         model_config = self.config["model"]
         dataset_config = self.config["dataset"]
-        train_config = self.config.get("train", {})
         sources = self._sources()
         if not sources:
             raise ValueError(f"No images found under {dataset_config['path']}")
@@ -148,7 +147,7 @@ class Krea2LoRATrainer:
                 pixels = load_krea2_image(source.path, resolution, aspect_mode).unsqueeze(0).to(self.device)
                 self.latent_cache[str(source.path)] = vae.encode(pixels).cpu()
                 self.samples.append((str(source.path), source.caption))
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 logger.warning("Skipping %s: %s", source.path.name, e)
         del vae
         gc.collect()
@@ -156,7 +155,7 @@ class Krea2LoRATrainer:
         print("VAE latents pre-cached and VAE unloaded from VRAM.", flush=True)
 
         prompts = {caption for _, caption in self.samples}
-        if float(train_config.get("caption_dropout", 0.0) or 0.0) > 0:
+        if float(self.config.get("train", {}).get("caption_dropout", 0.0) or 0.0) > 0:
             prompts.add("")
         if self.dop:
             self._plan_dop_captions()
@@ -208,7 +207,7 @@ class Krea2LoRATrainer:
 
     # ------------------------------------------------------------------ model
 
-    def load_transformer_and_lora(self):
+    def load_transformer_and_lora(self) -> None:
         print("=== Step 2/2: Loading Krea 2 DiT ===", flush=True)
         model_config = self.config["model"]
         lora_config = self.config.get("lora", {})
@@ -216,7 +215,7 @@ class Krea2LoRATrainer:
         self.run_metadata["base_load"] = load_info
         self.transformer.enable_gradient_checkpointing()
 
-        self.lora_network = Krea2LoRANetwork(
+        self.lora_network: Any = Krea2LoRANetwork(
             self.transformer,
             rank=int(lora_config.get("rank", 16)),
             alpha=float(lora_config.get("alpha", lora_config.get("rank", 16))),
@@ -236,7 +235,7 @@ class Krea2LoRATrainer:
         )
         logger.info("LoRA: %.1fM trainable parameters in %s", trainable / 1e6, self.lora_dtype)
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         train_config = self.config["train"]
         name = str(train_config.get("optimizer", "automagic3")).lower()
         weight_decay = float(train_config.get("weight_decay", 0.0))
@@ -249,7 +248,7 @@ class Krea2LoRATrainer:
             # and a 16-step sign window, because at 8 the rate "crawled from 1e-6 to 4.3e-6
             # across a whole epoch" on batch-1 Krea 2 gradients.
             groups = self.lora_network.param_groups(bool(train_config.get("automagic_param_groups", True)))
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "lr": lr,
                 "min_lr": float(train_config.get("automagic_min_lr", 1e-8)),
                 "max_lr": float(train_config.get("automagic_max_lr", 1e3)),
@@ -260,7 +259,7 @@ class Krea2LoRATrainer:
                 "polarity_history": int(train_config.get("automagic_polarity_history", 16)),
                 "fused": bool(train_config.get("automagic_fused", False)),
             }
-            self.optimizer = Automagic3(groups, **kwargs)
+            self.optimizer: Any = Automagic3(groups, **kwargs)
             self.run_metadata["optimizer_resolved"] = {
                 "name": "automagic3",
                 "groups": [g["name"] for g in groups],
@@ -313,7 +312,7 @@ class Krea2LoRATrainer:
 
     # ------------------------------------------------------------------ training
 
-    def _sample_sigma(self, image_tokens: int) -> Tuple[torch.Tensor, float]:
+    def _sample_sigma(self, image_tokens: int) -> tuple[torch.Tensor, float]:
         """Video-free flow-matching sigma for one sample, plus the shift used."""
         train_config = self.config["train"]
         distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
@@ -334,14 +333,14 @@ class Krea2LoRATrainer:
         hi = float(train_config.get("max_sigma", 0.999))
         return sigma.clamp(lo, hi), shift
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
         order = [i for i in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
         world = self.accelerator.num_processes
         return order[self.accelerator.process_index :: world] if world > 1 else order
 
-    def _training_step(self, index: int, shift_logged: List[bool]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _training_step(self, index: int, shift_logged: list[bool]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """The flow-matching loss for one sample, and the noised latent and sigma it used."""
         train_config = self.config["train"]
         key, caption = self.samples[index]
@@ -371,7 +370,7 @@ class Krea2LoRATrainer:
         strength = float(train_config.get("loss_weight_strength", 1.0))
         return (loss * strength if strength != 1.0 else loss), noisy, sigma
 
-    def _dop_loss(self, index: int, noisy: torch.Tensor, sigma: torch.Tensor) -> Optional[torch.Tensor]:
+    def _dop_loss(self, index: int, noisy: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor | None:
         """Differential output preservation (ai-toolkit's diff_output_preservation).
 
         On the same noised latent and sigma, the caption without the trigger: the base model's
@@ -389,7 +388,7 @@ class Krea2LoRATrainer:
         pred = self.lora_network(noisy, sigma, context)
         return torch.nn.functional.mse_loss(pred.float(), target) * float(train_config.get("dop_multiplier", 1.0))
 
-    def train(self):
+    def train(self) -> None:
         train_config = self.config["train"]
         save_every = int(train_config.get("save_every", 250) or 0)
         self.lora_network, self.optimizer = self.accelerator.prepare(self.lora_network, self.optimizer)
@@ -467,23 +466,19 @@ class Krea2LoRATrainer:
         self.save_checkpoint("final")
         logger.info("Krea 2 LoRA training completed!")
 
-    def _log_step(self, step, total, loss, epoch, num_epochs):
+    def _log_step(self, step: int, total: int, loss: torch.Tensor, epoch: int, num_epochs: int) -> None:
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
-        prefix = "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (
-            step,
-            total,
-            int(step / total * 100),
-            loss.item(),
-            epoch + 1,
-            num_epochs,
+        prefix = (
+            f"Step: {step}/{total} [{int(step / total * 100)}%], "
+            f"Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, "
         )
         if self.last_dop_loss is not None:
-            prefix += "DOP: %.6f, " % self.last_dop_loss
+            prefix += f"DOP: {self.last_dop_loss:.6f}, "
         if hasattr(inner, "get_avg_learning_rate"):
             rates = ", ".join(
                 f"{g.get('name', i)} {lr:.2e}"
-                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates()))
+                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates(), strict=False))
             )
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
         elif group.get("d") is not None:
@@ -493,7 +488,7 @@ class Krea2LoRATrainer:
         else:
             self.progress_logger.info("%sLR: %.2e", prefix, group["lr"])
 
-    def save_checkpoint(self, step):
+    def save_checkpoint(self, step: int | str) -> Any:  # the finetune subclass reports whether it saved
         if not self.is_main_process:
             return
         output_config = self.config.get("output", {})
@@ -523,7 +518,7 @@ class Krea2LoRATrainer:
 
     # ------------------------------------------------------------------ dry run / entry
 
-    def simulate(self):
+    def simulate(self) -> None:
         """Plan from the real dataset folder and tick through the steps without loading models."""
         dataset_config = self.config["dataset"]
         repeats = max(int(dataset_config.get("repeats", 1) or 1), 1)
@@ -550,7 +545,7 @@ class Krea2LoRATrainer:
                 )
         logger.info("Dry run complete: would save final checkpoint at step %d", total_steps)
 
-    def run(self):
+    def run(self) -> None:
         try:
             set_seed(self.config.get("seed", 42))
             if self.dry_run:
@@ -568,7 +563,7 @@ class Krea2LoRATrainer:
             raise
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Train a Krea 2 LoRA in maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")

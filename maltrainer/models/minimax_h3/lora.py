@@ -5,11 +5,12 @@ LoRA network injection for MiniMax H3 Transformer blocks.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, cast
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +63,9 @@ class GridAdaLNLoRA(nn.Module):
         self.scale = scale
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        index = torch.cdist(x.detach().float(), self.table.float()).argmin(dim=1)
-        full = self.grid[index].to(self.down.dtype)
-        return (full @ self.down.T @ self.up.T) * self.scale
+        index = torch.cdist(x.detach().float(), self.get_buffer("table").float()).argmin(dim=1)
+        full = self.get_buffer("grid")[index].to(self.get_buffer("down").dtype)
+        return (full @ self.get_buffer("down").T @ self.get_buffer("up").T) * self.scale
 
 
 class MiniMaxH3LoRANetwork(nn.Module):
@@ -75,11 +76,11 @@ class MiniMaxH3LoRANetwork(nn.Module):
         transformer: nn.Module,
         rank: int = 16,
         alpha: float = 16.0,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
         prefix: str = "diffusion_model.",
         include_adaln: bool = False,
         include_token_refiner: bool = True,
-        block_range: Optional[Tuple[int, int]] = None,
+        block_range: tuple[int, int] | None = None,
     ):
         super().__init__()
         self.transformer = transformer
@@ -93,10 +94,10 @@ class MiniMaxH3LoRANetwork(nn.Module):
         self.block_range = tuple(block_range) if block_range is not None else None
 
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
         self._inject_lora()
 
-    def _inject_lora(self):
+    def _inject_lora(self) -> None:
         """Inject LoRA layers into target linear modules of MiniMaxH3TransformerBlock.
 
         Targets are matched against the final component of the module path, not as a
@@ -111,8 +112,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         before block 20 nothing upstream needs a gradient, so the backward pass also stops
         there.
         """
-        injected = 0
-        adaln = 0
+        injected = adaln = 0
         for name, module in self.transformer.named_modules():
             if "modulation" in name or "norm" in name:
                 continue
@@ -151,14 +151,13 @@ class MiniMaxH3LoRANetwork(nn.Module):
             self.rank,
             self.alpha,
             f", including {adaln} per-block adaln_proj" if adaln else ", adaln_proj excluded",
-            "%d-%d" % self.block_range if self.block_range else "0-49",
+            f"{self.block_range[0]}-{self.block_range[1]}" if self.block_range else "0-49",
             "" if self.include_token_refiner else ", token refiner frozen",
         )
 
     def _add_lora_layer(self, name: str, module: nn.Linear) -> None:
-        lora_layer = MiniMaxH3LoRALayer(module, self.rank, self.alpha)
         safe_name = name.replace(".", "_")
-        self.lora_layers[safe_name] = lora_layer
+        self.lora_layers[safe_name] = lora_layer = MiniMaxH3LoRALayer(module, self.rank, self.alpha)
         self.name_map[safe_name] = name
         self._wrap_forward(module, lora_layer)
 
@@ -172,7 +171,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         """
         original_forward = module.forward
 
-        def forward(x, _orig=original_forward, _lora=lora):
+        def forward(x: torch.Tensor, _orig: Any = original_forward, _lora: nn.Module = lora) -> torch.Tensor:
             base = _orig(x)
             delta = _lora(x)
             if delta.dtype == base.dtype:
@@ -181,16 +180,16 @@ class MiniMaxH3LoRANetwork(nn.Module):
             # update is not truncated before it is even added.
             return (base + delta).to(base.dtype)
 
-        module.forward = forward
+        cast(Any, module).forward = forward
 
     def load_assistant_adapter(
         self,
         path: str,
         *,
         multiplier: float = 1.0,
-        device=None,
-        dtype: Optional[torch.dtype] = None,
-        adaln_grid_path: Optional[str] = None,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+        adaln_grid_path: str | None = None,
     ) -> int:
         """Attach a frozen de-distillation ("training") adapter alongside the trainable LoRA.
 
@@ -213,7 +212,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         from safetensors.torch import load_file
 
         state = load_file(str(path))
-        pairs: Dict[str, Dict[str, torch.Tensor]] = {}
+        pairs: dict[str, dict[str, torch.Tensor]] = {}
         for key, value in state.items():
             for suffix, slot in (
                 (".lora_A.weight", "down"),
@@ -236,9 +235,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         }
         table = getattr(self.transformer, "adaln_t_table", None)
         grid = None
-
-        attached, grid_rows, skipped, unbridged = 0, 0, [], []
-        rank = 0
+        attached, grid_rows, rank, skipped, unbridged = 0, 0, 0, [], []
         for name, parts in sorted(pairs.items()):
             if "down" not in parts or "up" not in parts:
                 continue
@@ -273,7 +270,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
                             f"AdaLN grid has {grid.shape[0]} rows but this checkpoint's curve table has "
                             f"{table.shape[0]}; they must come from the same H3 build."
                         )
-                layer = GridAdaLNLoRA(down, up, scale, table, grid)
+                layer: GridAdaLNLoRA | MiniMaxH3LoRALayer = GridAdaLNLoRA(down, up, scale, table, grid)
                 grid_rows += 1
             else:
                 layer = MiniMaxH3LoRALayer(module, rank, alpha)
@@ -315,7 +312,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         )
         return attached
 
-    def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
+    def set_lora_dtype(self, device: torch.device | str, dtype: torch.dtype) -> None:
         """Move/cast only the adapters, leaving the frozen base untouched.
 
         ``self.transformer`` is a submodule, so ``network.to(dtype=...)`` would also
@@ -324,7 +321,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         """
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         """Only the adapter parameters, for the optimizer and gradient clipping.
 
         ``parameters()`` also yields the frozen transformer's tensors. They carry no grads so
@@ -333,7 +330,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         """
         return self.lora_layers.parameters()
 
-    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+    def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         """Get LoRA state dict for saving in Kohya/AI-Toolkit safetensors format.
 
         Adapters train in fp32 so small updates survive accumulation, but the finished delta
@@ -342,7 +339,8 @@ class MiniMaxH3LoRANetwork(nn.Module):
         keep the training dtype.
         """
         state_dict = {}
-        for safe_name, lora_layer in self.lora_layers.items():
+        for safe_name, module in self.lora_layers.items():
+            lora_layer = cast(MiniMaxH3LoRALayer, module)
             name = self.name_map[safe_name]
             full_name = f"{self.prefix}{name}"
 
@@ -355,5 +353,5 @@ class MiniMaxH3LoRANetwork(nn.Module):
             state_dict[f"{full_name}.alpha"] = torch.tensor(lora_layer.alpha, dtype=torch.float32)
         return state_dict
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

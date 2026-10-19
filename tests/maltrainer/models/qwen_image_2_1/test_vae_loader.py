@@ -89,5 +89,5 @@ def test_the_missing_post_quant_conv_does_not_matter_when_the_decoder_is_not_req
 def test_an_encoder_weight_missing_from_the_checkpoint_fails_the_strict_load(tmp_path: Path) -> None:
     path = _checkpoint(tmp_path, drop=("encoder.head.2.bias",))
 
-    with pytest.raises(RuntimeError, match="encoder.head.2.bias|head.2.bias"):
+    with pytest.raises(RuntimeError, match=r"encoder\.head\.2\.bias|head\.2\.bias"):
         load_qwen_image_2_1_vae(path, device=CPU)

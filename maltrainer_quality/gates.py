@@ -41,10 +41,20 @@ def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
         Gate(
             "file length", "200 lines per Python or shell file, beyond the baseline", "maltrainer_quality.file_length"
         ),
+        Gate("types", "mypy, file by file beyond the baseline", "maltrainer_quality.typing_gate"),
+        Gate("dead code", "vulture at confidence 60; the whitelist is in pyproject.toml, with reasons", "vulture"),
         Gate("tests", "behaviour", "pytest", pytest),
         # pytest-cov can print the shortfall without failing the session; `coverage report`
         # exits non-zero on its own.
         Gate("coverage", "the floor in pyproject.toml", "coverage", ("report",)),
+        Gate("lock", "uv.lock is what pyproject.toml resolves to", "uv", ("lock", "--check")),
+        Gate("requirements", "requirements.lock is what uv.lock exports", "maltrainer_quality.requirements"),
+        Gate(
+            "audit",
+            "no known vulnerabilities in the runtime lock (dev tools excluded)",
+            "pip_audit",
+            ("-r", "requirements.lock", "--no-deps", "--disable-pip"),
+        ),
     )
 
 

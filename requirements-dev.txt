@@ -1,7 +1,0 @@
-# Quality gate tools, pinned so every checkout runs the same gate.
-#   pip install -r requirements-dev.txt
-coverage==7.14.1
-httpx==0.28.1  # starlette's TestClient, for the backend tests
-pytest-cov==7.1.0
-pytest==9.1.0
-ruff==0.15.18

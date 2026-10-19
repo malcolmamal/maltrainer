@@ -1,17 +1,19 @@
-import os
 import sys
+from pathlib import Path
+from typing import Any
 
 import safetensors.torch as safetensors
+from safetensors import SafetensorError
 
 
-def analyze_lora(path):
-    if not os.path.exists(path):
+def analyze_lora(path: str) -> dict[str, Any] | None:
+    if not Path(path).exists():
         print(f"File not found: {path}")
         return None
 
     try:
         tensors = safetensors.load_file(path)
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, KeyError, SafetensorError) as e:
         print(f"Error loading {path}: {e}")
         return None
 
@@ -70,14 +72,14 @@ def analyze_lora(path):
             ranks.add(v.shape[0])
 
     return {
-        "size_mb": os.path.getsize(path) / (1024 * 1024),
+        "size_mb": Path(path).stat().st_size / (1024 * 1024),
         "params": total_params,
         "modules": sorted(modules),
         "ranks": sorted(ranks),
     }
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 3:
         print("Usage: python compare_loras.py <good_lora> <my_lora>")
         return
@@ -85,7 +87,7 @@ def main():
     good_path = sys.argv[1]
     my_path = sys.argv[2]
 
-    print(f"--- Analyzing Good LoRA: {os.path.basename(good_path)} ---")
+    print(f"--- Analyzing Good LoRA: {Path(good_path).name} ---")
     good_stats = analyze_lora(good_path)
     if good_stats:
         print(f"Size: {good_stats['size_mb']:.2f} MB")
@@ -93,7 +95,7 @@ def main():
         print(f"Ranks detected: {good_stats['ranks']}")
         print(f"Target Modules: {good_stats['modules']}")
 
-    print(f"\n--- Analyzing My LoRA: {os.path.basename(my_path)} ---")
+    print(f"\n--- Analyzing My LoRA: {Path(my_path).name} ---")
     my_stats = analyze_lora(my_path)
     if my_stats:
         print(f"Size: {my_stats['size_mb']:.2f} MB")

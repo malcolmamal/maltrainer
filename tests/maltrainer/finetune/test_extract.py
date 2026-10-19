@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
 
 import pytest
 import torch
@@ -12,7 +12,7 @@ from maltrainer.finetune.extract import GENERIC, ExtractProfile, extract
 DIFF = torch.tensor([[3.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
 
 
-def _base() -> Dict[str, torch.Tensor]:
+def _base() -> dict[str, torch.Tensor]:
     return {
         "a.weight": torch.ones(2, 3),
         "a.bias": torch.zeros(2),
@@ -21,7 +21,7 @@ def _base() -> Dict[str, torch.Tensor]:
     }
 
 
-def _tuned() -> Dict[str, torch.Tensor]:
+def _tuned() -> dict[str, torch.Tensor]:
     tuned = _base()
     tuned["a.weight"] = tuned["a.weight"] + DIFF
     tuned["a.bias"] = torch.ones(2)
@@ -29,7 +29,7 @@ def _tuned() -> Dict[str, torch.Tensor]:
     return tuned
 
 
-def _files(tmp_path: Path, base: Dict[str, torch.Tensor], tuned: Dict[str, torch.Tensor]) -> Tuple[Path, Path]:
+def _files(tmp_path: Path, base: dict[str, torch.Tensor], tuned: dict[str, torch.Tensor]) -> tuple[Path, Path]:
     base_path, tuned_path = tmp_path / "base.safetensors", tmp_path / "tuned.safetensors"
     save_file(base, str(base_path))
     save_file(tuned, str(tuned_path))
@@ -104,7 +104,7 @@ def test_a_dynamic_mode_picks_each_layers_rank_under_the_cap(tmp_path: Path) -> 
     assert (report["mode"], report["value"], report["per_cap"][2]["rank_max"]) == ("threshold", 2.5, 1)
 
 
-def _split_rows(name: str, diff: torch.Tensor) -> List[Tuple[str, torch.Tensor]]:
+def _split_rows(name: str, diff: torch.Tensor) -> list[tuple[str, torch.Tensor]]:
     return [(f"{name}.top", diff[:1]), (f"{name}.bottom", diff[1:])]
 
 
@@ -128,9 +128,9 @@ def test_a_profile_splits_modules_and_skips_parts_that_did_not_change(tmp_path: 
 
 def test_progress_wraps_the_weight_names(tmp_path: Path) -> None:
     base, tuned = _files(tmp_path, _base(), _tuned())
-    seen: List[List[str]] = []
+    seen: list[list[str]] = []
 
-    def progress(names: List[str]) -> List[str]:
+    def progress(names: list[str]) -> list[str]:
         seen.append(list(names))
         return names
 

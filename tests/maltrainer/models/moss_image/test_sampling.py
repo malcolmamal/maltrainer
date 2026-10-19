@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 import pytest
 import torch
 
@@ -14,9 +12,9 @@ NEG = torch.ones(3, 4)
 class Recorder:
     """A stand-in DiT: ``velocity(x, context)`` is what it predicts; every call is logged."""
 
-    def __init__(self, velocity=None) -> None:
-        self.velocity = velocity or (lambda x, _context: torch.full_like(x, 0.5))
-        self.calls: List[dict] = []
+    def __init__(self, velocity=lambda x, _context: torch.full_like(x, 0.5)) -> None:
+        self.velocity = velocity
+        self.calls: list[dict] = []
 
     def __call__(self, x, sigma, context, skip_layers=None):
         self.calls.append({"sigma": sigma.item(), "context": context, "skip": skip_layers})
@@ -37,7 +35,7 @@ def _by_context(x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
     ],
 )
 def test_the_schedule_is_the_shifted_curve_snapped_to_the_thousand_training_sigmas(
-    steps: int, shift: float, expected: List[float]
+    steps: int, shift: float, expected: list[float]
 ) -> None:
     out = schedule(steps, shift)
 
@@ -123,7 +121,7 @@ def test_one_prediction_per_step_when_there_is_nothing_to_guide_against(cfg: flo
 
 def test_a_batched_context_is_passed_through_and_progress_is_reported_after_every_step() -> None:
     dit = Recorder()
-    progress: List[tuple] = []
+    progress: list[tuple] = []
 
     sample(dit, POS[None], 16, 16, steps=5, cfg=1.0, on_step=lambda done, total: progress.append((done, total)))
 

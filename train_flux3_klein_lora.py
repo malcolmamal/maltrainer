@@ -24,7 +24,7 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 from accelerate import Accelerator
@@ -34,7 +34,7 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 from maltrainer.data.flux3_dataset import load_flux3_image
-from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
+from maltrainer.data.minimax_dataset import MediaSource, count_media_files, scan_media_sources
 from maltrainer.models.flux3.loading import load_flux3_transformer
 from maltrainer.models.flux3.lora import Flux3LoRANetwork
 from maltrainer.models.flux3.text_encoder import load_flux3_text_encoder
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 FLUX3_SHIFT = 6.93
 
 
-def plan_training_steps(num_samples: int, train_config: dict) -> Tuple[int, int, int]:
+def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
     """(steps_per_epoch, num_epochs, total_steps); ``train.max_steps`` > 0 wins over epochs."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
@@ -67,10 +67,10 @@ class Flux3KleinLoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path: Optional[str] = None
-        self.lr_scheduler = None
-        self.ema: Optional[ParameterEMA] = None
-        self.run_metadata: Dict[str, object] = {
+        self.last_saved_path: str | None = None
+        self.lr_scheduler: Any = None
+        self.ema: ParameterEMA | None = None
+        self.run_metadata: dict[str, object] = {
             "model_type": "flux3_klein",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
@@ -78,9 +78,9 @@ class Flux3KleinLoRATrainer:
         }
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
-        self.samples: List[Tuple[str, str]] = []  # (key, caption)
-        self.latent_cache: Dict[str, torch.Tensor] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
+        self.samples: list[tuple[str, str]] = []  # (key, caption)
+        self.latent_cache: dict[str, torch.Tensor] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
 
         train_config = config.get("train", {})
         if int(train_config.get("batch_size", 1) or 1) != 1:
@@ -112,7 +112,7 @@ class Flux3KleinLoRATrainer:
 
     # ------------------------------------------------------------------ caching
 
-    def _sources(self):
+    def _sources(self) -> list[MediaSource]:
         dataset_config = self.config["dataset"]
         return scan_media_sources(
             dataset_config["path"],
@@ -121,7 +121,7 @@ class Flux3KleinLoRATrainer:
             default_caption=dataset_config.get("default_caption", ""),
         )
 
-    def precache_dataset(self):
+    def precache_dataset(self) -> None:
         model_config = self.config["model"]
         dataset_config = self.config["dataset"]
         train_config = self.config.get("train", {})
@@ -134,7 +134,7 @@ class Flux3KleinLoRATrainer:
         aspect_mode = str(dataset_config.get("aspect_mode", "bucket")).lower()
 
         vae = load_flux2_vae_encoder(model_config["vae_path"], self.device)
-        sizes: Dict[Tuple[int, int], int] = {}
+        sizes: dict[tuple[int, int], int] = {}
         for source in tqdm(sources, desc="Caching latents", disable=not self.is_main_process):
             try:
                 pixels = load_flux3_image(source.path, resolution, aspect_mode).unsqueeze(0).to(self.device)
@@ -143,7 +143,7 @@ class Flux3KleinLoRATrainer:
                 self.samples.append((str(source.path), source.caption))
                 size = (pixels.shape[-1], pixels.shape[-2])
                 sizes[size] = sizes.get(size, 0) + 1
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 logger.warning("Skipping %s: %s", source.path.name, e)
         del vae
         gc.collect()
@@ -164,18 +164,17 @@ class Flux3KleinLoRATrainer:
         del encoder
         gc.collect()
         torch.cuda.empty_cache()
-        windows = sorted({embeds.shape[0] for embeds in self.text_cache.values()})
         print("Text embeddings pre-cached and Text Encoder unloaded from VRAM.", flush=True)
         logger.info(
             "Pre-cached %d images and %d prompt embeddings (text windows: %s tokens).",
             len(self.samples),
             len(self.text_cache),
-            windows,
+            sorted({embeds.shape[0] for embeds in self.text_cache.values()}),
         )
 
     # ------------------------------------------------------------------ model
 
-    def load_transformer_and_lora(self):
+    def load_transformer_and_lora(self) -> None:
         print("=== Step 2/2: Loading FLUX.3 [klein] DiT ===", flush=True)
         model_config = self.config["model"]
         lora_config = self.config.get("lora", {})
@@ -208,7 +207,7 @@ class Flux3KleinLoRATrainer:
         )
         logger.info("LoRA: %.1fM trainable parameters in %s", trainable / 1e6, self.lora_dtype)
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         train_config = self.config["train"]
         name = str(train_config.get("optimizer", "automagic3")).lower()
         weight_decay = float(train_config.get("weight_decay", 0.0))
@@ -220,7 +219,7 @@ class Flux3KleinLoRATrainer:
             # As for Krea 2: attention, MLP and I/O each adapt their own rate, over a 16-step
             # sign window, which suits batch-1 gradients better than 8.
             groups = self.lora_network.param_groups(bool(train_config.get("automagic_param_groups", True)))
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "lr": lr,
                 "min_lr": float(train_config.get("automagic_min_lr", 1e-8)),
                 "max_lr": float(train_config.get("automagic_max_lr", 1e3)),
@@ -231,7 +230,7 @@ class Flux3KleinLoRATrainer:
                 "polarity_history": int(train_config.get("automagic_polarity_history", 16)),
                 "fused": bool(train_config.get("automagic_fused", False)),
             }
-            self.optimizer = Automagic3(groups, **kwargs)
+            self.optimizer: Any = Automagic3(groups, **kwargs)
             self.run_metadata["optimizer_resolved"] = {
                 "name": "automagic3",
                 "groups": [g["name"] for g in groups],
@@ -299,7 +298,7 @@ class Flux3KleinLoRATrainer:
         hi = float(train_config.get("max_sigma", 0.999))
         return sigma.clamp(lo, hi)
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
         order = [i for i in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
@@ -325,7 +324,7 @@ class Flux3KleinLoRATrainer:
         strength = float(train_config.get("loss_weight_strength", 1.0))
         return loss * strength if strength != 1.0 else loss
 
-    def train(self):
+    def train(self) -> None:
         train_config = self.config["train"]
         save_every = int(train_config.get("save_every", 250) or 0)
         self.lora_network, self.optimizer = self.accelerator.prepare(self.lora_network, self.optimizer)
@@ -394,21 +393,17 @@ class Flux3KleinLoRATrainer:
         self.save_checkpoint("final")
         logger.info("FLUX.3 [klein] LoRA training completed!")
 
-    def _log_step(self, step, total, loss, epoch, num_epochs):
+    def _log_step(self, step: int, total: int, loss: torch.Tensor, epoch: int, num_epochs: int) -> None:
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
-        prefix = "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (
-            step,
-            total,
-            int(step / total * 100),
-            loss.item(),
-            epoch + 1,
-            num_epochs,
+        prefix = (
+            f"Step: {step}/{total} [{int(step / total * 100)}%], "
+            f"Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, "
         )
         if hasattr(inner, "get_avg_learning_rate"):
             rates = ", ".join(
                 f"{g.get('name', i)} {lr:.2e}"
-                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates()))
+                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates(), strict=False))
             )
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
         elif group.get("d") is not None:
@@ -418,7 +413,7 @@ class Flux3KleinLoRATrainer:
         else:
             self.progress_logger.info("%sLR: %.2e", prefix, group["lr"])
 
-    def save_checkpoint(self, step):
+    def save_checkpoint(self, step: int | str) -> None:
         if not self.is_main_process:
             return
         output_config = self.config.get("output", {})
@@ -448,7 +443,7 @@ class Flux3KleinLoRATrainer:
 
     # ------------------------------------------------------------------ dry run / entry
 
-    def simulate(self):
+    def simulate(self) -> None:
         """Plan from the real dataset folder and tick through the steps without loading models."""
         dataset_config = self.config["dataset"]
         repeats = max(int(dataset_config.get("repeats", 1) or 1), 1)
@@ -475,7 +470,7 @@ class Flux3KleinLoRATrainer:
                 )
         logger.info("Dry run complete: would save final checkpoint at step %d", total_steps)
 
-    def run(self):
+    def run(self) -> None:
         try:
             set_seed(self.config.get("seed", 42))
             if self.dry_run:
@@ -493,7 +488,7 @@ class Flux3KleinLoRATrainer:
             raise
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Train a FLUX.3 [klein] LoRA in maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")

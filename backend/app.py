@@ -11,7 +11,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Deque, Dict, Optional, Set
+from typing import Any
 
 import yaml
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -83,7 +83,7 @@ class ModelSpec:
     caption_from_trigger: bool = False
 
 
-MODELS: Dict[str, ModelSpec] = {
+MODELS: dict[str, ModelSpec] = {
     spec.id: spec
     for spec in (
         ModelSpec(
@@ -273,7 +273,7 @@ class ModelInfo(BaseModel):
     default_max_steps: int
     native_max_steps: bool
     sec_per_step: float
-    models_root: Optional[str]
+    models_root: str | None
     missing_files: list[str]
     auto_steps: bool
     target_epochs: int
@@ -285,13 +285,13 @@ class ModelInfo(BaseModel):
 class StartTrainRequest(BaseModel):
     dataset: str = Field(..., min_length=1)
     model: str = "zimage"
-    optimizer: Optional[str] = None
-    learning_rate: Optional[float] = Field(None, gt=0)
-    duration_mode: Optional[str] = Field(None, pattern="^(epochs|steps)$")
-    epochs: Optional[int] = Field(None, ge=1, le=100000)
-    max_steps: Optional[int] = Field(None, ge=1, le=10000000)
-    save_every: Optional[int] = Field(None, ge=1)
-    trigger: Optional[str] = None
+    optimizer: str | None = None
+    learning_rate: float | None = Field(None, gt=0)
+    duration_mode: str | None = Field(None, pattern="^(epochs|steps)$")
+    epochs: int | None = Field(None, ge=1, le=100000)
+    max_steps: int | None = Field(None, ge=1, le=10000000)
+    save_every: int | None = Field(None, ge=1)
+    trigger: str | None = None
     dry_run: bool = False
     dry_run_step_time: float = 0.025
 
@@ -310,7 +310,7 @@ class TrainPlan(BaseModel):
     output_path: str
     duration: str
     auto_steps: bool
-    estimated_minutes: Optional[float]
+    estimated_minutes: float | None
     notes: list[str]
     warnings: list[str]
 
@@ -330,9 +330,9 @@ class JobStatusResponse(BaseModel):
     config_path: str
     status: str
     started_at: float
-    ended_at: Optional[float]
-    exit_code: Optional[int]
-    progress: Dict[str, Any]
+    ended_at: float | None
+    exit_code: int | None
+    progress: dict[str, Any]
     model: str = "zimage"
     optimizer: str = ""
     duration: str = ""
@@ -349,7 +349,7 @@ class TrainingJob:
     output_path: str
     config_path: str
     command: list[str]
-    process: Optional[asyncio.subprocess.Process]
+    process: asyncio.subprocess.Process | None
     started_at: float
     dry_run: bool
     dry_run_step_time: float
@@ -357,12 +357,13 @@ class TrainingJob:
     optimizer: str = ""
     duration: str = ""
     status: str = "running"
-    ended_at: Optional[float] = None
-    exit_code: Optional[int] = None
-    progress: Dict[str, Any] = field(default_factory=lambda: {"step": 0, "total": 0})
-    websockets: Set[WebSocket] = field(default_factory=set)
-    log_buffer: Deque[dict] = field(default_factory=lambda: deque(maxlen=2000))
-    reader_task: Optional[asyncio.Task] = None
+    ended_at: float | None = None
+    exit_code: int | None = None
+    progress: dict[str, Any] = field(default_factory=lambda: {"step": 0, "total": 0})
+    websockets: set[WebSocket] = field(default_factory=set)
+    log_buffer: deque[dict] = field(default_factory=lambda: deque(maxlen=2000))
+    reader_task: asyncio.Task | None = None
+    monitor_task: asyncio.Task | None = None
 
     async def start_readers(self) -> None:
         if not self.process:
@@ -433,13 +434,7 @@ class TrainingJob:
         self.ended_at = time.time()
         self.status = "exited" if self.exit_code == 0 else "failed"
         logger.info("Job finished: %s (%s) status=%s", self.job_id, self.dataset, self.status)
-        await self.broadcast(
-            {
-                "type": "status",
-                "status": self.status,
-                "exit_code": self.exit_code,
-            }
-        )
+        await self.broadcast({"type": "status", "status": self.status, "exit_code": self.exit_code})
         await launch_next_job()
 
     async def broadcast(self, payload: dict) -> None:
@@ -448,7 +443,7 @@ class TrainingJob:
         for ws in self.websockets:
             try:
                 await ws.send_json(payload)
-            except Exception:
+            except (RuntimeError, OSError, WebSocketDisconnect):  # the socket is gone
                 stale.append(ws)
         for ws in stale:
             self.websockets.discard(ws)
@@ -464,8 +459,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-jobs: Dict[str, TrainingJob] = {}
-queued_job_ids: Deque[str] = deque()
+jobs: dict[str, TrainingJob] = {}
+queued_job_ids: deque[str] = deque()
 job_lock = asyncio.Lock()
 
 
@@ -478,16 +473,16 @@ def output_root() -> Path:
     return Path("output").resolve()
 
 
-def comfyui_models_root() -> Optional[Path]:
+def comfyui_models_root() -> Path | None:
     root = os.environ.get(COMFYUI_MODELS_ENV)
     return Path(root).resolve() if root else None
 
 
-_model_file_cache: Dict[str, tuple[float, Dict[str, str], list[str]]] = {}
+_model_file_cache: dict[str, tuple[float, dict[str, str], list[str]]] = {}
 MODEL_FILE_CACHE_SECONDS = 30.0
 
 
-def resolve_model_files(spec: ModelSpec) -> tuple[Dict[str, str], list[str]]:
+def resolve_model_files(spec: ModelSpec) -> tuple[dict[str, str], list[str]]:
     """Find each required checkpoint under COMFYUI_MODELS_PATH/<subfolder>/ (any depth).
 
     Returns (config key -> absolute path, missing "subfolder/file" entries). Cached briefly
@@ -499,10 +494,10 @@ def resolve_model_files(spec: ModelSpec) -> tuple[Dict[str, str], list[str]]:
     if cached and time.time() - cached[0] < MODEL_FILE_CACHE_SECONDS:
         return dict(cached[1]), list(cached[2])
 
-    found: Dict[str, str] = {}
+    found: dict[str, str] = {}
     missing: list[str] = []
     for key, subfolder, name in spec.model_files:
-        path: Optional[Path] = None
+        path: Path | None = None
         if root is not None:
             base = root / subfolder
             if (base / name).is_file():
@@ -517,7 +512,7 @@ def resolve_model_files(spec: ModelSpec) -> tuple[Dict[str, str], list[str]]:
     return dict(found), list(missing)
 
 
-def load_template(spec: ModelSpec, dataset_name: str, optimizer: Optional[str] = None) -> Dict[str, Any]:
+def load_template(spec: ModelSpec, dataset_name: str, optimizer: str | None = None) -> dict[str, Any]:
     template_path = Path(dict(spec.optimizer_templates).get(optimizer or "", spec.template))
     if not template_path.exists():
         raise HTTPException(status_code=500, detail=f"Template not found: {spec.template}")
@@ -536,11 +531,11 @@ def count_images(path: Path) -> int:
 
 
 NON_SQUARE_TOLERANCE = 0.03  # |w - h| / max(w, h) above this counts as non-square
-_scan_cache: Dict[str, tuple[float, tuple[int, int, Optional[tuple[int, int]]]]] = {}
+_scan_cache: dict[str, tuple[float, tuple[int, int, tuple[int, int] | None]]] = {}
 SCAN_CACHE_SECONDS = 30.0
 
 
-def scan_images(path: Path) -> tuple[int, int, Optional[tuple[int, int]]]:
+def scan_images(path: Path) -> tuple[int, int, tuple[int, int] | None]:
     """(image count, non-square count, one non-square example size). Reads image headers only.
 
     Cached briefly because the plan endpoint runs on every form change.
@@ -561,7 +556,7 @@ def scan_images(path: Path) -> tuple[int, int, Optional[tuple[int, int]]]:
             try:
                 with Image.open(Path(root) / fname) as img:
                     width, height = img.size
-            except Exception:
+            except (OSError, ValueError, Image.DecompressionBombError):
                 continue
             if abs(width - height) / max(width, height, 1) > NON_SQUARE_TOLERANCE:
                 non_square += 1
@@ -578,7 +573,7 @@ def get_model_spec(model_id: str) -> ModelSpec:
     return spec
 
 
-def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], ModelSpec, list[str]]:
+def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, dict[str, Any], ModelSpec, list[str]]:
     """Turn a UI request into a concrete config. Returns (plan, config, spec, missing model files)."""
     spec = get_model_spec(request.model)
     dataset_path = datasets_root() / request.dataset
@@ -623,7 +618,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
     notes: list[str] = []
     if spec.square_only:
         image_count, non_square, example = scan_images(dataset_path)
-        if non_square:
+        if non_square and example is not None:
             resolution = int(dataset_cfg.get("resolution", 512) or 512)
             warnings.append(
                 f"{non_square} of {image_count} images are not square (e.g. {example[0]}×{example[1]}). "
@@ -646,7 +641,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
         max_steps = request.max_steps
         if not max_steps and spec.target_epochs and image_count > 0:
             wanted = spec.target_epochs * steps_per_epoch
-            rounded = int(round(wanted / 50.0)) * 50
+            rounded = round(wanted / 50.0) * 50
             max_steps = min(max(rounded, spec.min_auto_steps), spec.max_auto_steps)
             auto_steps = True
             note = f"Steps chosen automatically: {image_count} images × ~{spec.target_epochs} epochs = {wanted} steps"
@@ -746,7 +741,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
     return plan, config, spec, missing
 
 
-def job_to_status(job: "TrainingJob") -> JobStatusResponse:
+def job_to_status(job: TrainingJob) -> JobStatusResponse:
     return JobStatusResponse(
         job_id=job.job_id,
         dataset=job.dataset,
@@ -768,7 +763,7 @@ async def spawn_process(command: list[str]) -> asyncio.subprocess.Process:
     env["PYTHONUNBUFFERED"] = "1"
     return await asyncio.create_subprocess_exec(
         *command,
-        cwd=str(Path(".").resolve()),
+        cwd=str(Path.cwd()),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=env,
@@ -780,7 +775,7 @@ async def launch_job(job: TrainingJob) -> None:
     job.started_at = time.time()
     job.process = await spawn_process(job.command)
     logger.info("Job started: %s (%s)", job.job_id, job.dataset)
-    asyncio.create_task(job.monitor())
+    job.monitor_task = asyncio.create_task(job.monitor())
 
 
 async def launch_next_job() -> None:
@@ -797,7 +792,7 @@ async def launch_next_job() -> None:
 
 
 @app.get("/api/health")
-async def health() -> Dict[str, str]:
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
@@ -809,13 +804,7 @@ async def list_datasets() -> list[DatasetInfo]:
     items: list[DatasetInfo] = []
     for entry in root.iterdir():
         if entry.is_dir():
-            items.append(
-                DatasetInfo(
-                    name=entry.name,
-                    path=str(entry),
-                    image_count=count_images(entry),
-                )
-            )
+            items.append(DatasetInfo(name=entry.name, path=str(entry), image_count=count_images(entry)))
     return sorted(items, key=lambda d: d.name.lower())
 
 
@@ -941,7 +930,7 @@ async def job_list() -> JobListResponse:
 
 
 @app.post("/api/jobs/{job_id}/start")
-async def start_specific_job(job_id: str) -> Dict[str, str]:
+async def start_specific_job(job_id: str) -> dict[str, str]:
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -957,7 +946,7 @@ async def start_specific_job(job_id: str) -> Dict[str, str]:
 
 
 @app.post("/api/jobs/start-next")
-async def start_next_job() -> Dict[str, str]:
+async def start_next_job() -> dict[str, str]:
     await launch_next_job()
     return {"status": "ok"}
 
@@ -997,6 +986,6 @@ async def job_ws(ws: WebSocket, job_id: str) -> None:
             await ws.receive_text()
     except WebSocketDisconnect:
         job.websockets.discard(ws)
-    except Exception:
+    except (RuntimeError, OSError, KeyError):  # an error on the socket (or a binary frame): forget it and close
         job.websockets.discard(ws)
         await ws.close()

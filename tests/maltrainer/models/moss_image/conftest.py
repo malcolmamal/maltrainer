@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, Optional
 
 import pytest
 import torch
@@ -27,7 +27,7 @@ def write_checkpoint(tmp_path: Path) -> Callable[..., Path]:
         model: MOSSImageTransformer,
         name: str = "moss_image_base_bf16.safetensors",
         prefix: str = "",
-        extra: Optional[Dict[str, torch.Tensor]] = None,
+        extra: dict[str, torch.Tensor] | None = None,
         dtype: torch.dtype = torch.float32,
     ) -> Path:
         tensors = {k: v.detach().to(dtype).contiguous() for k, v in model.state_dict().items()}

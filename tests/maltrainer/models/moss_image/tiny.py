@@ -7,7 +7,6 @@ count as ``dim // 128``. Everything else is shrunk to a few channels.
 from __future__ import annotations
 
 import json
-from typing import Dict
 
 import torch
 
@@ -36,10 +35,10 @@ def json_tensor(value: object) -> torch.Tensor:
     return torch.tensor(list(json.dumps(value).encode("utf-8")), dtype=torch.uint8)
 
 
-def int8_tensors(model: MOSSImageTransformer) -> Dict[str, torch.Tensor]:
-    """The block Linears as an INT8 ConvRot file stores them: rotated int8 rows, a row scale, a marker."""
+def int8_tensors(model: MOSSImageTransformer) -> dict[str, torch.Tensor]:
+    """The block Linears as a ComfyUI INT8 ConvRot file stores them: rotated int8 rows, a per-row scale, a marker."""
     marker = json_tensor({"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": GROUP_SIZE})
-    out: Dict[str, torch.Tensor] = {}
+    out: dict[str, torch.Tensor] = {}
     for key, value in model.state_dict().items():
         if not (key.startswith("layers.") and ".proj." in key and key.endswith(".weight")):
             out[key] = value

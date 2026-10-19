@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
 
 import torch
 from accelerate import init_empty_weights
@@ -33,11 +32,11 @@ def is_block_linear(key: str) -> bool:
 
 
 def load_krea2_transformer(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     compute_dtype: torch.dtype = torch.bfloat16,
-    master: Optional[Dict[str, torch.Tensor]] = None,
-) -> Tuple[Krea2Transformer, Dict[str, object]]:
+    master: dict[str, torch.Tensor] | None = None,
+) -> tuple[Krea2Transformer, dict[str, object]]:
     """Build the DiT with fp8 block Linears.
 
     An fp8_scaled file keeps the exact fp8 weights ComfyUI runs. A bf16 file (e.g. Comfy-Org's
@@ -52,7 +51,7 @@ def load_krea2_transformer(
     tensors, layers = read_comfy_checkpoint(path)
     prefix_found = container_prefix(tensors)
     tensors, layers = strip_prefix(tensors, layers)
-    info: Dict[str, object] = {"source_fp8_layers": len(layers), "key_prefix": prefix_found}
+    info: dict[str, object] = {"source_fp8_layers": len(layers), "key_prefix": prefix_found}
 
     if master is not None:
         for key in [k for k in tensors if is_block_linear(k)]:

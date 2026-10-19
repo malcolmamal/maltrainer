@@ -17,7 +17,7 @@ import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 from accelerate import Accelerator, init_empty_weights
@@ -65,7 +65,7 @@ from maltrainer.utils.lora_metadata import build_metadata, git_commit
 logger = logging.getLogger(__name__)
 
 
-def patchify_video(latent: torch.Tensor, patch_size=(1, 2, 2)) -> torch.Tensor:
+def patchify_video(latent: torch.Tensor, patch_size: tuple[int, int, int] = (1, 2, 2)) -> torch.Tensor:
     """Patchify video/image latents matching ComfyUI / MiniMax H3 layout [B, C, T, H, W] -> [B, N_tokens, C*1*2*2]."""
     b, c, t_full, h_full, w_full = latent.shape
     pt, ph, pw = patch_size
@@ -125,7 +125,7 @@ def _axis_from_sqrt_area(dim: int, patch: int, sqrt_area: float) -> torch.Tensor
     return (torch.arange(n, dtype=torch.float64) * (ratio / n) + (1.0 - ratio) / 2.0) * 32.0
 
 
-def _frame_grid(latent_h: int, latent_w: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def _frame_grid(latent_h: int, latent_w: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Area-normalized (h, w) coordinates of one latent frame's 2x2-patch rows, plus the w axis."""
     area = math.sqrt(latent_h * latent_w)
     w_axis = _axis_from_sqrt_area(latent_w, 2, area)
@@ -182,7 +182,7 @@ class H3Sample:
     caption: str
     frames: int  # 24 fps pixel frames the item spans (1 for a still)
     video: torch.Tensor  # [1, 24, T_lat, H/16, W/16] normalized, CPU
-    audio: Optional[torch.Tensor] = None  # [1, 2*A, 32] normalized rows, CPU; None = silence
+    audio: torch.Tensor | None = None  # [1, 2*A, 32] normalized rows, CPU; None = silence
     audio_only: bool = False  # video is a zeros placeholder; drop the video loss
 
     @property
@@ -197,11 +197,11 @@ class MiniMaxH3LoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path = None
-        self.lr_scheduler = None
+        self.last_saved_path: str | None = None
+        self.lr_scheduler: Any = None
         # Resolved facts about this run, embedded into every checkpoint's metadata. Populated
         # as they become known, since several are only decided at load/first-step time.
-        self.run_metadata: Dict[str, object] = {
+        self.run_metadata: dict[str, object] = {
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
             "torch_version": torch.__version__,
@@ -209,10 +209,10 @@ class MiniMaxH3LoRATrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
-        self.samples: List[H3Sample] = []
-        self._layout_cache: Dict[tuple, Dict[str, torch.Tensor]] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
-        self.ema: Optional[ParameterEMA] = None
+        self.samples: list[H3Sample] = []
+        self._layout_cache: dict[tuple, dict[str, torch.Tensor]] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
+        self.ema: ParameterEMA | None = None
 
         train_config = config.get("train", {})
         if int(train_config.get("batch_size", 1) or 1) != 1:
@@ -255,7 +255,7 @@ class MiniMaxH3LoRATrainer:
         train_config = self.config.get("train", {})
         return bool(train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)))
 
-    def precache_dataset(self):
+    def precache_dataset(self) -> None:
         """Encode every dataset item once -- video latents, audio rows, caption embeddings --
         into memory, unloading each encoder before the next loads so peak VRAM stays at one model.
         """
@@ -291,7 +291,7 @@ class MiniMaxH3LoRATrainer:
         placeholder_px = int(dataset_config.get("audio_placeholder_resolution", 128))
 
         # Audio waits for the audio encoder: (sample index, source, start frame).
-        pending_audio: List[Tuple[int, MediaSource, int]] = []
+        pending_audio: list[tuple[int, MediaSource, int]] = []
         audio_sources = [s for s in sources if s.kind == "audio"]
         visual_sources = [s for s in sources if s.kind != "audio"]
 
@@ -355,11 +355,11 @@ class MiniMaxH3LoRATrainer:
             print(f"Loading Audio VAE from {audio_vae_path} for pre-caching...", flush=True)
             audio_vae = load_minimax_h3_audio_encoder(audio_vae_path, device=self.device)
 
-            def encode(wav) -> torch.Tensor:
+            def encode(wav: Any) -> torch.Tensor:
                 waveform = torch.from_numpy(wav).unsqueeze(0).to(self.device)
                 return pack_audio_rows(audio_vae.encode(waveform)).detach().cpu()
 
-            decoded: Dict[str, object] = {}
+            decoded: dict[str, Any] = {}
             for index, source, start in tqdm(
                 pending_audio, desc="Caching clip audio", disable=not self.is_main_process
             ):
@@ -418,10 +418,7 @@ class MiniMaxH3LoRATrainer:
         text_encoder_path = model_config["text_encoder_path"]
         print(f"Loading Text Encoder from {text_encoder_path} for pre-caching...", flush=True)
         text_encoder = load_minimax_h3_text_encoder(
-            text_encoder_path,
-            tokenizer_path=model_config.get("tokenizer_path"),
-            device=self.device,
-            dtype=self.dtype,
+            text_encoder_path, tokenizer_path=model_config.get("tokenizer_path"), device=self.device, dtype=self.dtype
         )
 
         train_config = self.config.get("train", {})
@@ -468,7 +465,7 @@ class MiniMaxH3LoRATrainer:
                 f"layout packs {expected}"
             )
 
-    def load_transformer_and_lora(self):
+    def load_transformer_and_lora(self) -> None:
         """Load INT8 ConvRot transformer base and inject LoRA network."""
         print("=== Step 2/2: Loading MiniMax H3 INT8 Transformer Base ===", flush=True)
         logger.info("Loading Transformer base and LoRA network...")
@@ -559,7 +556,7 @@ class MiniMaxH3LoRATrainer:
         )
         print("Transformer and LoRA network ready on GPU!", flush=True)
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         """Shuffled sample indices for one epoch (each sample ``repeats`` times), this rank's share."""
         repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
         order = [index for index in range(len(self.samples)) for _ in range(repeats)]
@@ -577,7 +574,7 @@ class MiniMaxH3LoRATrainer:
         repeats = int(dataset_config.get("repeats", 1) or 1)
         return max(sample_count, 1) * max(repeats, 1)
 
-    def dry_run_training(self):
+    def dry_run_training(self) -> None:
         """Simulate training without downloading or loading models."""
         train_config = self.config.get("train", {})
         num_epochs = int(train_config.get("num_epochs", 10) or 1)
@@ -608,8 +605,8 @@ class MiniMaxH3LoRATrainer:
         logger.info("Dry run completed successfully.")
 
     def _write_dry_run_checkpoint(
-        self, output_dir: Path, step, total_steps: int, steps_per_epoch: int, num_epochs: int, start_time: float
-    ):
+        self, output_dir: Path, step: Any, total_steps: int, steps_per_epoch: int, num_epochs: int, start_time: float
+    ) -> None:
         elapsed = max(time.time() - start_time, 0.0)
         completed_steps = total_steps if step == "final" else int(step)
         progress = min(completed_steps / max(total_steps, 1), 1.0)
@@ -635,7 +632,7 @@ class MiniMaxH3LoRATrainer:
 
     def _build_packed_layout(
         self, num_text_tokens: int, latent_t: int, latent_h: int, latent_w: int, audio_t: int = 0
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Index/tag/position tensors for one [text | audio | video] packed sequence.
 
         Everything here is a function of the text length, the latent size and the audio
@@ -735,7 +732,7 @@ class MiniMaxH3LoRATrainer:
         mu = 0.5 + slope * (packed_tokens - 256)
         return math.exp(mu)
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         """Setup optimizer over the LoRA adapters only."""
         train_config = self.config["train"]
         lr = float(train_config.get("learning_rate", 1e-4))
@@ -748,10 +745,10 @@ class MiniMaxH3LoRATrainer:
                 import bitsandbytes as bnb
 
                 optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
-                self.optimizer = optimizer_cls(params, lr=lr)
+                self.optimizer: Any = optimizer_cls(params, lr=lr)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
                 self.run_metadata["optimizer_resolved"] = {"name": optimizer_name, "lr": lr}
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr)
         elif optimizer_name.startswith("prodigy"):
@@ -828,14 +825,14 @@ class MiniMaxH3LoRATrainer:
                         "%s those are too coarse to steer it. Set lora.dtype: float32.",
                         self.lora_dtype,
                     )
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr)
         elif optimizer_name in {"automagic3", "automagic", "automagic_v3"}:
             from maltrainer.optimizers import Automagic3
 
             configured_lr = float(train_config.get("learning_rate", 1e-6))
-            automagic_params = {
+            automagic_params: dict[str, Any] = {
                 "lr": configured_lr,
                 "min_lr": float(train_config.get("automagic_min_lr", train_config.get("min_lr", 1e-8))),
                 "max_lr": float(train_config.get("automagic_max_lr", train_config.get("max_lr", 1e3))),
@@ -867,13 +864,12 @@ class MiniMaxH3LoRATrainer:
             def lr_lambda(step: int) -> float:
                 return min((step + 1) / warmup_steps, 1.0)
 
-            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
-                self.optimizer,
-                lr_lambda=lr_lambda,
-            )
+            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lr_lambda)
             logger.info("Configured learning rate warmup for %d steps.", warmup_steps)
 
-    def _forward(self, video_patches, audio_rows, text_embeds, timestep, layout):
+    def _forward(
+        self, video_patches: Any, audio_rows: Any, text_embeds: Any, timestep: Any, layout: dict[str, Any]
+    ) -> Any:
         return self.lora_network(
             video_hidden_states=video_patches,
             audio_hidden_states=audio_rows,
@@ -888,7 +884,9 @@ class MiniMaxH3LoRATrainer:
         )
 
     @staticmethod
-    def _guided_target(target, uncond, sigma, scale, schedule, cfg_zero):
+    def _guided_target(
+        target: torch.Tensor, uncond: torch.Tensor, sigma: torch.Tensor, scale: float, schedule: str, cfg_zero: bool
+    ) -> torch.Tensor:
         """Contrastive guidance target for one stream: uncond + scale * (target - uncond).
 
         H3 is guidance-distilled: CFG is baked into the weights, so a plain flow-matching
@@ -913,7 +911,7 @@ class MiniMaxH3LoRATrainer:
         scale_eff = 1.0 + (scale - 1.0) * sigma.detach().float().view(bsz, 1, 1) if schedule == "sigma" else scale
         return (uncond + scale_eff * (guided - uncond)).detach().to(target.dtype)
 
-    def _training_step(self, sample: H3Sample, flow_shift: float) -> Tuple[torch.Tensor, Dict[str, float]]:
+    def _training_step(self, sample: H3Sample, flow_shift: float) -> tuple[torch.Tensor, dict[str, float]]:
         """Loss for one cached sample. Returns (loss, parts for logging)."""
         train_config = self.config["train"]
 
@@ -944,7 +942,7 @@ class MiniMaxH3LoRATrainer:
         pack_audio = use_audio or bool(train_config.get("pack_silent_audio", True))
         audio_t = sample.audio_latents if pack_audio else 0
         audio_target = None
-        if use_audio:
+        if use_audio and sample.audio is not None:
             a0 = sample.audio.to(device=self.device, dtype=torch.float32)
             a_noise = torch.randn_like(a0)
             audio_rows = (1.0 - sigma_a.view(1, 1, 1)) * a0 + sigma_a.view(1, 1, 1) * a_noise
@@ -982,7 +980,7 @@ class MiniMaxH3LoRATrainer:
                     audio_target, uncond_output.audio, sigma_a, scale, schedule, cfg_zero
                 )
 
-        parts: Dict[str, float] = {"sigma": float(sigma_v)}
+        parts: dict[str, float] = {"sigma": float(sigma_v)}
         loss = None
         if train_video:
             # Not 0 * loss for audio-only items: their video is a placeholder, and even a
@@ -996,12 +994,14 @@ class MiniMaxH3LoRATrainer:
             weighted = float(train_config.get("audio_loss_weight", 1.0)) * audio_loss
             loss = weighted if loss is None else loss + weighted
 
+        if loss is None:
+            raise RuntimeError("no loss term for this sample")
         loss_weight_strength = float(train_config.get("loss_weight_strength", 1.0))
         if loss_weight_strength != 1.0:
             loss = loss * loss_weight_strength
         return loss, parts
 
-    def train(self):
+    def train(self) -> None:
         """Main MiniMax H3 LoRA training loop (~0.8s/step)."""
         train_config = self.config["train"]
         num_epochs = train_config.get("num_epochs", 10)
@@ -1140,7 +1140,7 @@ class MiniMaxH3LoRATrainer:
         self.save_checkpoint("final")
         logger.info("MiniMax H3 LoRA training completed!")
 
-    def save_checkpoint(self, step):
+    def save_checkpoint(self, step: int | str) -> None:
         """Save LoRA checkpoint safetensors file."""
         if not self.is_main_process:
             return
@@ -1172,7 +1172,7 @@ class MiniMaxH3LoRATrainer:
         self.last_saved_path = str(save_path)
         logger.info("Saved LoRA checkpoint to %s", save_path)
 
-    def run(self):
+    def run(self) -> None:
         """Run training pipeline."""
         try:
             set_seed(self.config.get("seed", 42))
@@ -1193,7 +1193,7 @@ class MiniMaxH3LoRATrainer:
             raise e
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Train MiniMax H3 LoRA in Maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")
@@ -1208,11 +1208,7 @@ def main():
     if config.get("output"):
         save_config_to_output(config, config["output"]["path"])
 
-    trainer = MiniMaxH3LoRATrainer(
-        config,
-        dry_run=args.dry_run,
-        dry_run_step_time=args.dry_run_step_time,
-    )
+    trainer = MiniMaxH3LoRATrainer(config, dry_run=args.dry_run, dry_run_step_time=args.dry_run_step_time)
     trainer.run()
 
 

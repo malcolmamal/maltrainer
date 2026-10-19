@@ -31,14 +31,14 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from maltrainer.finetune.extract import GENERIC, MODES, extract, strip_prefix  # noqa: E402
-from maltrainer.models.moss_image.finetune import EXTRACT_PROFILE as MOSS_IMAGE  # noqa: E402
+from maltrainer.finetune.extract import GENERIC, MODES, ExtractProfile, extract, strip_prefix
+from maltrainer.models.moss_image.finetune import EXTRACT_PROFILE as MOSS_IMAGE
 
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 PROFILES = {"moss_image": MOSS_IMAGE, "generic": GENERIC}
 
 
-def detect_profile(path: Path):
+def detect_profile(path: Path) -> ExtractProfile:
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
     prefix = strip_prefix(keys)
@@ -63,7 +63,10 @@ def main() -> int:
         "--value",
         type=float,
         default=None,
-        help="fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; threshold: absolute",
+        help=(
+            "fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; "
+            "threshold: absolute"
+        ),
     )
     parser.add_argument(
         "--model", choices=["auto", *PROFILES], default="auto", help="checkpoint layout (default: detected)"
@@ -141,7 +144,8 @@ def main() -> int:
         }
         save_file(states[rank], str(target), metadata=metadata)
         print(
-            f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} (mean {info['rank_mean']:.1f}), "
+            f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} "
+            f"(mean {info['rank_mean']:.1f}), "
             f"dropped norm per layer: mean {info['dropped_mean']:.1%}, worst {info['dropped_worst']:.1%}"
         )
         print(f"       wrote {target} ({target.stat().st_size / 1024**2:.0f} MB)")

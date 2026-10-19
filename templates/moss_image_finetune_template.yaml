@@ -109,6 +109,10 @@ sample:
   width: 1024
   height: 1024
   seed: 42
+  # Key [g]: 8 of the trained people (prior.classes) at random, each with a generic prompt for their
+  # class word, into samples/gallery/. Every person x prompt is encoded at the start. false = off.
+  gallery:
+    count: 8
 
 dtype: "bfloat16"
 mixed_precision: "bf16"

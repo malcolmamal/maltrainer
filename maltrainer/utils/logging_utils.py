@@ -4,7 +4,7 @@ Logging utilities.
 
 import logging
 import sys
-from typing import Any, Dict
+from typing import Any
 
 LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
 
@@ -19,7 +19,7 @@ def log_level(level: Any) -> int:
     return int(getattr(logging, name))
 
 
-def setup_logging(logging_config: Dict[str, Any]):
+def setup_logging(logging_config: dict[str, Any]) -> None:
     """Setup logging configuration."""
     level = log_level(logging_config.get("level", "INFO"))
     format_str = logging_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")

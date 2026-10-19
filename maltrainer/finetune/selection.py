@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional, Tuple
+from collections.abc import Iterable
 
 from torch import nn
 
 
 def select_trainable(
     model: nn.Module,
-    prefixes: Optional[Iterable[str]] = None,
+    prefixes: Iterable[str] | None = None,
     linears_only: bool = False,
-) -> List[Tuple[str, nn.Parameter]]:
+) -> list[tuple[str, nn.Parameter]]:
     """Unfreeze the parameters whose name starts with one of ``prefixes`` (none = all of them).
 
     ``linears_only``: only nn.Linear weights train. Biases, norm scales and other vectors stay

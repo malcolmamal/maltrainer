@@ -19,8 +19,9 @@ decoder, [-1, 1] -> [0, 1]. The decoder's layout follows BFL's reference autoenc
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -95,8 +96,8 @@ class Encoder(nn.Module):
     ):
         super().__init__()
         self.conv_in = nn.Conv2d(3, ch, 3, padding=1)
-        in_mult = (1,) + tuple(ch_mult)
-        self.down = nn.ModuleList()
+        in_mult = (1, *tuple(ch_mult))
+        self.down: Any = nn.ModuleList()
         block_in = ch
         for level, mult in enumerate(ch_mult):
             down = nn.Module()
@@ -108,7 +109,7 @@ class Encoder(nn.Module):
             if level != len(ch_mult) - 1:
                 down.downsample = Downsample(block_in)
             self.down.append(down)
-        self.mid = nn.Module()
+        self.mid: Any = nn.Module()
         self.mid.block_1 = ResnetBlock(block_in, block_in)
         self.mid.attn_1 = AttnBlock(block_in)
         self.mid.block_2 = ResnetBlock(block_in, block_in)
@@ -133,12 +134,12 @@ class Decoder(nn.Module):
         super().__init__()
         block_in = ch * ch_mult[-1]
         self.conv_in = nn.Conv2d(z_channels, block_in, 3, padding=1)
-        self.mid = nn.Module()
+        self.mid: Any = nn.Module()
         self.mid.block_1 = ResnetBlock(block_in, block_in)
         self.mid.attn_1 = AttnBlock(block_in)
         self.mid.block_2 = ResnetBlock(block_in, block_in)
         # up[0] is the full-resolution level; it runs last
-        self.up = nn.ModuleList()
+        self.up: Any = nn.ModuleList()
         for level in reversed(range(len(ch_mult))):
             up = nn.Module()
             up.block = nn.ModuleList()
@@ -175,8 +176,8 @@ class Flux2VAEDecoder(nn.Module):
         """Latents [B, 128, h, w] (what the DiT sees) -> RGB [B, 3, 16h, 16w] in [0, 1]."""
         dtype = self.post_quant_conv.weight.dtype
         z = latents.to(dtype)
-        mean = self.bn_running_mean.to(dtype).view(1, -1, 1, 1)
-        std = torch.sqrt(self.bn_running_var.to(dtype).view(1, -1, 1, 1) + BN_EPS)
+        mean = self.get_buffer("bn_running_mean").to(dtype).view(1, -1, 1, 1)
+        std = torch.sqrt(self.get_buffer("bn_running_var").to(dtype).view(1, -1, 1, 1) + BN_EPS)
         z = z * std + mean
         B, C, h, w = z.shape
         z = z.view(B, C // 4, 2, 2, h, w).permute(0, 1, 4, 2, 5, 3).reshape(B, C // 4, 2 * h, 2 * w)
@@ -200,12 +201,11 @@ class Flux2VAEEncoder(nn.Module):
         mean = moments.chunk(2, dim=1)[0]
         B, C, H, W = mean.shape
         z = mean.view(B, C, H // 2, 2, W // 2, 2).permute(0, 1, 3, 5, 2, 4).reshape(B, C * 4, H // 2, W // 2)
-        return F.batch_norm(
-            z, self.bn_running_mean.to(z.dtype), self.bn_running_var.to(z.dtype), training=False, eps=BN_EPS
-        )
+        rm, rv = (self.get_buffer(n).to(z.dtype) for n in ("bn_running_mean", "bn_running_var"))
+        return F.batch_norm(z, rm, rv, training=False, eps=BN_EPS)
 
 
-def _read_vae_state(path: Union[str, Path]) -> dict:
+def _read_vae_state(path: str | Path) -> dict:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Flux2 VAE not found at {path}")
@@ -221,7 +221,7 @@ def _read_vae_state(path: Union[str, Path]) -> dict:
 
 
 def load_flux2_vae_decoder(
-    path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32
+    path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32
 ) -> Flux2VAEDecoder:
     """The decoder half of ComfyUI's flux2_vae.safetensors, for previews."""
     state = _read_vae_state(path)
@@ -244,7 +244,7 @@ def load_flux2_vae_decoder(
 
 
 def load_flux2_vae_encoder(
-    path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32
+    path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32
 ) -> Flux2VAEEncoder:
     path = Path(path)
     if not path.exists():

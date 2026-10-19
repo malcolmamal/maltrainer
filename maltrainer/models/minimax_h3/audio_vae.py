@@ -32,7 +32,6 @@ SAMPLE_RATE = 32000
 HOP_LENGTH = 800  # prod(encoder strides)
 LATENTS_PER_SECOND = SAMPLE_RATE // HOP_LENGTH  # 40
 LATENT_CHANNELS = 32
-AUDIO_CHANNELS = 2
 
 # Per-channel latent statistics from the released FL2VA/audio_vae/config.json. ComfyUI's
 # single file carries them as buffers; these are only the fallback for the original release.
@@ -107,7 +106,7 @@ DEFAULT_LATENTS_STD = (
 
 
 def _snake(x: torch.Tensor, alpha: torch.Tensor, beta: torch.Tensor) -> torch.Tensor:
-    # x + 1/beta * sin^2(alpha * x)
+    # the snake activation: x plus sin squared of (alpha * x), scaled by 1 / beta
     return x + (beta + 1e-9).reciprocal() * torch.sin(alpha * x).pow(2)
 
 
@@ -156,9 +155,9 @@ class EncoderBlock(nn.Module):
 
 
 class DacEncoder(nn.Module):
-    def __init__(self, d_model: int = 64, strides=(2, 4, 4, 5, 5), d_latent: int = 2048):
+    def __init__(self, d_model: int = 64, strides: tuple[int, ...] = (2, 4, 4, 5, 5), d_latent: int = 2048):
         super().__init__()
-        block = [nn.Conv1d(1, d_model, kernel_size=7, padding=3)]
+        block: list[nn.Module] = [nn.Conv1d(1, d_model, kernel_size=7, padding=3)]
         for stride in strides:
             d_model *= 2
             block.append(EncoderBlock(d_model, stride=stride))
@@ -196,7 +195,7 @@ class CausalAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, n, _ = x.shape
-        bias = torch.cat((self.q_bias, self.zero_k_bias, self.v_bias)).to(x.dtype)
+        bias = torch.cat((self.q_bias, self.get_buffer("zero_k_bias"), self.v_bias)).to(x.dtype)
         qkv = F.linear(x, self.qkv.weight.to(x.dtype), bias)
         q, k, v = qkv.reshape(b, n, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4).unbind(0)
         x = F.scaled_dot_product_attention(q, k, v, is_causal=True)
@@ -223,7 +222,7 @@ class AttnProjection(nn.Module):
 class MiniMaxH3AudioEncoder(nn.Module):
     """Stereo 32 kHz waveform -> normalized H3 audio latents. Frozen, fp32."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.encoder = DacEncoder(64, (2, 4, 4, 5, 5), 2048)
         self.pre_block = AttnProjection(2048, LATENT_CHANNELS, num_heads=8)
@@ -245,7 +244,7 @@ class MiniMaxH3AudioEncoder(nn.Module):
         x = self.encoder(x)
         x = self.pre_block(x.transpose(1, 2)).transpose(1, 2)
         z = self.mean_proj(x)
-        z = (z - self.latents_mean.view(1, -1, 1)) / self.latents_std.view(1, -1, 1)
+        z = (z - self.get_buffer("latents_mean").view(1, -1, 1)) / self.get_buffer("latents_std").view(1, -1, 1)
         return z.reshape(b, s, z.shape[1], z.shape[2]).permute(0, 2, 1, 3)
 
 

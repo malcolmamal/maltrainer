@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 import torch
@@ -27,7 +28,7 @@ class _TextRotary(nn.Module):
 
 
 class _FakeQwen(nn.Module):
-    instances: list[_FakeQwen] = []
+    instances: ClassVar[list[_FakeQwen]] = []
 
     def __init__(self, config: SimpleNamespace) -> None:
         super().__init__()
@@ -41,7 +42,7 @@ class _FakeQwen(nn.Module):
         self.strict: bool | None = None
         _FakeQwen.instances.append(self)
 
-    def load_state_dict(self, state, strict=True, **_options):  # noqa: ANN001, ANN003
+    def load_state_dict(self, state, strict=True, **_options):
         self.loaded, self.strict = state, strict
 
 
@@ -93,7 +94,7 @@ def test_an_explicit_tokenizer_directory_is_used_when_it_has_a_tokenizer_json(tm
 def test_a_directory_without_a_tokenizer_json_is_rejected_naming_where_it_came_from(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    with pytest.raises(FileNotFoundError, match="from model.tokenizer_path"):
+    with pytest.raises(FileNotFoundError, match=r"from model\.tokenizer_path"):
         te._resolve_tokenizer_assets(tmp_path)
     monkeypatch.setattr(te, "BUNDLED_TOKENIZER_ASSETS", tmp_path)
     with pytest.raises(FileNotFoundError, match="from the bundled assets directory"):
@@ -186,7 +187,7 @@ def test_a_comfy_quantized_checkpoint_goes_through_the_quantized_loader(fakes: S
 
 @pytest.mark.usefixtures("fakes")
 def test_a_missing_tokenizer_directory_stops_the_load_before_anything_is_built(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="tokenizer.json"):
+    with pytest.raises(FileNotFoundError, match=r"tokenizer\.json"):
         te.load_minimax_h3_text_encoder(_checkpoint(tmp_path), tokenizer_path=tmp_path / "nope", device="cpu")
 
     assert _FakeQwen.instances == []

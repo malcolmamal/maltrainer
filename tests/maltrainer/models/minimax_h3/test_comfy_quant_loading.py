@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -134,7 +135,7 @@ def test_a_marker_on_a_module_that_is_neither_a_linear_nor_an_embedding_is_an_er
     tensors = {**_tensors(), "model.norm.comfy_quant": _marker({"format": "nvfp4"})}
     tensors["model.norm.weight_scale"] = torch.ones(1)
 
-    with pytest.raises(TypeError, match="model.norm maps to LayerNorm; expected Linear or Embedding"):
+    with pytest.raises(TypeError, match=re.escape("model.norm maps to LayerNorm; expected Linear or Embedding")):
         _load(tmp_path, tensors)
 
 

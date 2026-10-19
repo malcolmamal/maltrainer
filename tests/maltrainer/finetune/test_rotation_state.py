@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 import torch
 from torch import nn
 
@@ -74,7 +72,7 @@ def test_a_loaded_state_is_used_when_its_window_activates() -> None:
 
 
 class _Handle:
-    def __init__(self, removed: List[str], name: str) -> None:
+    def __init__(self, removed: list[str], name: str) -> None:
         self.removed, self.name = removed, name
 
     def remove(self) -> None:
@@ -82,9 +80,9 @@ class _Handle:
 
 
 def test_a_fused_optimizers_grad_hooks_are_removed_when_its_window_freezes() -> None:
-    removed: List[str] = []
+    removed: list[str] = []
 
-    def make_optimizer(params: List[nn.Parameter], name: str) -> torch.optim.Optimizer:
+    def make_optimizer(params: list[nn.Parameter], name: str) -> torch.optim.Optimizer:
         optimizer = torch.optim.SGD(params, lr=0.1)
         optimizer._hook_handles = [_Handle(removed, f"{name}0"), _Handle(removed, f"{name}1")]
         return optimizer

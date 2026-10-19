@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from PIL import Image
@@ -30,9 +29,9 @@ class QwenImage21Dataset(Dataset):
 
     def __init__(
         self,
-        data_root: Union[str, Path],
-        resolution: Union[int, Tuple[int, int]] = 512,
-        trigger_token: Optional[str] = None,
+        data_root: str | Path,
+        resolution: int | tuple[int, int] = 512,
+        trigger_token: str | None = None,
         default_caption: str = "",
         repeats: int = 1,
     ):
@@ -49,8 +48,8 @@ class QwenImage21Dataset(Dataset):
             self.height = align_to_multiple(resolution[0], 16)
             self.width = align_to_multiple(resolution[1], 16)
 
-        self.image_paths: List[Path] = []
-        self.captions: List[str] = []
+        self.image_paths: list[Path] = []
+        self.captions: list[str] = []
         self._load_dataset()
 
         self.transform = transforms.Compose(
@@ -60,12 +59,12 @@ class QwenImage21Dataset(Dataset):
             ]
         )
 
-    def _load_dataset(self):
+    def _load_dataset(self) -> None:
         if not self.data_root.exists():
             logger.warning("Dataset root does not exist: %s", self.data_root)
             return
 
-        base_images: List[Path] = []
+        base_images: list[Path] = []
         for root, _, files in walk_visible(self.data_root):
             for file in files:
                 ext = Path(file).suffix.lower()
@@ -80,7 +79,7 @@ class QwenImage21Dataset(Dataset):
             if txt_path.exists():
                 try:
                     caption = txt_path.read_text(encoding="utf-8").strip()
-                except Exception as e:
+                except (OSError, ValueError) as e:
                     logger.warning("Error reading caption for %s: %s", img_path, e)
 
             if caption:
@@ -110,14 +109,14 @@ class QwenImage21Dataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, index: int) -> Dict[str, Union[torch.Tensor, str]]:
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor | str]:
         img_path = self.image_paths[index]
         caption = self.captions[index]
 
         try:
             image = Image.open(img_path).convert("RGB")
             pixel_values = self.transform(image)
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error("Failed to load image %s: %s", img_path, e)
             pixel_values = torch.zeros((3, self.height, self.width), dtype=torch.float32)
 

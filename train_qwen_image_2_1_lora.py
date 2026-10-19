@@ -13,7 +13,7 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any
 
 import torch
 from accelerate import Accelerator
@@ -23,12 +23,8 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from maltrainer.data.qwen_dataset import (
-    QwenImage21Dataset,
-)
-from maltrainer.models.qwen_image_2_1.lora import (
-    QwenImage21LoRANetwork,
-)
+from maltrainer.data.qwen_dataset import QwenImage21Dataset
+from maltrainer.models.qwen_image_2_1.lora import QwenImage21LoRANetwork
 from maltrainer.models.qwen_image_2_1.model import (
     apply_flow_shift,
     calculate_shift,
@@ -47,7 +43,7 @@ from maltrainer.utils.lora_metadata import build_metadata, git_commit
 logger = logging.getLogger(__name__)
 
 
-def plan_training_steps(num_batches: int, train_config: dict) -> Tuple[int, int, int]:
+def plan_training_steps(num_batches: int, train_config: dict) -> tuple[int, int, int]:
     """Return (steps_per_epoch, num_epochs, total_steps) for a run.
 
     ``train.max_steps`` (> 0) wins over ``train.num_epochs``: the run stops exactly at that
@@ -70,9 +66,10 @@ class QwenImage21LoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path = None
-        self.lr_scheduler = None
-        self.run_metadata: Dict[str, object] = {
+        self.last_saved_path: str | None = None
+        self.lr_scheduler: Any = None
+        self.optimizer: Any = None
+        self.run_metadata: dict[str, object] = {
             "model_type": "qwen_image_2_1",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
@@ -81,8 +78,8 @@ class QwenImage21LoRATrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
-        self.latent_cache: Dict[str, torch.Tensor] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
+        self.latent_cache: dict[str, torch.Tensor] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
 
         # Initialize accelerator
         self.accelerator = Accelerator(
@@ -112,8 +109,8 @@ class QwenImage21LoRATrainer:
         self.progress_logger.addHandler(file_handler)
         self.progress_logger.propagate = False
 
-    def precache_dataset(self):
-        """Pre-cache VAE latents and Qwen3-VL text embeddings into memory, then unload VAE & Text Encoder to free VRAM."""
+    def precache_dataset(self) -> None:
+        """Pre-cache VAE latents and Qwen3-VL text embeddings, then unload the VAE and text encoder to free VRAM."""
         model_config = self.config.get("model", {})
         vae_path = model_config["vae_path"]
         text_encoder_path = model_config["text_encoder_path"]
@@ -184,7 +181,7 @@ class QwenImage21LoRATrainer:
             len(self.text_cache),
         )
 
-    def load_transformer_and_lora(self):
+    def load_transformer_and_lora(self) -> None:
         """Load INT8 ConvRot / BF16 Qwen-Image-2.1 Transformer Base and inject LoRA network."""
         print("=== Step 2/2: Loading Qwen-Image-2.1 Transformer Base ===", flush=True)
         logger.info("Loading Transformer base and LoRA network...")
@@ -236,7 +233,7 @@ class QwenImage21LoRATrainer:
         )
         print("Transformer and LoRA network ready on GPU!", flush=True)
 
-    def create_dataset(self):
+    def create_dataset(self) -> None:
         """Create image training dataset and dataloader."""
         dataset_config = self.config["dataset"]
 
@@ -268,7 +265,7 @@ class QwenImage21LoRATrainer:
             timesteps = torch.rand(batch_size, device=self.device, dtype=self.dtype)
         return timesteps
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         """Setup optimizer over the LoRA adapters only."""
         train_config = self.config["train"]
         lr = float(train_config.get("learning_rate", 1e-4))
@@ -284,7 +281,7 @@ class QwenImage21LoRATrainer:
                 self.optimizer = optimizer_cls(params, lr=lr, weight_decay=weight_decay)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
                 self.run_metadata["optimizer_resolved"] = {"name": optimizer_name, "lr": lr}
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
         elif optimizer_name.startswith("prodigy"):
@@ -326,14 +323,14 @@ class QwenImage21LoRATrainer:
                     requested["d0"],
                 )
                 self.run_metadata["optimizer_resolved"] = {"name": "prodigy", **supported}
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
         elif optimizer_name in {"automagic3", "automagic", "automagic_v3"}:
             from maltrainer.optimizers import Automagic3
 
             configured_lr = float(train_config.get("learning_rate", 1e-6))
-            automagic_params = {
+            automagic_params: dict[str, Any] = {
                 "lr": configured_lr,
                 "min_lr": float(train_config.get("automagic_min_lr", train_config.get("min_lr", 1e-8))),
                 "max_lr": float(train_config.get("automagic_max_lr", train_config.get("max_lr", 1e3))),
@@ -364,13 +361,13 @@ class QwenImage21LoRATrainer:
         if warmup_steps > 0:
             from torch.optim.lr_scheduler import LambdaLR
 
-            def lr_lambda(current_step: int):
+            def lr_lambda(current_step: int) -> float:
                 return min(1.0, float(current_step) / float(max(1, warmup_steps)))
 
             self.lr_scheduler = LambdaLR(self.optimizer, lr_lambda=lr_lambda)
             logger.info("Configured learning rate warmup for %d steps.", warmup_steps)
 
-    def train(self):
+    def train(self) -> None:
         """Main Qwen-Image-2.1 LoRA training loop."""
         train_config = self.config["train"]
         save_every = train_config.get("save_every", 500)
@@ -520,7 +517,7 @@ class QwenImage21LoRATrainer:
         self.save_checkpoint("final")
         logger.info("Qwen-Image-2.1 LoRA training completed!")
 
-    def save_checkpoint(self, step):
+    def save_checkpoint(self, step: int | str) -> None:
         """Save LoRA checkpoint safetensors file."""
         if not self.is_main_process:
             return
@@ -561,7 +558,7 @@ class QwenImage21LoRATrainer:
         self.last_saved_path = str(save_path)
         logger.info("Saved LoRA checkpoint to %s", save_path)
 
-    def simulate(self):
+    def simulate(self) -> None:
         """Dry run: plan the run from the real dataset, then tick through the steps without models.
 
         Emits the same progress bar and progress-log lines as a real run, so the web UI's
@@ -596,7 +593,7 @@ class QwenImage21LoRATrainer:
                     logger.info("Dry run: would save checkpoint at step %d", step)
         logger.info("Dry run complete: would save final checkpoint at step %d", total_steps)
 
-    def run(self):
+    def run(self) -> None:
         """Run training pipeline."""
         try:
             set_seed(self.config.get("seed", 42))
@@ -617,7 +614,7 @@ class QwenImage21LoRATrainer:
             raise e
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Train Qwen-Image-2.1 LoRA in Maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML/JSON config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")

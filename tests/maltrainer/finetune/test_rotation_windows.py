@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import pytest
 import torch
@@ -51,7 +52,9 @@ def test_a_window_matching_no_linear_is_an_error() -> None:
 
 
 def test_a_linear_in_two_windows_is_an_error() -> None:
-    with pytest.raises(ValueError, match="blocks.0.attn.wq.weight is in two finetune windows, 'attn' and 'wq'"):
+    with pytest.raises(
+        ValueError, match=re.escape("blocks.0.attn.wq.weight is in two finetune windows, 'attn' and 'wq'")
+    ):
         rotator([("attn", ("attn.",)), ("wq", ("attn.wq",))])
 
 

@@ -60,5 +60,5 @@ def test_a_file_without_the_encoder_is_read_at_the_default_width_and_refused(tmp
     path = tmp_path / "other.safetensors"
     save_file({"unet.weight": torch.zeros(1)}, str(path))
 
-    with pytest.raises(ValueError, match="is not a Wan 2.1 VAE"):
+    with pytest.raises(ValueError, match=r"is not a Wan 2\.1 VAE"):
         load_krea2_vae(path, CPU)

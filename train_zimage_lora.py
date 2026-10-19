@@ -9,9 +9,9 @@ import inspect
 import json
 import logging
 import math
-import os
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import torch
 from accelerate import Accelerator
@@ -42,8 +42,8 @@ class ZImageLoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path = None
-        self.lr_scheduler = None
+        self.last_saved_path: str | None = None
+        self.lr_scheduler: Any = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
@@ -79,7 +79,7 @@ class ZImageLoRATrainer:
         self.progress_logger.propagate = False
 
     def _resolve_hf_path(self, path_value: str) -> str:
-        if os.path.exists(path_value):
+        if Path(path_value).exists():
             return path_value
         parts = path_value.split("/")
         if len(parts) < 3:
@@ -116,13 +116,13 @@ class ZImageLoRATrainer:
             scale = (alpha / rank) * float(merge_weight)
 
             with torch.no_grad():
-                lora_a = lora_a.to(device=module.weight.device, dtype=module.weight.dtype)
-                lora_b = lora_b.to(device=module.weight.device, dtype=module.weight.dtype)
-                module.weight.add_(torch.matmul(lora_b, lora_a) * scale)
+                a_dev = lora_a.to(device=module.weight.device, dtype=module.weight.dtype)
+                b_dev = lora_b.to(device=module.weight.device, dtype=module.weight.dtype)
+                module.weight.add_(torch.matmul(b_dev, a_dev) * scale)
             merged += 1
         return merged
 
-    def load_model(self):
+    def load_model(self) -> None:
         """Load Z-Image model components."""
         logger.info("Loading Z-Image model...")
 
@@ -147,17 +147,12 @@ class ZImageLoRATrainer:
             logger.info("Merged %d adapter layers from %s", merged, assistant_lora_path)
 
         # Load text encoder
-        text_encoder = AutoModelForCausalLM.from_pretrained(
-            base_model_path,
-            subfolder="text_encoder",
-            torch_dtype=self.dtype,
+        text_encoder: Any = cast(Any, AutoModelForCausalLM).from_pretrained(
+            base_model_path, subfolder="text_encoder", torch_dtype=self.dtype
         )
 
         # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            base_model_path,
-            subfolder="tokenizer",
-        )
+        tokenizer: Any = AutoTokenizer.from_pretrained(base_model_path, subfolder="tokenizer")
 
         # Load VAE
         vae = AutoencoderKL.from_pretrained(
@@ -183,7 +178,7 @@ class ZImageLoRATrainer:
 
         logger.info("Model loaded successfully")
 
-    def create_lora_network(self):
+    def create_lora_network(self) -> None:
         """Create LoRA network for the transformer."""
         logger.info("Creating LoRA network...")
 
@@ -200,7 +195,7 @@ class ZImageLoRATrainer:
         self.lora_network.to(self.device, dtype=self.dtype)
         logger.info(f"LoRA network created with rank={lora_config.get('rank', 4)}")
 
-    def create_dataset(self):
+    def create_dataset(self) -> None:
         """Create training dataset."""
         logger.info("Creating dataset...")
 
@@ -285,7 +280,7 @@ class ZImageLoRATrainer:
             timesteps = (timesteps * num_train_timesteps).floor() / num_train_timesteps
         return timesteps
 
-    def dry_run_training(self):
+    def dry_run_training(self) -> None:
         """Simulate training without loading or downloading models."""
         train_config = self.config.get("train", {})
         num_epochs = int(train_config.get("num_epochs", 10) or 1)
@@ -313,11 +308,7 @@ class ZImageLoRATrainer:
         )
 
         start_time = time.time()
-        progress_bar = tqdm(
-            total=total_steps,
-            desc="Dry Run Steps",
-            disable=not self.is_main_process,
-        )
+        progress_bar = tqdm(total=total_steps, desc="Dry Run Steps", disable=not self.is_main_process)
         for step in range(1, total_steps + 1):
             if step_time > 0:
                 time.sleep(step_time)
@@ -344,8 +335,8 @@ class ZImageLoRATrainer:
         logger.info("Dry run completed.")
 
     def _write_dry_run_checkpoint(
-        self, output_dir: Path, step, total_steps: int, steps_per_epoch: int, num_epochs: int, start_time: float
-    ):
+        self, output_dir: Path, step: Any, total_steps: int, steps_per_epoch: int, num_epochs: int, start_time: float
+    ) -> None:
         dataset_config = self.config.get("dataset", {})
         train_config = self.config.get("train", {})
         elapsed = max(time.time() - start_time, 0.0)
@@ -386,18 +377,18 @@ class ZImageLoRATrainer:
         save_path.write_text(json.dumps(payload, indent=2))
         self.last_saved_path = str(save_path)
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         """Setup optimizer and scheduler."""
         train_config = self.config["train"]
 
-        def _to_float(value, default: float) -> float:
+        def _to_float(value: Any, default: float) -> float:
             if value is None:
                 return float(default)
             if isinstance(value, (int, float)):
                 return float(value)
             return float(str(value))
 
-        def _to_int(value, default: int) -> int:
+        def _to_int(value: Any, default: int) -> int:
             if value is None:
                 return int(default)
             if isinstance(value, int):
@@ -406,7 +397,7 @@ class ZImageLoRATrainer:
                 return int(value)
             return int(str(value))
 
-        def _to_bool(value, default: bool) -> bool:
+        def _to_bool(value: Any, default: bool) -> bool:
             if value is None:
                 return bool(default)
             if isinstance(value, bool):
@@ -459,7 +450,7 @@ class ZImageLoRATrainer:
                     slice_p=slice_p,
                 )
                 logger.info("Using optimizer: %s", optimizer_name)
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning(
                     "Failed to load prodigy optimizer (%s). Falling back to AdamW. Error: %s",
                     optimizer_name,
@@ -485,7 +476,7 @@ class ZImageLoRATrainer:
                     eps=eps,
                 )
                 logger.info("Using optimizer: %s", optimizer_name)
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning(
                     "Failed to load bitsandbytes optimizer (%s). Falling back to AdamW. Error: %s",
                     optimizer_name,
@@ -507,7 +498,7 @@ class ZImageLoRATrainer:
                 eps=eps,
             )
 
-        self.noise_scheduler = get_flow_match_scheduler()
+        self.noise_scheduler: Any = get_flow_match_scheduler()
 
         warmup_steps = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
         if warmup_steps > 0:
@@ -520,7 +511,7 @@ class ZImageLoRATrainer:
                 lr_lambda=lr_lambda,
             )
 
-    def train(self):
+    def train(self) -> None:
         """Main training loop."""
         train_config = self.config["train"]
         aitk_weighting = [
@@ -1003,12 +994,12 @@ class ZImageLoRATrainer:
                     global_step += 1
                     progress_bar.update(1)
 
-                    # Log progress to file
-                    if global_step % 1 == 0:  # Log every step
-                        current_lr = self.optimizer.param_groups[0]["lr"]
-                        self.progress_logger.info(
-                            f"Step: {global_step}/{total_steps} [{int(global_step / total_steps * 100)}%], Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, LR: {current_lr:.2e}"
-                        )
+                    # Log progress to file, every step
+                    current_lr = self.optimizer.param_groups[0]["lr"]
+                    self.progress_logger.info(
+                        f"Step: {global_step}/{total_steps} [{int(global_step / total_steps * 100)}%], "
+                        f"Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, LR: {current_lr:.2e}"
+                    )
 
                     # Save checkpoint
                     if global_step % save_every == 0:
@@ -1024,7 +1015,7 @@ class ZImageLoRATrainer:
         self.save_checkpoint("final")
         logger.info("Training completed!")
 
-    def save_checkpoint(self, step):
+    def save_checkpoint(self, step: int | str) -> None:
         """Save LoRA checkpoint."""
         if not self.is_main_process:
             return
@@ -1048,12 +1039,12 @@ class ZImageLoRATrainer:
         self.last_saved_path = str(save_path)
         logger.info(f"Saved checkpoint to {save_path}")
 
-    def _log_summary(self, start_time: float):
+    def _log_summary(self, start_time: float) -> None:
         elapsed = max(time.time() - start_time, 0.0)
         output_path = self.last_saved_path or self.config.get("output", {}).get("path", "")
         logger.info("Summary: ran for %.2fs, last output saved to %s", elapsed, output_path)
 
-    def run(self):
+    def run(self) -> None:
         """Run the complete training pipeline."""
         try:
             set_seed(self.config.get("seed", 42))
@@ -1079,7 +1070,7 @@ class ZImageLoRATrainer:
             raise e
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Train Z-Image LoRA")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without downloading/loading models")

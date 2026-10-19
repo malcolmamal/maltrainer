@@ -34,7 +34,8 @@ from __future__ import annotations
 import logging
 import math
 import time
-from typing import Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 BANDS = (("low", 0.0, 0.5), ("mid", 0.5, 0.85), ("high", 0.85, 1.01))
 
 
-class NonFiniteLoss(RuntimeError):
+class NonFiniteLossError(RuntimeError):
     """The loss stayed NaN / inf; training stops without saving over the last good files."""
 
 
@@ -52,18 +53,18 @@ class WeightDrift:
     """|W - W0| / |W0| of chosen tensors, grouped by label. W0 is kept on the tensors' own
     device (pick a few tensors: their size is held twice)."""
 
-    def __init__(self, tracked: Sequence[Tuple[str, torch.nn.Parameter]]):
+    def __init__(self, tracked: Sequence[tuple[str, torch.nn.Parameter]]):
         self.tracked = [(label, p, p.detach().clone(), p.detach().float().norm().item()) for label, p in tracked]
-        self.previous: Optional[Tuple[int, float]] = None  # (steps since the start, mean drift)
+        self.previous: tuple[int, float] | None = None  # (steps since the start, mean drift)
 
     @property
     def size_mb(self) -> float:
         return sum(w0.numel() * w0.element_size() for _, _, w0, _ in self.tracked) / 1024**2
 
     @torch.no_grad()
-    def measure(self) -> Dict[str, float]:
-        sq: Dict[str, float] = {}
-        ref: Dict[str, float] = {}
+    def measure(self) -> dict[str, float]:
+        sq: dict[str, float] = {}
+        ref: dict[str, float] = {}
         for label, p, w0, norm in self.tracked:
             d = (p.detach().float() - w0.float()).norm().item()
             sq[label] = sq.get(label, 0.0) + d * d
@@ -83,7 +84,7 @@ class WeightDrift:
 
 
 class TrainMonitor:
-    def __init__(self, every: int = 100, stop_after: int = 3, drift: Optional[WeightDrift] = None):
+    def __init__(self, every: int = 100, stop_after: int = 3, drift: WeightDrift | None = None):
         self.every = max(int(every), 1)
         self.stop_after = max(int(stop_after), 1)
         self.drift = drift
@@ -92,22 +93,22 @@ class TrainMonitor:
         self._reset()
 
     def _reset(self) -> None:
-        self.losses: List[float] = []
-        self.bands: Dict[str, List[float]] = {name: [] for name, _, _ in BANDS}
-        self.priors: List[float] = []
+        self.losses: list[float] = []
+        self.bands: dict[str, list[float]] = {name: [] for name, _, _ in BANDS}
+        self.priors: list[float] = []
         self.started = time.time()
         self.excluded = 0.0
         self.steps = 0
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
 
-    def record(self, loss: float, sigma: float, prior: Optional[float] = None) -> None:
+    def record(self, loss: float, sigma: float, prior: float | None = None) -> None:
         """One micro-step's loss (a float already synced for the progress bar) and its sigma."""
         if not math.isfinite(loss):
             self.bad_in_a_row += 1
             logger.error("[monitor] the loss is %s (%d in a row)", loss, self.bad_in_a_row)
             if self.bad_in_a_row >= self.stop_after:
-                raise NonFiniteLoss(
+                raise NonFiniteLossError(
                     f"the loss was NaN / inf {self.bad_in_a_row} steps in a row; stopping without saving, so the "
                     "last checkpoint and resume state stay as they were. Resume from the state with a lower rate."
                 )
@@ -125,7 +126,7 @@ class TrainMonitor:
         """Time spent outside training (preview rounds), kept out of s/step."""
         self.excluded += float(seconds)
 
-    def step_done(self, step: int, total: int, optimizer=None) -> None:
+    def step_done(self, step: int, total: int, optimizer: Any = None) -> None:
         """Call once per optimizer step; logs the summary every ``every`` steps."""
         self.steps += 1
         self.steps_total += 1
@@ -134,7 +135,7 @@ class TrainMonitor:
         logger.info("[monitor] %s", self.summary(step, total, optimizer))
         self._reset()
 
-    def summary(self, step: int, total: int, optimizer=None) -> str:
+    def summary(self, step: int, total: int, optimizer: Any = None) -> str:
         parts = [f"step {step}/{total}"]
         if self.losses:
             bands = ", ".join(

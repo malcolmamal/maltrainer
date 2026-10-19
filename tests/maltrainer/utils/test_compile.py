@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-from typing import List, Optional
 
 import pytest
 import torch
@@ -22,9 +21,9 @@ def _torch_with_cache_limit(monkeypatch: pytest.MonkeyPatch, limit: int) -> Simp
 
 class _Block:
     def __init__(self) -> None:
-        self.modes: List[Optional[str]] = []
+        self.modes: list[str | None] = []
 
-    def compile(self, mode: Optional[str] = None) -> None:
+    def compile(self, mode: str | None = None) -> None:
         self.modes.append(mode)
 
 
@@ -64,7 +63,8 @@ def test_blocks_stay_eager_when_compiling_is_unavailable(
     assert compiled is False
     assert [block.modes for block in blocks] == [[], []]
     assert caplog.messages == [
-        "train.compile is on but the blocks stay eager: Triton is not installed (on Windows: pip install triton-windows)"
+        "train.compile is on but the blocks stay eager: Triton is not installed "
+        "(on Windows: pip install triton-windows)"
     ]
 
 

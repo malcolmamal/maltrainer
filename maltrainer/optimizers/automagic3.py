@@ -2,7 +2,10 @@
 Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / Fizgig (MIT License).
 """
 
-from typing import List
+import itertools
+import logging
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 import torch
 
@@ -26,7 +29,7 @@ class Automagic3(torch.optim.Optimizer):
 
     def __init__(
         self,
-        params,
+        params: Any,
         lr: float = 1e-6,
         min_lr: float = 1e-8,
         max_lr: float = 1e3,
@@ -36,11 +39,11 @@ class Automagic3(torch.optim.Optimizer):
         weight_decay: float = 0.0,
         polarity_history: int = 8,
         fused: bool = False,
-    ):
+    ) -> None:
         if min_lr > max_lr:
             raise ValueError(f"min_lr ({min_lr}) must be <= max_lr ({max_lr})")
         if lr > 1e-3:
-            print(f"Note: start lr {lr} is high; the controller will correct it (the pooled vote will walk it down).")
+            logging.getLogger(__name__).warning("start lr %s is high; the controller will correct it", lr)
         defaults = {
             "lr": lr,
             "min_lr": min_lr,
@@ -52,7 +55,8 @@ class Automagic3(torch.optim.Optimizer):
             "polarity_history": max(2, min(64, int(polarity_history))),
         }
         self.fused = fused  # set before super().__init__, which calls add_param_group per group
-        self._built, self._hook_handles = [], []
+        self._built: list[dict[str, Any]] = []
+        self._hook_handles: list[Any] = []
         super().__init__(params, defaults)
 
         # Multiplies every update's step size (not the learned rates): regularisation images train
@@ -63,10 +67,10 @@ class Automagic3(torch.optim.Optimizer):
         # (they are zeroed before the update, so without this count they would pass unseen).
         self._signal_sum: dict = {}
         self._signal_steps: dict = {}
-        self._nonfinite = None
+        self._nonfinite: torch.Tensor | None = None
 
         total = sum(p.numel() for g in self.param_groups for p in g["params"])
-        print(f"Total training parameters: {total:,}")
+        logging.getLogger(__name__).info("Total training parameters: %s", f"{total:,}")
 
     def add_param_group(self, param_group: dict) -> None:
         super().add_param_group(param_group)
@@ -95,9 +99,7 @@ class Automagic3(torch.optim.Optimizer):
     @staticmethod
     def _approx_sq_grad(row: torch.Tensor, col: torch.Tensor) -> torch.Tensor:
         # Adafactor's factored second moment.
-        r = (row / row.mean(dim=-1, keepdim=True)).rsqrt_().unsqueeze(-1)
-        c = col.unsqueeze(-2).rsqrt()
-        return torch.mul(r, c)
+        return torch.mul((row / row.mean(dim=-1, keepdim=True)).rsqrt_().unsqueeze(-1), col.unsqueeze(-2).rsqrt())
 
     @staticmethod
     def _sr_truncate(v_fp32: torch.Tensor, drop_bits: int) -> torch.Tensor:
@@ -114,10 +116,10 @@ class Automagic3(torch.optim.Optimizer):
         noise = torch.rand_like(v).sub_(0.5).mul_(ulp)
         return v.add_(noise).to(dtype)
 
-    _PACK_CONSTS: dict = {}
+    _PACK_CONSTS: ClassVar[dict] = {}
 
     @classmethod
-    def _pack_consts(cls, device):
+    def _pack_consts(cls, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
         consts = cls._PACK_CONSTS.get(device)
         if consts is None:
             consts = (
@@ -143,7 +145,7 @@ class Automagic3(torch.optim.Optimizer):
         return vals.view(-1)[:numel]
 
     @classmethod
-    def _vote_masks(cls, hist: torch.Tensor, start: int, numel: int):
+    def _vote_masks(cls, hist: torch.Tensor, start: int, numel: int) -> tuple[torch.Tensor, torch.Tensor]:
         """(up, down) 0/1 masks from the packed sign history, oldest row at ``start``.
 
         up: the sign was the same in all H steps. down: it flipped at every step. Both are
@@ -153,10 +155,9 @@ class Automagic3(torch.optim.Optimizer):
         """
         H = hist.shape[0]
         rows = [hist[(start + i) % H] for i in range(H)]
-        all_set = rows[0].clone()
-        any_set = rows[0].clone()
+        all_set, any_set = rows[0].clone(), rows[0].clone()
         alternating = rows[0] ^ rows[1]
-        for prev, cur in zip(rows[1:], rows[2:]):
+        for prev, cur in itertools.pairwise(rows[1:]):
             alternating.bitwise_and_(prev ^ cur)
         for row in rows[1:]:
             all_set.bitwise_and_(row)
@@ -166,8 +167,8 @@ class Automagic3(torch.optim.Optimizer):
 
     def _rebuild_group_index(self) -> None:
         self._param_group_index = {p: gi for gi, group in enumerate(self.param_groups) for p in group["params"]}
-        self._group_num: List = [None] * len(self.param_groups)
-        self._group_den: List = [None] * len(self.param_groups)
+        self._group_num: list = [None] * len(self.param_groups)
+        self._group_den: list = [None] * len(self.param_groups)
 
     @classmethod
     def _stochastic_copy_(cls, dst: torch.Tensor, src_fp32: torch.Tensor) -> None:
@@ -178,8 +179,8 @@ class Automagic3(torch.optim.Optimizer):
         else:
             dst.copy_(cls._stochastic_round(src_fp32, dst.dtype))
 
-    def _make_accum_hook(self):
-        def _hook(p: torch.Tensor):
+    def _make_accum_hook(self) -> Callable[[Any], None]:
+        def _hook(p: Any) -> None:  # Any: _accum_grad is an attribute set on the parameter
             if p.grad is None:
                 return
             if hasattr(p, "_accum_grad"):
@@ -195,9 +196,7 @@ class Automagic3(torch.optim.Optimizer):
         state = self.state[p]
         state["step"] = 0
         state["lr"] = torch.tensor(
-            min(max(float(group["lr"]), group["min_lr"]), group["max_lr"]),
-            dtype=torch.float32,
-            device=p.device,
+            min(max(float(group["lr"]), group["min_lr"]), group["max_lr"]), dtype=torch.float32, device=p.device
         )
         H = group["polarity_history"]
         width = (p.numel() + 7) // 8
@@ -210,8 +209,8 @@ class Automagic3(torch.optim.Optimizer):
         else:
             state["exp_avg_sq"] = torch.zeros(p.shape, dtype=p.dtype, device=p.device)
 
-    def _make_backward_hook(self, group):
-        def _hook(p: torch.Tensor):
+    def _make_backward_hook(self, group: dict) -> Callable[[torch.Tensor], None]:
+        def _hook(p: torch.Tensor) -> None:
             self._update_param(p, group)
 
         return _hook
@@ -236,8 +235,7 @@ class Automagic3(torch.optim.Optimizer):
         self._nonfinite = bad if self._nonfinite is None else self._nonfinite.add_(bad.to(self._nonfinite.device))
         grad.nan_to_num_(nan=0.0, posinf=0.0, neginf=0.0)
 
-        beta2 = group["beta2"]
-        eps = group["eps"]
+        beta2, eps = group["beta2"], group["eps"]
         sq = grad * grad
 
         if p.dim() >= 2:
@@ -318,7 +316,7 @@ class Automagic3(torch.optim.Optimizer):
     # ----------------------------------------------------------- optimizer API
 
     @torch.no_grad()
-    def step(self, closure=None):
+    def step(self, closure: Callable[[], Any] | None = None) -> Any:
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -375,7 +373,7 @@ class Automagic3(torch.optim.Optimizer):
         self._signal_sum, self._signal_steps, self._nonfinite = {}, {}, None
         return {"signal": signal, "nonfinite": nonfinite}
 
-    def get_learning_rates(self) -> List[float]:
+    def get_learning_rates(self) -> list[float]:
         out = []
         for group in self.param_groups:
             lrs = [self.state[p]["lr"] for p in group["params"] if p in self.state and "lr" in self.state[p]]
@@ -386,7 +384,7 @@ class Automagic3(torch.optim.Optimizer):
         lrs = self.get_learning_rates()
         return sum(lrs) / len(lrs) if lrs else float(self.defaults["lr"])
 
-    def load_state_dict(self, state_dict):
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         # torch casts floating state to each param's dtype, which would round the fp32 rates
         # of bf16 params (a full finetune) to bf16; put the saved values back afterwards.
         saved_lrs = {
@@ -400,7 +398,7 @@ class Automagic3(torch.optim.Optimizer):
             st = self.state.get(params[int(idx)])
             if st is not None:
                 st["lr"] = lr.to(device=params[int(idx)].device, dtype=torch.float32)
-        for group, built in zip(self.param_groups, self._built):
+        for group, built in zip(self.param_groups, self._built, strict=False):
             group.update(built)
             lrs = [
                 st["lr"]

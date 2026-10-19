@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import gc
 import logging
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import torch
 from torch import nn
@@ -31,10 +32,10 @@ from maltrainer.models.comfy_fp8 import Fp8ScaledLinear, quantize_rows
 logger = logging.getLogger(__name__)
 
 # A window: (name, Linear-name prefixes inside a block). "attn." matches blocks.N.attn.wq etc.
-Window = Tuple[str, Tuple[str, ...]]
+Window = tuple[str, tuple[str, ...]]
 
 
-def _block_leaf(key: str, blocks: str) -> Optional[str]:
+def _block_leaf(key: str, blocks: str) -> str | None:
     """``blocks.12.attn.wq.weight`` -> ``attn.wq`` (None outside the numbered blocks)."""
     parts = key.split(".")
     if len(parts) < 4 or parts[0] != blocks or not parts[1].isdigit() or parts[-1] != "weight":
@@ -42,7 +43,7 @@ def _block_leaf(key: str, blocks: str) -> Optional[str]:
     return ".".join(parts[2:-1])
 
 
-def _to_cpu(value):
+def _to_cpu(value: Any) -> Any:
     if torch.is_tensor(value):
         return value.detach().to("cpu", copy=True)
     if isinstance(value, dict):
@@ -52,7 +53,7 @@ def _to_cpu(value):
     return value
 
 
-def _remove_hooks(optimizer) -> None:
+def _remove_hooks(optimizer: Any) -> None:
     """Fused optimizers (Automagic3) step from grad hooks; a frozen window's must not fire."""
     for handle in getattr(optimizer, "_hook_handles", []):
         handle.remove()
@@ -70,23 +71,22 @@ class WindowRotator:
     def __init__(
         self,
         model: nn.Module,
-        master: Dict[str, torch.Tensor],
+        master: dict[str, torch.Tensor],
         windows: Sequence[Window],
         device: torch.device,
         compute_dtype: torch.dtype,
-        make_optimizer: Callable[[List[nn.Parameter], str], torch.optim.Optimizer],
+        make_optimizer: Callable[[list[nn.Parameter], str], torch.optim.Optimizer],
         blocks: str = "blocks",
     ):
-        self.model = model
-        self.master = master
+        self.model, self.master = model, master
         self.device = torch.device(device)
         self.compute_dtype = compute_dtype
         self.make_optimizer = make_optimizer
         # every window's weight keys, in the model's own module order (stable across loads, so an
         # optimizer state saved by index lines up again)
         ordered = [f"{name}.weight" for name, _ in model.named_modules() if f"{name}.weight" in master]
-        self.windows: List[Tuple[str, List[str]]] = []
-        owner: Dict[str, str] = {}
+        self.windows: list[tuple[str, list[str]]] = []
+        owner: dict[str, str] = {}
         for name, prefixes in windows:
             keys = [k for k in ordered if (_block_leaf(k, blocks) or "").startswith(tuple(prefixes))]
             if not keys:
@@ -101,12 +101,12 @@ class WindowRotator:
             logger.warning(
                 "%d block Linears are in no finetune window and stay frozen, e.g. %s", len(untrained), untrained[:3]
             )
-        self.current: Optional[int] = None
-        self.optimizer: Optional[torch.optim.Optimizer] = None
-        self.optimizer_states: Dict[int, dict] = {}  # frozen windows' optimizer state, on the CPU
+        self.current: int | None = None
+        self.optimizer: Any = None  # the active window's torch Optimizer
+        self.optimizer_states: dict[int, dict] = {}  # frozen windows' optimizer state, on the CPU
 
     @property
-    def names(self) -> List[str]:
+    def names(self) -> list[str]:
         return [name for name, _ in self.windows]
 
     def window_parameters(self, index: int) -> int:
@@ -129,9 +129,9 @@ class WindowRotator:
         if self.current is not None:
             self.deactivate()
         name, keys = self.windows[index]
-        params: List[nn.Parameter] = []
+        params: list[nn.Parameter] = []
         for key in keys:
-            frozen = self.model.get_submodule(key[: -len(".weight")])
+            frozen: Any = self.model.get_submodule(key[: -len(".weight")])
             linear = nn.Linear(frozen.in_features, frozen.out_features, bias=False, device="meta")
             linear.weight = nn.Parameter(self.master[key].to(self.device, self.compute_dtype), requires_grad=True)
             if getattr(frozen, "bias", None) is not None:
@@ -157,7 +157,7 @@ class WindowRotator:
         _remove_hooks(self.optimizer)
         self.optimizer = None
         for key in keys:
-            linear = self.model.get_submodule(key[: -len(".weight")])
+            linear: Any = self.model.get_submodule(key[: -len(".weight")])
             weight = linear.weight.detach()
             linear.weight.grad = None
             self.master[key] = weight.to("cpu", torch.bfloat16, copy=True)  # before the lossy fp8 encode
@@ -181,10 +181,10 @@ class WindowRotator:
     def weight(self, key: str) -> torch.Tensor:
         """A rotating weight as trained so far, bf16 on the CPU (the active window read live)."""
         if self.current is not None and key in self.windows[self.current][1]:
-            return self.model.get_submodule(key[: -len(".weight")]).weight.detach().to("cpu", torch.bfloat16)
+            return self.model.get_parameter(key).detach().to("cpu", torch.bfloat16)
         return self.master[key]
 
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         return [key for _, keys in self.windows for key in keys]
 
     def state_dict(self) -> dict:

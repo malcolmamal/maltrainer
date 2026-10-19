@@ -43,11 +43,11 @@ system RAM.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import time
+from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Callable, ContextManager, Dict, List, Optional, Sequence, Tuple
 
 from PIL import Image
 
@@ -57,9 +57,9 @@ SETTINGS = ("every", "at_start", "negative", "steps", "cfg", "width", "height", 
 ROWS = ("raw", "ema")
 
 
-def _entries(prompts) -> List[Tuple[str, bool]]:
+def _entries(prompts: Sequence[object] | None) -> list[tuple[str, bool]]:
     """``prompts`` items as (prompt, enabled): a string, or {prompt: ..., enabled: ...}."""
-    out = []
+    out: list[tuple[str, bool]] = []
     for item in prompts or []:
         if isinstance(item, dict):
             text = str(item.get("prompt", "")).strip()
@@ -71,8 +71,8 @@ def _entries(prompts) -> List[Tuple[str, bool]]:
 
 
 class Previews:
-    def __init__(self, config: Optional[dict], output_dir: Path):
-        self.slots: Dict[str, int] = {}  # prompt -> its stable number (seed offset, file name)
+    def __init__(self, config: dict | None, output_dir: Path):
+        self.slots: dict[str, int] = {}  # prompt -> its stable number (seed offset, file name)
         self.current = ""
         self.dir = Path(output_dir) / "samples"
         self._listed = False  # prompts.txt is rewritten once per process, then on every change
@@ -83,7 +83,7 @@ class Previews:
     def _apply(self, config: dict) -> None:
         self.every = int(config.get("every", 0) or 0)
         entries = _entries(config.get("prompts"))
-        self.prompts: List[str] = [p for p, _ in entries]  # every defined prompt, in file order
+        self.prompts: list[str] = [p for p, _ in entries]  # every defined prompt, in file order
         self.enabled_prompts = {p for p, on in entries if on}
         self.at_start = bool(config.get("at_start", True))
         self.negative = str(config.get("negative", "") or "")
@@ -100,7 +100,7 @@ class Previews:
                 self.slots[prompt] = max(self.slots.values(), default=-1) + 1
 
     @property
-    def active(self) -> List[str]:
+    def active(self) -> list[str]:
         """The enabled prompts, in file order."""
         return [p for p in self.prompts if p in self.enabled_prompts]
 
@@ -110,7 +110,7 @@ class Previews:
 
     # ------------------------------------------------------------------ changes while running
 
-    def update(self, config: Optional[dict]) -> List[str]:
+    def update(self, config: dict | None) -> list[str]:
         """Apply a new ``sample`` section; returns a line per change (empty: nothing changed)."""
         before = {key: getattr(self, key) for key in SETTINGS}
         old_prompts, old_enabled, old_rows = list(self.prompts), set(self.enabled_prompts), dict(self.rows)
@@ -144,7 +144,7 @@ class Previews:
     # ------------------------------------------------------------------ rendering
 
     @property
-    def captions(self) -> List[str]:
+    def captions(self) -> list[str]:
         """Everything a render may need encoded: every defined prompt (enabled or not, so enabling
         one later is instant) and, with CFG, the negative."""
         if not self.prompts:
@@ -172,7 +172,7 @@ class Previews:
         self,
         step: int,
         render_one: Callable[[str, int], Image.Image],
-        variants: Sequence[Tuple[str, Callable[[], ContextManager]]] = (("", contextlib.nullcontext),),
+        variants: Sequence[tuple[str, Callable[[], AbstractContextManager]]] = (("", nullcontext),),
         ready: Callable[[str], bool] = lambda _prompt: True,
     ) -> float:
         """Render every enabled, ready prompt for ``step``, once per variant (label, context that

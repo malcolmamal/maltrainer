@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import pytest
 import torch
@@ -124,10 +125,10 @@ def test_the_network_logs_how_many_adapters_each_family_got(caplog: pytest.LogCa
 
 
 def test_an_unknown_target_preset_is_refused() -> None:
-    with pytest.raises(ValueError, match="lora.targets must be one of"):
+    with pytest.raises(ValueError, match=re.escape("lora.targets must be one of")):
         Flux3LoRANetwork(tiny_transformer(), targets="attn")
 
 
 def test_a_model_with_nothing_to_adapt_is_refused() -> None:
-    with pytest.raises(ValueError, match="No FLUX.3 modules matched"):
+    with pytest.raises(ValueError, match=re.escape("No FLUX.3 modules matched")):
         Flux3LoRANetwork(nn.Sequential(nn.Linear(2, 2)))

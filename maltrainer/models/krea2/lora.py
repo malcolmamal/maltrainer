@@ -9,8 +9,9 @@ conversion.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from typing import Dict, Iterable, Iterator, List, Optional
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -29,7 +30,7 @@ IO_LAYERS = ("first", "tmlp.0", "tmlp.2", "txtmlp.1", "txtmlp.3", "tproj.1", "la
 TARGET_PRESETS = ("attn-mlp", "blocks+txt", "all")
 
 
-def _selected(name: str, preset: str, block_range) -> bool:
+def _selected(name: str, preset: str, block_range: tuple[int, ...] | None) -> bool:
     if name.startswith("blocks."):
         index = int(name.split(".", 2)[1])
         if block_range is not None and not block_range[0] <= index <= block_range[1]:
@@ -77,7 +78,7 @@ class Krea2LoRANetwork(nn.Module):
         rank: int = 16,
         alpha: float = 16.0,
         targets: str = "attn-mlp",
-        block_range: Optional[Iterable[int]] = None,
+        block_range: Iterable[int] | None = None,
         prefix: str = "diffusion_model.",
     ):
         super().__init__()
@@ -87,7 +88,7 @@ class Krea2LoRANetwork(nn.Module):
         self.prefix = prefix
         self.targets = targets
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
         self._active = [True]  # shared with every wrapped forward; see disabled()
         block_range = tuple(block_range) if block_range is not None else None
         for name, module in transformer.named_modules():
@@ -100,7 +101,7 @@ class Krea2LoRANetwork(nn.Module):
             self._wrap(module, layer, self._active)
         if not self.lora_layers:
             raise ValueError("No Krea 2 modules matched the LoRA targets")
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for name in self.name_map.values():
             counts[param_group_of(name)] = counts.get(param_group_of(name), 0) + 1
         logger.info(
@@ -113,10 +114,10 @@ class Krea2LoRANetwork(nn.Module):
         )
 
     @staticmethod
-    def _wrap(module: nn.Module, lora: nn.Module, active: List[bool]) -> None:
+    def _wrap(module: nn.Module, lora: nn.Module, active: list[bool]) -> None:
         original = module.forward
 
-        def forward(x, _orig=original, _lora=lora, _active=active):
+        def forward(x: torch.Tensor, _orig: Any = original, _lora: Any = lora, _active: Any = active) -> torch.Tensor:
             base = _orig(x)
             if not _active[0]:
                 return base
@@ -134,23 +135,23 @@ class Krea2LoRANetwork(nn.Module):
         finally:
             self._active[0] = True
 
-    def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
+    def set_lora_dtype(self, device: torch.device | str, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
-    def param_groups(self, split: bool) -> List[dict]:
+    def param_groups(self, split: bool) -> list[dict]:
         if not split:
             return [{"params": list(self.lora_layers.parameters()), "name": "lora"}]
-        groups: Dict[str, List[nn.Parameter]] = {}
+        groups: dict[str, list[nn.Parameter]] = {}
         for safe, layer in self.lora_layers.items():
             groups.setdefault(param_group_of(self.name_map[safe]), []).extend(layer.parameters())
         return [{"params": params, "name": name} for name, params in groups.items()]
 
-    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+    def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         out = {}
-        for safe, layer in self.lora_layers.items():
+        for safe, layer in cast("dict[str, LoRALayer]", self.lora_layers).items():
             key = f"{self.prefix}{self.name_map[safe]}"
             down = layer.lora_down.weight.detach().cpu()
             up = layer.lora_up.weight.detach().cpu()
@@ -159,5 +160,5 @@ class Krea2LoRANetwork(nn.Module):
             out[f"{key}.alpha"] = torch.tensor(float(layer.alpha), dtype=torch.float32)
         return out
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

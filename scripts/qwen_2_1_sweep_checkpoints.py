@@ -26,6 +26,7 @@ import math
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 from PIL import Image, ImageDraw
@@ -51,7 +52,7 @@ def build_sigmas(num_steps: int, image_seq_len: int, device: torch.device) -> to
     return torch.cat([sigmas, sigmas.new_zeros(1)])
 
 
-def sort_key(path: Path):
+def sort_key(path: Path) -> tuple[int, int]:
     """`..._step_600` -> 600; the unsuffixed final checkpoint sorts last."""
     match = re.search(r"_step_(\d+)$", path.stem)
     return (0, int(match.group(1))) if match else (1, 0)
@@ -76,7 +77,7 @@ def swap_adapter(network: QwenImage21LoRANetwork, path: Path, scale: float) -> N
         if not key.endswith(".lora_A.weight"):
             continue
         module_path = key[len(network.prefix) : -len(".lora_A.weight")]
-        layer = layers[module_path.replace(".", "_")]
+        layer: Any = layers[module_path.replace(".", "_")]
         layer.lora_down.weight.data.copy_(state[key].to(layer.lora_down.weight.dtype))
         up = state[key.replace(".lora_A.", ".lora_B.")]
         layer.lora_up.weight.data.copy_(up.to(layer.lora_up.weight.dtype))
@@ -85,7 +86,9 @@ def swap_adapter(network: QwenImage21LoRANetwork, path: Path, scale: float) -> N
         layer.scale = (float(alpha.item()) if alpha is not None else float(rank)) / rank * scale
 
 
-def sample_latents(transformer, embeds, sigmas, seed, latent_h, latent_w, dtype, device) -> torch.Tensor:
+def sample_latents(
+    transformer: Any, embeds: Any, sigmas: Any, seed: int, latent_h: int, latent_w: int, dtype: Any, device: Any
+) -> torch.Tensor:
     """Euler flow-matching sample from pure noise; returns normalized latents [1, 64, h, w]."""
     generator = torch.Generator(device=device).manual_seed(seed)
     latents = torch.randn((1, 64, latent_h, latent_w), device=device, dtype=torch.float32, generator=generator)
@@ -134,9 +137,7 @@ def main() -> None:
     latent_h = latent_w = edge // VAE_SCALE_FACTOR
 
     text_encoder = load_qwen_image_2_1_text_encoder(
-        model_config["text_encoder_path"],
-        asset_dir=model_config.get("tokenizer_path"),
-        device=device,
+        model_config["text_encoder_path"], asset_dir=model_config.get("tokenizer_path"), device=device
     )
     with torch.no_grad():
         embeds = text_encoder.encode_prompts([args.prompt], device=device).to(device, dtype)
@@ -144,11 +145,10 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    transformer = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
-    network = QwenImage21LoRANetwork(transformer, target_modules=["__none__"])
+    transformer: Any = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
+    network: Any = QwenImage21LoRANetwork(transformer, target_modules=["__none__"])
     network.load_assistant_adapter(checkpoints[0], multiplier=1.0, device=device, dtype=dtype)
-    layers = network.assistant_layers
-    print(f"adapter attached: {len(layers)} modules")
+    print(f"adapter attached: {len(network.assistant_layers)} modules")
 
     def load_checkpoint(path: Path, scale: float) -> None:
         swap_adapter(network, path, scale)
@@ -177,7 +177,7 @@ def main() -> None:
     grid: list[tuple[str, list[Image.Image]]] = []
     for label, latents_list in rows:
         images = []
-        for seed, latents in zip(args.seeds, latents_list):
+        for seed, latents in zip(args.seeds, latents_list, strict=False):
             with torch.no_grad():
                 decoded = vae.decode(latents.to(dtype))
             array = decoded[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255

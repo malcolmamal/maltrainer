@@ -43,8 +43,9 @@ class StubEncoder(nn.Module):
 class StubDecoder(nn.Module):
     """Hands the first four latent channels back as the RGBA image."""
 
-    def __init__(self, **_: object) -> None:
+    def __init__(self, z_dim: int = 64) -> None:
         super().__init__()
+        self.z_dim = z_dim
         self.seen: list[torch.Tensor] = []
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:

@@ -6,8 +6,6 @@ tiny model keeps that and shrinks everything else (one key head, two value heads
 
 from __future__ import annotations
 
-from typing import Dict
-
 import torch
 
 from maltrainer.models.minimax_h3.int8_convrot import rotate_activation
@@ -47,11 +45,11 @@ def _quantize(value: torch.Tensor) -> tuple:
     return (rotated / scale).round().clamp(-127, 127).to(torch.int8), scale.reshape(-1)
 
 
-def text_int8_tensors(model: Qwen35TextModel) -> Dict[str, torch.Tensor]:
+def text_int8_tensors(model: Qwen35TextModel) -> dict[str, torch.Tensor]:
     """Every Linear and the embedding table as an INT8 ConvRot file stores them."""
     marker = {"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": GROUP}
     linears = {name for name, m in model.named_modules() if isinstance(m, torch.nn.Linear)} | {"embed_tokens"}
-    out: Dict[str, torch.Tensor] = {}
+    out: dict[str, torch.Tensor] = {}
     for key, value in model.state_dict().items():
         base = key[: -len(".weight")]
         if not key.endswith(".weight") or base not in linears:

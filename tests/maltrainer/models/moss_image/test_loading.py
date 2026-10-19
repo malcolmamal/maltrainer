@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 import torch
@@ -119,7 +120,7 @@ def test_a_checkpoint_missing_a_weight_fails_strictly(make_model: Maker, tmp_pat
 def test_an_unexpected_tensor_fails_strictly(make_model: Maker, write_checkpoint: Writer) -> None:
     path = write_checkpoint(make_model(), extra={"layers.0.proj.extra.weight": torch.zeros(1)})
 
-    with pytest.raises(RuntimeError, match="layers.0.proj.extra.weight"):
+    with pytest.raises(RuntimeError, match=re.escape("layers.0.proj.extra.weight")):
         load_moss_image_transformer(path, CPU)
 
 

@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import cast
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from safetensors import safe_open
 from safetensors.torch import load_file
+from torch import nn
 
-IMG_SIZE = 256
 LATENT_SIZE = 32
 LATENT_CH = 4
 PATCH = 2
@@ -69,7 +69,7 @@ class Attention(nn.Module):
         self.n_heads = n_heads
         self.head_dim = dim // n_heads
         self.is_self = ctx_dim is None
-        if self.is_self:
+        if ctx_dim is None:
             self.qkv = nn.Linear(dim, dim * 3, bias=True)
         else:
             self.q = nn.Linear(dim, dim, bias=True)
@@ -77,17 +77,14 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim, bias=True)
 
     def forward(
-        self,
-        x: torch.Tensor,
-        ctx: torch.Tensor | None = None,
-        ctx_mask: torch.Tensor | None = None,
+        self, x: torch.Tensor, ctx: torch.Tensor | None = None, ctx_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
         batch, length, channels = x.shape
         if self.is_self:
             qkv = self.qkv(x).view(batch, length, 3, self.n_heads, self.head_dim)
             q, k, v = (qkv[:, :, i].transpose(1, 2) for i in range(3))
         else:
-            ctx_len = ctx.shape[1]
+            ctx_len = cast(torch.Tensor, ctx).shape[1]
             q = self.q(x).view(batch, length, self.n_heads, self.head_dim).transpose(1, 2)
             kv = self.kv(ctx).view(batch, ctx_len, 2, self.n_heads, self.head_dim)
             k, v = kv[:, :, 0].transpose(1, 2), kv[:, :, 1].transpose(1, 2)
@@ -171,7 +168,7 @@ class SupraDiT(nn.Module):
     def _position_embed(self, grid_h: int, grid_w: int) -> torch.Tensor:
         """Learned 16x16 positions, bicubic-resized when the latent grid is not 256px."""
         pos = self.pos_embed
-        side = int(math.isqrt(pos.shape[1]))
+        side = math.isqrt(pos.shape[1])
         if grid_h == side and grid_w == side:
             return pos
         weight = pos.reshape(1, side, side, pos.shape[-1]).permute(0, 3, 1, 2).float()

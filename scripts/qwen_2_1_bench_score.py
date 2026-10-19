@@ -61,7 +61,7 @@ def l2(v: np.ndarray) -> np.ndarray:
     return v / (np.linalg.norm(v, axis=-1, keepdims=True) + 1e-12)
 
 
-def free():
+def free() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -90,14 +90,14 @@ class ClipVisionH:
         missing = [m for m in missing if not m.endswith("position_ids")]
         if missing or unexpected:
             raise RuntimeError(f"clip_vision_h mismatch: missing={missing[:5]} unexpected={unexpected[:5]}")
-        self.model = self.model.to(device, torch.float16).eval()
+        self.model = self.model.to(device, torch.float16).eval()  # type: ignore[arg-type]  # @wraps stub types `self` as arg 1
         self.device = device
 
     def _prep(self, image: Image.Image) -> np.ndarray:
         image = image.convert("RGB")
         scale = 224 / min(image.size)
         image = image.resize(
-            (max(224, round(image.width * scale)), max(224, round(image.height * scale))), Image.BICUBIC
+            (max(224, round(image.width * scale)), max(224, round(image.height * scale))), Image.Resampling.BICUBIC
         )
         left, top = (image.width - 224) // 2, (image.height - 224) // 2
         array = np.asarray(image.crop((left, top, left + 224, top + 224)), dtype=np.float32) / 255.0
@@ -142,7 +142,7 @@ class FaceEmbedder:
 
     def __call__(self, images: list[Image.Image]) -> list[np.ndarray | None]:
         if self.app:
-            out = []
+            out: list[np.ndarray | None] = []
             for image in images:
                 faces = self.app.get(np.asarray(image.convert("RGB"))[:, :, ::-1])
                 if not faces:
@@ -168,11 +168,11 @@ class FaceEmbedder:
                 int(min(rgb.shape[1], cx + half)),
                 int(min(rgb.shape[0], cy + half)),
             )
-            crops.append(image.convert("RGB").crop(box).resize((224, 224), Image.BICUBIC))
+            crops.append(image.convert("RGB").crop(box).resize((224, 224), Image.Resampling.BICUBIC))
             index.append(i)
-        out: list[np.ndarray | None] = [None] * len(images)
+        out = [None] * len(images)
         if crops:
-            for i, emb in zip(index, self.clip(crops)):
+            for i, emb in zip(index, self.clip(crops), strict=False):
                 out[i] = emb
         return out
 
@@ -196,7 +196,7 @@ class YesNoJudge:
         )
 
         path = snapshot_download(JUDGE_REPO, local_files_only=True)
-        self.model = Qwen3VLForConditionalGeneration.from_pretrained(path, dtype=torch.bfloat16).to(device).eval()
+        self.model = Qwen3VLForConditionalGeneration.from_pretrained(path, dtype=torch.bfloat16).to(device).eval()  # type: ignore[arg-type]  # @wraps stub types `self` as arg 1
         tokenizer = AutoTokenizer.from_pretrained(path)
         self.processor = Qwen3VLProcessor(
             image_processor=AutoImageProcessor.from_pretrained(PROCESSOR_DIR),
@@ -262,7 +262,7 @@ def main() -> None:
     print(f"training faces {len(train_faces)}/{len(train_images)}, likeness ceiling {ceiling:.4f}")
 
     image_clip = clip(images)
-    for r, emb, face in zip(records, image_clip, faces(images)):
+    for r, emb, face in zip(records, image_clip, faces(images), strict=False):
         r["face_found"] = face is not None
         r["likeness"] = float(face @ centroid) if face is not None else None
         r["memorization"] = float((train_clip @ emb).max())
@@ -273,7 +273,7 @@ def main() -> None:
     # ---- VLM adherence judge ------------------------------------------------------------
     if not args.no_judge:
         judge = YesNoJudge(args.device)
-        for i, (r, image) in enumerate(zip(records, images)):
+        for i, (r, image) in enumerate(zip(records, images, strict=False)):
             qs = checks.get(r["prompt"], [])
             r["checks"] = {q: judge(image, q) for q in qs}
             r["judge"] = float(np.mean(list(r["checks"].values()))) if qs else None
@@ -293,7 +293,7 @@ def main() -> None:
     base_likes = [r["likeness"] for r in records if r["run"] == "base" and r["likeness"] is not None]
     floor = float(np.mean(base_likes)) if base_likes else 0.0
 
-    def mean_of(idx, key, prompt=None):
+    def mean_of(idx: list[int], key: str, prompt: str | None = None) -> float | None:
         vals = [
             records[i][key]
             for i in idx
@@ -301,7 +301,7 @@ def main() -> None:
         ]
         return float(np.mean(vals)) if vals else None
 
-    def diversity(idx):
+    def diversity(idx: list[int]) -> float | None:
         by_prompt = defaultdict(list)
         for i in idx:
             by_prompt[records[i]["prompt"]].append(i)
@@ -346,7 +346,7 @@ def main() -> None:
         "reference": {
             "likeness_floor_base": floor,
             "likeness_ceiling_real": ceiling,
-            "training_faces": int(len(train_faces)),
+            "training_faces": len(train_faces),
             "training_pairwise_clip": train_pairwise,
         },
         "rows": rows,
@@ -354,21 +354,20 @@ def main() -> None:
     (bench / "scores.json").write_text(json.dumps(records, indent=1))
     (bench / "summary.json").write_text(json.dumps(summary, indent=2))
 
-    def fmt(v, f):
+    def fmt(v: float | None, f: str) -> str:
         return f.format(v) if v is not None else "   -  "
 
     print(
         f"\nlikeness floor (base) {floor:.4f}  ceiling (real photos) {ceiling:.4f}  "
         f"training pairwise CLIP {train_pairwise:.4f}\n"
     )
-    print(
-        f"{'run':>11} {'step':>5} {'face%':>6} {'likeness':>9} {'norm':>6} {'judge':>6} {'adhere':>7} {'divers':>7} {'memo':>6}"
-    )
+    print("        run  step  face%  likeness   norm  judge  adhere  divers   memo")
     for row in rows:
         print(
             f"{row['run']:>11} {row['step']:>5} {row['face_rate'] * 100:5.0f}% {fmt(row['likeness'], '{:9.4f}')} "
-            f"{fmt(row['likeness_norm'], '{:6.2f}')} {fmt(row['judge'], '{:6.3f}')} {fmt(row['adherence'], '{:+7.3f}')} "
-            f"{fmt(row['diversity'], '{:7.4f}')} {fmt(row['memorization'], '{:6.4f}')}"
+            f"{fmt(row['likeness_norm'], '{:6.2f}')} {fmt(row['judge'], '{:6.3f}')} "
+            f"{fmt(row['adherence'], '{:+7.3f}')} {fmt(row['diversity'], '{:7.4f}')} "
+            f"{fmt(row['memorization'], '{:6.4f}')}"
         )
 
 

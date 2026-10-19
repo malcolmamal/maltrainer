@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+import re
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -41,7 +42,7 @@ def test_selection_by_preset_never_includes_the_text_side(
 
 
 def test_selection_rejects_an_unknown_preset() -> None:
-    with pytest.raises(ValueError, match="lora.targets must be one of"):
+    with pytest.raises(ValueError, match=re.escape("lora.targets must be one of")):
         selected("layers.0.proj.q", "text")
 
     assert TARGET_PRESETS == ("blocks", "attn", "all")
@@ -125,7 +126,7 @@ def test_weights_are_saved_in_the_requested_dtype_and_alpha_always_in_float32(
 
     state = network.get_state_dict(save_dtype)
 
-    dtypes: Dict[str, List[torch.dtype]] = {}
+    dtypes: dict[str, list[torch.dtype]] = {}
     for key, value in state.items():
         dtypes.setdefault(key.rsplit(".", 1)[-1], []).append(value.dtype)
     assert set(dtypes["weight"]) == {expected}

@@ -5,10 +5,9 @@ regularisation both caption by class."""
 from __future__ import annotations
 
 import re
-from typing import Dict, Optional
 
 
-def class_caption(caption: str, classes: Dict[str, str]) -> Optional[str]:
+def class_caption(caption: str, classes: dict[str, str]) -> str | None:
     """``caption`` with every trigger (a whole word, any case) replaced by its class word, or
     None when it names no trigger. Longer triggers go first, so "annasmith" wins over "anna".
 
@@ -19,11 +18,11 @@ def class_caption(caption: str, classes: Dict[str, str]) -> Optional[str]:
         return None
     alternatives = "|".join(f"(?P<t{i}>{re.escape(trigger)})" for i, trigger in enumerate(triggers))
     pattern = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])", re.IGNORECASE)
-    out, count = pattern.subn(lambda match: classes[triggers[int(match.lastgroup[1:])]], caption)
+    out, count = pattern.subn(lambda match: classes[triggers[int((match.lastgroup or "t0")[1:])]], caption)
     return out if count else None
 
 
-def resolve_classes(prior_config: dict, trigger: Optional[str]) -> Dict[str, str]:
+def resolve_classes(prior_config: dict, trigger: str | None) -> dict[str, str]:
     """``prior.classes`` (trigger -> class word), or ``dataset.trigger`` -> ``prior.class_word``."""
     classes = {str(k).strip(): str(v).strip() for k, v in (prior_config.get("classes") or {}).items() if str(k).strip()}
     word = str(prior_config.get("class_word") or "").strip()

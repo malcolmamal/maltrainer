@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pytest
 import torch
@@ -32,7 +31,7 @@ def tiny_qwen(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(te, "TAP_LAYERS", [1, 2, 3])
 
 
-def _state() -> Dict[str, torch.Tensor]:
+def _state() -> dict[str, torch.Tensor]:
     config = Qwen3VLConfig.from_pretrained(str(te.TOKENIZER_ASSETS)).text_config
     for name, value in TINY_TEXT.items():
         setattr(config, name, value)
@@ -41,7 +40,7 @@ def _state() -> Dict[str, torch.Tensor]:
     return {k: v.detach().clone() for k, v in Qwen3VLTextModel(config).state_dict().items()}
 
 
-def _write(path: Path, state: Dict[str, torch.Tensor], prefix: str = PREFIX, fp8: Optional[List[str]] = None) -> Path:
+def _write(path: Path, state: dict[str, torch.Tensor], prefix: str = PREFIX, fp8: list[str] | None = None) -> Path:
     metadata = None
     if fp8 is not None:
         layers = {prefix + name: {"format": "float8_e4m3fn"} for name in fp8}
@@ -50,7 +49,7 @@ def _write(path: Path, state: Dict[str, torch.Tensor], prefix: str = PREFIX, fp8
     return path
 
 
-def _fp8_state() -> Dict[str, torch.Tensor]:
+def _fp8_state() -> dict[str, torch.Tensor]:
     state = _state()
     for key in [k for k in state if k.endswith("_proj.weight")]:
         scale = (state[key].abs().amax() / FP8_MAX).float()

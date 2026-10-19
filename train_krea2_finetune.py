@@ -29,7 +29,6 @@ import random
 import shutil
 import time
 from pathlib import Path
-from typing import List, Optional
 
 import torch
 from tqdm import tqdm
@@ -64,17 +63,17 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             raise ValueError("fused Automagic3 steps inside backward, so gradient_accumulation_steps must be 1")
         resume = config.get("train", {}).get("resume_from")
         self.resume_dir = Path(resume) if resume else None
-        self.resume_state: Optional[dict] = None
+        self.resume_state: dict | None = None
         self.global_step = 0
         self.epoch = 0
         self.position = 0
-        self.epoch_rng = None
-        self.always_optimizer = None
+        self.epoch_rng: tuple[object, ...] | None = None
+        self.always_optimizer: Automagic3 | None = None
         self.key_prefix = ""
 
     # ------------------------------------------------------------------ model
 
-    def load_transformer_and_lora(self):
+    def load_transformer_and_lora(self) -> None:
         print("=== Step 2/2: Loading Krea 2 DiT for finetuning ===", flush=True)
         model_config = self.config["model"]
         finetune_config = self.config.get("finetune", {}) or {}
@@ -86,7 +85,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             path = self.resume_dir / STATE_MODEL
             logger.info("Resuming from %s", self.resume_dir)
 
-        master = {}
+        master: dict[str, torch.Tensor] = {}
         self.transformer, info = load_krea2_transformer(path, self.device, self.dtype, master=master)
         self.key_prefix = str(info.get("key_prefix", ""))
         self.run_metadata["base_load"] = {k: v for k, v in info.items() if k != "key_prefix"}
@@ -149,10 +148,10 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             "fused": True,
         }
 
-    def _make_optimizer(self, params: List[torch.nn.Parameter], name: str) -> Automagic3:
+    def _make_optimizer(self, params: list[torch.nn.Parameter], name: str) -> Automagic3:
         return Automagic3([{"params": params, "name": name}], **self._automagic_kwargs())
 
-    def setup_optimizer(self):
+    def setup_optimizer(self) -> None:
         name = str(self.config["train"].get("optimizer", "automagic3")).lower()
         if name not in {"automagic3", "automagic", "automagic_v3"}:
             raise ValueError(
@@ -177,12 +176,12 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
 
     def _dataset_fingerprint(self) -> str:
         root = self.config["dataset"]["path"]
-        digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"))
+        digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"), usedforsecurity=False)
         for key, caption in self.samples:
-            digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode("utf-8"))
+            digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode())
         return digest.hexdigest()
 
-    def train(self):
+    def train(self) -> None:
         train_config = self.config["train"]
         save_every = int(train_config.get("save_every", 0) or 0)
         if not self.samples:
@@ -248,12 +247,12 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         first = resume is not None
         while self.global_step < total_steps:
             num_epochs = max(num_epochs, epoch + 1)
-            if first and same_data:
+            if resume is not None and first and same_data:
                 random.setstate(resume["epoch_rng"])
             self.epoch, self.epoch_rng = epoch, random.getstate()
             order = self._epoch_order()
             start = self.position if first else 0
-            if first:
+            if resume is not None and first:
                 random.setstate(resume["python_rng"])
                 torch.set_rng_state(resume["torch_rng"])
                 if resume.get("cuda_rng") is not None and torch.cuda.is_available():
@@ -312,7 +311,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         self.save_checkpoint("final")
         logger.info("Krea 2 finetuning completed!")
 
-    def _log_step(self, step, total, loss, epoch, num_epochs):
+    def _log_step(self, step: int, total: int, loss: torch.Tensor, epoch: int, num_epochs: int) -> None:
         window = self.rotator.names[self.rotator.current] if self.rotator.current is not None else "-"
         self.progress_logger.info(
             "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, Window: %s, LR: %.2e",
@@ -337,7 +336,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
     def _model_bytes(self) -> int:
         return sum(t.numel() * 2 for t in self.transformer.state_dict().values())  # bf16, an upper bound
 
-    def save_checkpoint(self, step) -> bool:
+    def save_checkpoint(self, step: int | str) -> bool:
         """The full model and, with train.save_state, the resume state (its weights hard-linked to
         the checkpoint). A save that does not fit is skipped (the final one waits for space)."""
         output_config = self.config.get("output", {})
@@ -387,11 +386,9 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         if bool(self.config["train"].get("save_state", True)):
             try:
                 self._save_state(output_dir / f"{name}_state", save_path)
-            except Exception as error:
+            except Exception:  # logged with its traceback; the run goes on
                 shutil.rmtree(output_dir / f"{name}_state.tmp", ignore_errors=True)
-                logger.error(
-                    "Writing the resume state for step %s failed (%s); the previous state is kept.", step, error
-                )
+                logger.exception("Writing the resume state for step %s failed; the previous state is kept.", step)
         return True
 
     def _save_state(self, state_dir: Path, weights: Path) -> None:
@@ -435,7 +432,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         logger.info("Saved resume state (step %d) to %s (%.0fs)", self.global_step, state_dir, time.time() - started)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Finetune the Krea 2 DiT in maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--resume-from", type=str, help="A <name>_state folder; overrides train.resume_from")

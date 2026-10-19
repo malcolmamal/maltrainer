@@ -111,5 +111,5 @@ def test_a_target_set_that_matches_nothing_is_refused() -> None:
 
 
 def test_an_unknown_preset_is_refused() -> None:
-    with pytest.raises(ValueError, match="lora.targets must be one of"):
+    with pytest.raises(ValueError, match=r"lora\.targets must be one of"):
         Krea2LoRANetwork(tiny_transformer(), targets="blocks")

@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def test_load(lora_path, prompt):
+def test_load(lora_path: str, prompt: str) -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     pipe = ZImagePipeline.from_pretrained("Tongyi-MAI/Z-Image", torch_dtype=torch.bfloat16).to(device)
 
@@ -16,8 +16,8 @@ def test_load(lora_path, prompt):
         pipe.load_lora_weights(lora_path)
         pipe.fuse_lora()
         logger.info("LoRA loaded and fused successfully.")
-    except Exception as e:
-        logger.error(f"Failed to load LoRA: {e}")
+    except Exception:
+        logger.exception("Failed to load LoRA")
         return
 
     logger.info(f"Generating with prompt: {prompt}")

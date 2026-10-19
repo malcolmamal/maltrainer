@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import sys
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -12,14 +13,14 @@ from maltrainer.utils.logging_utils import log_level, setup_logging
 
 
 @pytest.fixture
-def configured(monkeypatch: pytest.MonkeyPatch) -> List[Dict[str, Any]]:
-    calls: List[Dict[str, Any]] = []
+def configured(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
     monkeypatch.setattr(logging_utils.logging, "basicConfig", lambda **kwargs: calls.append(kwargs))
     return calls
 
 
 def test_the_default_logs_info_to_stdout_with_time_and_logger(
-    configured: List[Dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    configured: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     stdout = io.StringIO()
     monkeypatch.setattr(sys, "stdout", stdout)
@@ -34,7 +35,7 @@ def test_the_default_logs_info_to_stdout_with_time_and_logger(
     assert handler.stream is stdout
 
 
-def test_the_level_and_format_come_from_the_config(configured: List[Dict[str, Any]]) -> None:
+def test_the_level_and_format_come_from_the_config(configured: list[dict[str, Any]]) -> None:
     setup_logging({"level": "DEBUG", "format": "%(message)s"})
 
     assert (configured[0]["level"], configured[0]["format"]) == (logging.DEBUG, "%(message)s")
@@ -50,11 +51,13 @@ def test_a_level_is_a_name_in_any_case_or_a_number(level: object, expected: int)
 
 @pytest.mark.parametrize("level", ["verbose", "", "basicConfig", True])
 def test_an_unknown_level_names_the_ones_there_are(level: object) -> None:
-    with pytest.raises(ValueError, match="logging.level must be one of CRITICAL, ERROR, WARNING, INFO, DEBUG"):
+    with pytest.raises(
+        ValueError, match=re.escape("logging.level must be one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
+    ):
         log_level(level)
 
 
-def test_a_lower_case_level_configures_logging(configured: List[Dict[str, Any]]) -> None:
+def test_a_lower_case_level_configures_logging(configured: list[dict[str, Any]]) -> None:
     setup_logging({"level": "debug"})
 
     assert configured[0]["level"] == logging.DEBUG

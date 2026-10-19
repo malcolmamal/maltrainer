@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Union
 
 import torch
 from accelerate import init_empty_weights
@@ -35,14 +34,14 @@ logger = logging.getLogger(__name__)
 CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
 
 
-def _strip_container_prefix(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def _strip_container_prefix(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     for prefix in CONTAINER_PREFIXES:
         if state_dict and all(key.startswith(prefix) for key in state_dict):
             return {key[len(prefix) :]: value for key, value in state_dict.items()}
     return state_dict
 
 
-def _to_module_names(state_dict: Dict[str, torch.Tensor]) -> Tuple[Dict[str, torch.Tensor], Dict[str, str]]:
+def _to_module_names(state_dict: dict[str, torch.Tensor]) -> tuple[dict[str, torch.Tensor], dict[str, str]]:
     """Drop what is not a weight, as ComfyUI does on load.
 
     - ``rope.bands``: the training code's RoPE frequency buffer. It is recomputed
@@ -50,7 +49,8 @@ def _to_module_names(state_dict: Dict[str, torch.Tensor]) -> Tuple[Dict[str, tor
     - ``<block>.comfy_attention.config``: a JSON hint naming the attention kernel ComfyUI's
       inference may use. Training runs plain SDPA, so it is dropped and only reported.
     """
-    out, attention = {}, {}
+    out: dict[str, torch.Tensor] = {}
+    attention: dict[str, int] = {}
     for key, value in state_dict.items():
         if key == "rope.bands":
             continue
@@ -68,11 +68,11 @@ def _to_module_names(state_dict: Dict[str, torch.Tensor]) -> Tuple[Dict[str, tor
 
 
 def load_moss_image_transformer(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
     grad_precision: str = "bf16",
-) -> Tuple[MOSSImageTransformer, dict]:
+) -> tuple[MOSSImageTransformer, dict]:
     """The frozen DiT on ``device``, plus a small summary for the checkpoint metadata."""
     path = Path(path)
     if not path.exists():

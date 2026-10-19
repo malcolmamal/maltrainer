@@ -19,9 +19,9 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 import torch
+from safetensors import SafetensorError
 from safetensors.torch import load_file, save_file
 
 logger = logging.getLogger(__name__)
@@ -29,10 +29,10 @@ logger = logging.getLogger(__name__)
 CACHE_DIR_NAME = ".maltrainer_cache"
 
 
-def content_hash(path: Union[str, Path]) -> str:
+def content_hash(path: str | Path) -> str:
     """BLAKE2b of the file's bytes: the same image matches wherever it is."""
     digest = hashlib.blake2b(digest_size=20)
-    with open(path, "rb") as handle:
+    with Path(path).open("rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
@@ -41,7 +41,7 @@ def content_hash(path: Union[str, Path]) -> str:
 IDENTITY_SAMPLE = 1 << 20
 
 
-def model_identity(path: Union[str, Path, None]) -> str:
+def model_identity(path: str | Path | None) -> str:
     """File name, size, and a hash of the first and last MiB: the same model file matches from
     any folder or machine, and two files of one size (two finetunes of a model) do not."""
     if not path:
@@ -51,7 +51,7 @@ def model_identity(path: Union[str, Path, None]) -> str:
         return path.name
     size = path.stat().st_size
     digest = hashlib.blake2b(digest_size=8)
-    with open(path, "rb") as handle:
+    with Path(path).open("rb") as handle:
         head = handle.read(IDENTITY_SAMPLE)
         handle.seek(max(size - IDENTITY_SAMPLE, len(head)))
         digest.update(head + handle.read())
@@ -59,13 +59,13 @@ def model_identity(path: Union[str, Path, None]) -> str:
 
 
 def cache_key(*parts: object) -> str:
-    return hashlib.sha1("\x1f".join(str(p) for p in parts).encode("utf-8")).hexdigest()
+    return hashlib.sha1("\x1f".join(str(p) for p in parts).encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 class FolderCache:
     """The ``.maltrainer_cache`` of one image folder."""
 
-    def __init__(self, folder: Union[str, Path]):
+    def __init__(self, folder: str | Path):
         self.root = Path(folder) / CACHE_DIR_NAME
 
     def _path(self, kind: str, key: str) -> Path:
@@ -74,13 +74,13 @@ class FolderCache:
     def has(self, kind: str, key: str) -> bool:
         return self._path(kind, key).exists()
 
-    def get(self, kind: str, key: str) -> Optional[torch.Tensor]:
+    def get(self, kind: str, key: str) -> torch.Tensor | None:
         path = self._path(kind, key)
         if not path.exists():
             return None
         try:
             return load_file(str(path))["tensor"]
-        except Exception as e:  # a truncated or foreign file: re-encode it
+        except (OSError, ValueError, RuntimeError, KeyError, SafetensorError) as e:  # truncated or foreign: re-encode
             logger.warning("Unreadable cache entry %s (%s); re-encoding", path, e)
             return None
 
@@ -92,7 +92,7 @@ class FolderCache:
         os.close(handle)
         try:
             save_file({"tensor": tensor.detach().cpu().contiguous()}, tmp)
-            os.replace(tmp, path)
+            Path(tmp).replace(path)
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
             raise

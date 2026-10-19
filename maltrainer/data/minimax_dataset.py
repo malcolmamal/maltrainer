@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -76,7 +76,7 @@ def audio_latent_frames(frames: int) -> int:
     return round(frames / FPS * AUDIO_LATENTS_PER_SECOND)
 
 
-def bucket_size(width: int, height: int, resolution: int, step: int = 32) -> Tuple[int, int]:
+def bucket_size(width: int, height: int, resolution: int, step: int = 32) -> tuple[int, int]:
     """Aspect-preserving target size whose area is about ``resolution``^2, on a ``step`` grid.
 
     32 px = the VAE's 16x downsample times the DiT's 2x2 patch, so every side patchifies exactly.
@@ -87,14 +87,14 @@ def bucket_size(width: int, height: int, resolution: int, step: int = 32) -> Tup
     return target_w, target_h
 
 
-def resize_and_crop(image: Image.Image, size: Tuple[int, int]) -> Image.Image:
+def resize_and_crop(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     """Scale to cover ``size`` (Lanczos), then centre-crop to it exactly."""
     target_w, target_h = size
     scale = max(target_w / image.width, target_h / image.height)
     resized_w = max(target_w, round(image.width * scale))
     resized_h = max(target_h, round(image.height * scale))
     if (resized_w, resized_h) != image.size:
-        image = image.resize((resized_w, resized_h), Image.LANCZOS)
+        image = image.resize((resized_w, resized_h), Image.Resampling.LANCZOS)
     left = (resized_w - target_w) // 2
     top = (resized_h - target_h) // 2
     return image.crop((left, top, left + target_w, top + target_h))
@@ -113,7 +113,7 @@ class MediaSource:
         return self.path.stem.lower().endswith(MUTE_SUFFIX)
 
 
-def _media_kind(path: Path) -> Optional[str]:
+def _media_kind(path: Path) -> str | None:
     ext = path.suffix.lower()
     if ext in SUPPORTED_IMAGE_EXTENSIONS:
         return "image"
@@ -128,12 +128,12 @@ def _read_text(path: Path, one_line: bool = False) -> str:
     try:
         text = path.read_text(encoding="utf-8")
         return " ".join(text.split()) if one_line else text.strip()
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logger.warning("Error reading %s: %s", path, e)
         return ""
 
 
-def _prefix_for(folder: Path, data_root: Path, templates: Dict[Path, Optional[str]]) -> str:
+def _prefix_for(folder: Path, data_root: Path, templates: dict[Path, str | None]) -> str:
     """The nearest ``prefix.txt`` from ``folder`` up to one level above the dataset folder,
     with ``[folder]`` replaced by ``folder``'s name; "" if there is none. An empty prefix.txt
     counts: it switches off any prefix from further up.
@@ -146,9 +146,9 @@ def _prefix_for(folder: Path, data_root: Path, templates: Dict[Path, Optional[st
         if current not in templates:
             path = current / PREFIX_FILE
             templates[current] = _read_text(path, one_line=True) if path.exists() else None
-        if templates[current] is not None:
-            return templates[current].replace("[folder]", folder.name)
-        if current == stop or current.parent == current:
+        if (template := templates[current]) is not None:
+            return template.replace("[folder]", folder.name)
+        if current in (stop, current.parent):
             return ""
         current = current.parent
 
@@ -178,11 +178,11 @@ def _caption_for(path: Path, trigger_token: str, default_caption: str, prefix: s
 
 
 def scan_media_sources(
-    data_root: Union[str, Path],
+    data_root: str | Path,
     kinds: Iterable[str] = MEDIA_KINDS,
-    trigger_token: Optional[str] = None,
+    trigger_token: str | None = None,
     default_caption: str = "",
-) -> List[MediaSource]:
+) -> list[MediaSource]:
     """Every supported file under ``data_root`` whose kind is in ``kinds``, sorted by path."""
     data_root = Path(data_root)
     kinds = set(kinds)
@@ -195,8 +195,8 @@ def scan_media_sources(
 
     trigger_token = (trigger_token or "").strip()
     default_caption = (default_caption or "").strip()
-    sources: List[MediaSource] = []
-    templates: Dict[Path, Optional[str]] = {}
+    sources: list[MediaSource] = []
+    templates: dict[Path, str | None] = {}
     for root, _, files in walk_visible(data_root):
         for name in files:
             path = Path(root) / name
@@ -208,7 +208,7 @@ def scan_media_sources(
     return sources
 
 
-def count_media_files(data_root: Union[str, Path], kinds: Iterable[str] = MEDIA_KINDS) -> int:
+def count_media_files(data_root: str | Path, kinds: Iterable[str] = MEDIA_KINDS) -> int:
     """Number of supported files, for the dry run's step estimate (no decoding)."""
     data_root = Path(data_root)
     if not data_root.exists():
@@ -231,14 +231,14 @@ def load_image(path: Path, resolution: int, aspect_mode: str = "bucket") -> torc
     image = Image.open(path).convert("RGB")
     if aspect_mode == "stretch":
         side = align_to_32(resolution)
-        image = image.resize((side, side), Image.BICUBIC)
+        image = image.resize((side, side), Image.Resampling.BICUBIC)
     else:
         image = resize_and_crop(image, bucket_size(image.width, image.height, resolution))
     array = np.asarray(image, dtype=np.uint8)
     return torch.from_numpy(array.copy()).permute(2, 0, 1).float().div_(255.0)
 
 
-def plan_segments(total_frames: int, max_frames: int, mode: str, min_frames: int) -> List[Tuple[int, int]]:
+def plan_segments(total_frames: int, max_frames: int, mode: str, min_frames: int) -> list[tuple[int, int]]:
     """(start_frame, frames) windows on the 17k + 5 grid.
 
     ``first`` keeps one window from the start (``min_frames`` or longer). ``split`` tiles the
@@ -249,7 +249,7 @@ def plan_segments(total_frames: int, max_frames: int, mode: str, min_frames: int
     max_frames = grid_frames(max_frames)
     if max_frames < min_frames:
         raise ValueError(f"max_frames must allow at least {min_frames} frames on the 17k + 5 grid")
-    segments: List[Tuple[int, int]] = []
+    segments: list[tuple[int, int]] = []
     start = 0
     while True:
         frames = grid_frames(min(max_frames, total_frames - start))

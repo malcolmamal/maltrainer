@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 
 from maltrainer.models.krea2.model import Krea2Config, Krea2Transformer
@@ -33,7 +31,7 @@ def tiny_transformer(config: Krea2Config = TINY, seed: int = 0) -> Krea2Transfor
     return model.eval()
 
 
-def tiny_inputs(batch: int = 2, h: int = 4, w: int = 6, length: int = 3) -> Tuple[torch.Tensor, ...]:
+def tiny_inputs(batch: int = 2, h: int = 4, w: int = 6, length: int = 3) -> tuple[torch.Tensor, ...]:
     generator = torch.Generator().manual_seed(5)
     x = torch.randn(batch, TINY.channels, h, w, generator=generator)
     sigma = torch.linspace(0.25, 0.75, batch)

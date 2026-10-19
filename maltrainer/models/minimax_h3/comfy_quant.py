@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import torch
 import torch.nn.functional as F
@@ -50,10 +50,9 @@ def unswizzle_nvfp4_scales(scales: torch.Tensor, rows: int, columns: int) -> tor
     expected_elements = padded_rows * padded_columns
     if scales.numel() != expected_elements:
         raise ValueError(
-            f"Invalid NVFP4 scale tensor: expected {expected_elements} elements for {rows}x{columns}, got {scales.numel()}"
+            f"Bad NVFP4 scale tensor: expected {expected_elements} elements for {rows}x{columns}, got {scales.numel()}"
         )
-    values = scales.reshape(-1, 32, 16)
-    values = values.reshape(-1, 32, 4, 4).transpose(1, 2)
+    values = scales.reshape(-1, 32, 16).reshape(-1, 32, 4, 4).transpose(1, 2)
     values = values.reshape(row_blocks, column_blocks, 4, 32, 4)
     values = values.reshape(row_blocks, column_blocks, 128, 4)
     values = values.permute(0, 2, 1, 3).reshape(padded_rows, padded_columns)
@@ -81,6 +80,9 @@ def get_nvfp4_lut(device: torch.device, dtype: torch.dtype) -> torch.Tensor:
 class ComfyInt8Embedding(nn.Module):
     """Per-row INT8 embedding used by the quantized H3 Qwen3-VL checkpoint."""
 
+    qweight: torch.Tensor
+    scales_u8: torch.Tensor
+
     def __init__(self, qweight: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype) -> None:
         super().__init__()
         if qweight.ndim != 2 or qweight.dtype is not torch.int8:
@@ -91,9 +93,7 @@ class ComfyInt8Embedding(nn.Module):
         self.output_dtype = output_dtype
         self.register_buffer("qweight", qweight.contiguous(), persistent=False)
         self.register_buffer(
-            "scales_u8",
-            scales.detach().float().reshape(-1).contiguous().view(torch.uint8),
-            persistent=False,
+            "scales_u8", scales.detach().float().reshape(-1).contiguous().view(torch.uint8), persistent=False
         )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -106,6 +106,11 @@ class ComfyInt8Embedding(nn.Module):
 
 class ComfyNvfp4Linear(nn.Module):
     """NVFP4/AWQ Linear that keeps packed weights and dequantizes each forward."""
+
+    packed_weight: torch.Tensor
+    scales_u8: torch.Tensor
+    per_tensor_scale_u8: torch.Tensor
+    bias: torch.Tensor | None
 
     def __init__(
         self,
@@ -120,10 +125,7 @@ class ComfyNvfp4Linear(nn.Module):
         self.in_features = source.in_features
         self.out_features = source.out_features
         self.output_dtype = output_dtype
-        if packed_weight.dtype is not torch.uint8 or packed_weight.shape != (
-            self.out_features,
-            self.in_features // 2,
-        ):
+        if packed_weight.dtype is not torch.uint8 or packed_weight.shape != (self.out_features, self.in_features // 2):
             raise ValueError(
                 f"Invalid NVFP4 packed weight shape {tuple(packed_weight.shape)} for "
                 f"Linear({self.in_features}, {self.out_features})"
@@ -136,9 +138,7 @@ class ComfyNvfp4Linear(nn.Module):
             raise ValueError("NVFP4 pre_quant_scale must have one value per input column")
 
         scales = unswizzle_nvfp4_scales(
-            blocked_scales.view(torch.float8_e4m3fn),
-            self.out_features,
-            self.in_features // NVFP4_BLOCK_SIZE,
+            blocked_scales.view(torch.float8_e4m3fn), self.out_features, self.in_features // NVFP4_BLOCK_SIZE
         )
         self.register_buffer("packed_weight", packed_weight.contiguous(), persistent=False)
         self.register_buffer("scales_u8", scales.view(torch.uint8), persistent=False)
@@ -158,7 +158,7 @@ class ComfyNvfp4Linear(nn.Module):
         self.register_parameter("bias", source.bias)
 
     def _pre_quant_scale(self) -> torch.Tensor | None:
-        value = getattr(self, "pre_quant_scale_u8", None)
+        value: torch.Tensor | None = getattr(self, "pre_quant_scale_u8", None)
         return None if value is None else value.view(torch.bfloat16)
 
     @torch.no_grad()
@@ -228,7 +228,7 @@ def load_comfy_quantized_state_dict(
             if isinstance(module, nn.Embedding):
                 if quant_format != "int8_tensorwise":
                     raise ValueError(f"Unsupported Comfy embedding quantization {quant_format!r} on {prefix}")
-                replacement = ComfyInt8Embedding(weight, weight_scale, output_dtype)
+                replacement: nn.Module = ComfyInt8Embedding(weight, weight_scale, output_dtype)
             elif isinstance(module, nn.Linear):
                 if quant_format != "nvfp4":
                     raise ValueError(f"Unsupported Comfy Linear quantization {quant_format!r} on {prefix}")

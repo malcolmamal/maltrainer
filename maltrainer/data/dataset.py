@@ -3,7 +3,7 @@ Dataset for Z-Image training.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -21,7 +21,7 @@ class ZImageDataset(Dataset):
         resolution: int = 512,
         center_crop: bool = True,
         random_flip: bool = False,
-        trigger_token: Optional[str] = None,
+        trigger_token: str | None = None,
         repeats: int = 1,
     ):
         self.data_root = Path(data_root)
@@ -56,7 +56,7 @@ class ZImageDataset(Dataset):
                 # Look for caption file
                 caption_path = img_path.with_suffix(".txt")
                 if caption_path.exists():
-                    with open(caption_path, "r", encoding="utf-8") as f:
+                    with Path(caption_path).open("r", encoding="utf-8") as f:
                         caption = f.read().strip()
                 else:
                     caption = ""
@@ -75,10 +75,10 @@ class ZImageDataset(Dataset):
             self.image_paths = self.image_paths * self.repeats
             self.captions = self.captions * self.repeats
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         # Load image
         image = Image.open(self.image_paths[idx]).convert("RGB")
         pixel_values = self.transform(image)
