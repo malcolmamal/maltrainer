@@ -448,7 +448,8 @@ class Automagic3(torch.optim.Optimizer):
                 if isinstance(st.get("lr"), torch.Tensor):
                     st["lr"] = st["lr"].to(torch.float32)
                     if med is not None:
-                        st["lr"].copy_(med.to(st["lr"].device))
+                        # clamped: the log/exp median moves a pinned rate (min = max) by an fp32 ulp
+                        st["lr"].copy_(med.to(st["lr"].device)).clamp_(min=group["min_lr"], max=group["max_lr"])
                 numel = p.numel()
                 H = group["polarity_history"]
                 width = (numel + 7) // 8
