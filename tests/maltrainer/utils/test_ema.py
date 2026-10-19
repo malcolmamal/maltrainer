@@ -96,8 +96,9 @@ def test_the_offloaded_decay_is_raised_to_the_update_interval(warmup: bool, ever
     assert ema.current_decay() == pytest.approx(expected)
 
 
-def test_an_offloaded_update_averages_on_the_cpu_in_fp32() -> None:
-    param = _param(0.0, 0.0, dtype=torch.bfloat16)
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
+def test_an_offloaded_update_averages_on_the_cpu_in_fp32(dtype: torch.dtype) -> None:
+    param = _param(0.0, 0.0, dtype=dtype)
     ema = OffloadedParameterEMA([("w", param)], decay=0.5, warmup=False)
     _set(param, 4.0, 8.0)
 

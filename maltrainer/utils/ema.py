@@ -78,7 +78,9 @@ class OffloadedParameterEMA:
         self.updates = 0
         self.calls = 0
         pin = torch.cuda.is_available()
-        self.shadow = [p.detach().to("cpu", torch.float32) for p in self.parameters]
+        # copy=True: for a CPU fp32 parameter `.to` would return the parameter itself, and the
+        # "average" would then be the live weights.
+        self.shadow = [p.detach().to("cpu", torch.float32, copy=True) for p in self.parameters]
         self.staging = [torch.empty(p.shape, dtype=p.dtype, pin_memory=pin) for p in self.parameters]
         self._thread: Optional[threading.Thread] = None
 
