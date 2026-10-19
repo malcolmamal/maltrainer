@@ -39,12 +39,12 @@ filterwarnings = ["error"]
 xfail_strict = true
 
 [tool.coverage.run]
-source = ["maltrainer", "maltrainer_quality"]
+source = ["maltrainer", "maltrainer_quality", "backend"]
 branch = true
 
 [tool.coverage.report]
 # A floor, not a target: raise it whenever tests land, never lower it.
-fail_under = 37.55
+fail_under = 99.73
 precision = 2
 show_missing = true
 skip_covered = true
