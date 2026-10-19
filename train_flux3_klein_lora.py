@@ -24,7 +24,6 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import torch
 from accelerate import Accelerator
@@ -51,7 +50,7 @@ logger = logging.getLogger(__name__)
 FLUX3_SHIFT = 6.93
 
 
-def plan_training_steps(num_samples: int, train_config: dict) -> Tuple[int, int, int]:
+def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
     """(steps_per_epoch, num_epochs, total_steps); ``train.max_steps`` > 0 wins over epochs."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
@@ -67,10 +66,10 @@ class Flux3KleinLoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path: Optional[str] = None
+        self.last_saved_path: str | None = None
         self.lr_scheduler = None
-        self.ema: Optional[ParameterEMA] = None
-        self.run_metadata: Dict[str, object] = {
+        self.ema: ParameterEMA | None = None
+        self.run_metadata: dict[str, object] = {
             "model_type": "flux3_klein",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
@@ -78,9 +77,9 @@ class Flux3KleinLoRATrainer:
         }
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
-        self.samples: List[Tuple[str, str]] = []  # (key, caption)
-        self.latent_cache: Dict[str, torch.Tensor] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
+        self.samples: list[tuple[str, str]] = []  # (key, caption)
+        self.latent_cache: dict[str, torch.Tensor] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
 
         train_config = config.get("train", {})
         if int(train_config.get("batch_size", 1) or 1) != 1:
@@ -134,7 +133,7 @@ class Flux3KleinLoRATrainer:
         aspect_mode = str(dataset_config.get("aspect_mode", "bucket")).lower()
 
         vae = load_flux2_vae_encoder(model_config["vae_path"], self.device)
-        sizes: Dict[Tuple[int, int], int] = {}
+        sizes: dict[tuple[int, int], int] = {}
         for source in tqdm(sources, desc="Caching latents", disable=not self.is_main_process):
             try:
                 pixels = load_flux3_image(source.path, resolution, aspect_mode).unsqueeze(0).to(self.device)
@@ -299,7 +298,7 @@ class Flux3KleinLoRATrainer:
         hi = float(train_config.get("max_sigma", 0.999))
         return sigma.clamp(lo, hi)
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
         order = [i for i in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
@@ -397,13 +396,9 @@ class Flux3KleinLoRATrainer:
     def _log_step(self, step, total, loss, epoch, num_epochs):
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
-        prefix = "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (
-            step,
-            total,
-            int(step / total * 100),
-            loss.item(),
-            epoch + 1,
-            num_epochs,
+        prefix = (
+            f"Step: {step}/{total} [{int(step / total * 100)}%], "
+            f"Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, "
         )
         if hasattr(inner, "get_avg_learning_rate"):
             rates = ", ".join(

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from safetensors import safe_open
@@ -49,16 +48,16 @@ def param_group_of(param_name: str) -> str:
     return "other"
 
 
-def param_groups(named: List[Tuple[str, nn.Parameter]], split: bool) -> List[dict]:
+def param_groups(named: list[tuple[str, nn.Parameter]], split: bool) -> list[dict]:
     if not split:
         return [{"params": [p for _, p in named], "name": "all"}]
-    groups: Dict[str, List[nn.Parameter]] = {}
+    groups: dict[str, list[nn.Parameter]] = {}
     for name, param in named:
         groups.setdefault(param_group_of(name), []).append(param)
     return [{"params": params, "name": name} for name, params in groups.items()]
 
 
-def _container_prefix(keys: List[str]) -> str:
+def _container_prefix(keys: list[str]) -> str:
     for prefix in CONTAINER_PREFIXES:
         if keys and all(key.startswith(prefix) for key in keys):
             return prefix
@@ -67,10 +66,10 @@ def _container_prefix(keys: List[str]) -> str:
 
 def save_full_model(
     model: nn.Module,
-    layout_path: Union[str, Path],
-    out_path: Union[str, Path],
-    overrides: Optional[Dict[str, torch.Tensor]] = None,
-    metadata: Optional[Dict[str, str]] = None,
+    layout_path: str | Path,
+    out_path: str | Path,
+    overrides: dict[str, torch.Tensor] | None = None,
+    metadata: dict[str, str] | None = None,
     dtype: torch.dtype = torch.bfloat16,
 ) -> None:
     """Write ``model`` in the key layout of the plain (bf16) checkpoint at ``layout_path``.
@@ -80,7 +79,7 @@ def save_full_model(
     """
     overrides = overrides or {}
     live = model.state_dict()
-    out: Dict[str, torch.Tensor] = {}
+    out: dict[str, torch.Tensor] = {}
     with safe_open(str(layout_path), framework="pt", device="cpu") as source:
         keys = list(source.keys())
         prefix = _container_prefix(keys)
@@ -108,7 +107,7 @@ def save_full_model(
 DRIFT_BLOCKS = (0, 10, 21, 31, 41)
 
 
-def drift_targets(named: List[Tuple[str, nn.Parameter]]) -> List[Tuple[str, nn.Parameter]]:
+def drift_targets(named: list[tuple[str, nn.Parameter]]) -> list[tuple[str, nn.Parameter]]:
     """(label, parameter) for maltrainer.utils.train_monitor.WeightDrift: the attention output and
     the feed-forward down projection of DRIFT_BLOCKS, where they train. ~350 MB of bf16 copies."""
     leaves = {"proj.o.weight": "attn", "proj.ffn_down.weight": "mlp"}
@@ -123,7 +122,7 @@ def drift_targets(named: List[Tuple[str, nn.Parameter]]) -> List[Tuple[str, nn.P
 # ---------------------------------------------------------------- LoRA extraction
 
 
-def _split_fused_qkv(name: str, diff: torch.Tensor) -> List[Tuple[str, torch.Tensor]]:
+def _split_fused_qkv(name: str, diff: torch.Tensor) -> list[tuple[str, torch.Tensor]]:
     """ComfyUI's files fuse each block's q / k / v into ``proj.qkv`` = [q; k; v]. The LoRA names
     them apart, as trained MOSS-Image LoRAs do: ComfyUI's MOSS-Image loader slices them into the
     fused weight, and an unfused model (the diffusers shards) takes them as they are."""

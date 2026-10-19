@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -86,9 +85,9 @@ class Qwen3VLTextEncoder(nn.Module):
     @torch.no_grad()
     def encode_prompts(
         self,
-        prompts: Union[str, List[str]],
+        prompts: str | list[str],
         max_length: int = 512,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> torch.Tensor:
         """Encode a list of text prompts into Qwen-Image-2.1 text embeddings [B, S, 4096]."""
         if isinstance(prompts, str):
@@ -134,9 +133,9 @@ def _map_te_key(k: str) -> str:
 
 
 def load_qwen_image_2_1_text_encoder(
-    text_encoder_path: Union[str, Path],
-    asset_dir: Optional[Union[str, Path]] = None,
-    device: Union[str, torch.device] = "cuda",
+    text_encoder_path: str | Path,
+    asset_dir: str | Path | None = None,
+    device: str | torch.device = "cuda",
     grad_precision: str = "bf16",
 ) -> Qwen3VLTextEncoder:
     """Load Qwen3-VL 8B text encoder from INT8 ConvRot safetensors (no dtype: the file fixes it)."""

@@ -9,7 +9,6 @@ import json
 import logging
 import math
 from types import MethodType
-from typing import Dict, Tuple
 
 import torch
 from safetensors import safe_open
@@ -18,7 +17,7 @@ from torch.nn import functional as F
 
 logger = logging.getLogger(__name__)
 
-_HADAMARD_CACHE: Dict[Tuple[int, str, torch.dtype], torch.Tensor] = {}
+_HADAMARD_CACHE: dict[tuple[int, str, torch.dtype], torch.Tensor] = {}
 
 
 def parse_comfy_quant_marker(marker: torch.Tensor) -> dict:
@@ -70,7 +69,7 @@ def rotate_activation(value: torch.Tensor, group_size: int) -> torch.Tensor:
     return torch.matmul(grouped, matrix).reshape(value.shape)
 
 
-def _quantize_rows(value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def _quantize_rows(value: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     scale = (value.float().abs().amax(dim=-1, keepdim=True) / 127.0).clamp(min=1e-30)
     quantized = (value.float() / scale).round().clamp(-127, 127).to(torch.int8)
     return quantized, scale
@@ -184,9 +183,9 @@ def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tenso
 
 def load_comfy_int8_convrot_state_dict(
     checkpoint_path: str, *, device: torch.device
-) -> Tuple[Dict[str, torch.Tensor], int]:
-    state_dict: Dict[str, torch.Tensor] = {}
-    marker_config: Dict[str, dict] = {}
+) -> tuple[dict[str, torch.Tensor], int]:
+    state_dict: dict[str, torch.Tensor] = {}
+    marker_config: dict[str, dict] = {}
     with safe_open(str(checkpoint_path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
         for key in keys:
@@ -228,7 +227,7 @@ def load_comfy_int8_convrot_state_dict(
     return state_dict, len(marker_config)
 
 
-def prepare_int8_convrot_modules(model: nn.Module, state_dict: Dict[str, torch.Tensor]) -> int:
+def prepare_int8_convrot_modules(model: nn.Module, state_dict: dict[str, torch.Tensor]) -> int:
     scale_shapes = {
         key[: -len(".scale_weight")]: tuple(value.shape)
         for key, value in state_dict.items()

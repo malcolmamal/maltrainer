@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Iterator, List, Tuple
 
 import pytest
 from PIL import Image
@@ -21,7 +21,7 @@ class _Renderer:
     def __init__(self, seconds: float = 0.0) -> None:
         self.now = 0.0
         self.seconds = seconds
-        self.calls: List[Tuple[str, int]] = []
+        self.calls: list[tuple[str, int]] = []
 
     def time(self) -> float:
         return self.now
@@ -67,7 +67,7 @@ def test_each_enabled_prompt_renders_with_its_slot_seed_into_a_strip(tmp_path: P
 
 def test_each_variant_renders_in_its_own_weights_as_a_row(tmp_path: Path, renderer: _Renderer) -> None:
     previews = _previews(tmp_path)
-    entered: List[str] = []
+    entered: list[str] = []
 
     @contextlib.contextmanager
     def ema_weights() -> Iterator[None]:

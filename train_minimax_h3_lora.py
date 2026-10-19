@@ -17,7 +17,6 @@ import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import torch
 from accelerate import Accelerator, init_empty_weights
@@ -125,7 +124,7 @@ def _axis_from_sqrt_area(dim: int, patch: int, sqrt_area: float) -> torch.Tensor
     return (torch.arange(n, dtype=torch.float64) * (ratio / n) + (1.0 - ratio) / 2.0) * 32.0
 
 
-def _frame_grid(latent_h: int, latent_w: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def _frame_grid(latent_h: int, latent_w: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Area-normalized (h, w) coordinates of one latent frame's 2x2-patch rows, plus the w axis."""
     area = math.sqrt(latent_h * latent_w)
     w_axis = _axis_from_sqrt_area(latent_w, 2, area)
@@ -182,7 +181,7 @@ class H3Sample:
     caption: str
     frames: int  # 24 fps pixel frames the item spans (1 for a still)
     video: torch.Tensor  # [1, 24, T_lat, H/16, W/16] normalized, CPU
-    audio: Optional[torch.Tensor] = None  # [1, 2*A, 32] normalized rows, CPU; None = silence
+    audio: torch.Tensor | None = None  # [1, 2*A, 32] normalized rows, CPU; None = silence
     audio_only: bool = False  # video is a zeros placeholder; drop the video loss
 
     @property
@@ -201,7 +200,7 @@ class MiniMaxH3LoRATrainer:
         self.lr_scheduler = None
         # Resolved facts about this run, embedded into every checkpoint's metadata. Populated
         # as they become known, since several are only decided at load/first-step time.
-        self.run_metadata: Dict[str, object] = {
+        self.run_metadata: dict[str, object] = {
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
             "torch_version": torch.__version__,
@@ -209,10 +208,10 @@ class MiniMaxH3LoRATrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
-        self.samples: List[H3Sample] = []
-        self._layout_cache: Dict[tuple, Dict[str, torch.Tensor]] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
-        self.ema: Optional[ParameterEMA] = None
+        self.samples: list[H3Sample] = []
+        self._layout_cache: dict[tuple, dict[str, torch.Tensor]] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
+        self.ema: ParameterEMA | None = None
 
         train_config = config.get("train", {})
         if int(train_config.get("batch_size", 1) or 1) != 1:
@@ -291,7 +290,7 @@ class MiniMaxH3LoRATrainer:
         placeholder_px = int(dataset_config.get("audio_placeholder_resolution", 128))
 
         # Audio waits for the audio encoder: (sample index, source, start frame).
-        pending_audio: List[Tuple[int, MediaSource, int]] = []
+        pending_audio: list[tuple[int, MediaSource, int]] = []
         audio_sources = [s for s in sources if s.kind == "audio"]
         visual_sources = [s for s in sources if s.kind != "audio"]
 
@@ -359,7 +358,7 @@ class MiniMaxH3LoRATrainer:
                 waveform = torch.from_numpy(wav).unsqueeze(0).to(self.device)
                 return pack_audio_rows(audio_vae.encode(waveform)).detach().cpu()
 
-            decoded: Dict[str, object] = {}
+            decoded: dict[str, object] = {}
             for index, source, start in tqdm(
                 pending_audio, desc="Caching clip audio", disable=not self.is_main_process
             ):
@@ -559,7 +558,7 @@ class MiniMaxH3LoRATrainer:
         )
         print("Transformer and LoRA network ready on GPU!", flush=True)
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         """Shuffled sample indices for one epoch (each sample ``repeats`` times), this rank's share."""
         repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
         order = [index for index in range(len(self.samples)) for _ in range(repeats)]
@@ -635,7 +634,7 @@ class MiniMaxH3LoRATrainer:
 
     def _build_packed_layout(
         self, num_text_tokens: int, latent_t: int, latent_h: int, latent_w: int, audio_t: int = 0
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Index/tag/position tensors for one [text | audio | video] packed sequence.
 
         Everything here is a function of the text length, the latent size and the audio
@@ -913,7 +912,7 @@ class MiniMaxH3LoRATrainer:
         scale_eff = 1.0 + (scale - 1.0) * sigma.detach().float().view(bsz, 1, 1) if schedule == "sigma" else scale
         return (uncond + scale_eff * (guided - uncond)).detach().to(target.dtype)
 
-    def _training_step(self, sample: H3Sample, flow_shift: float) -> Tuple[torch.Tensor, Dict[str, float]]:
+    def _training_step(self, sample: H3Sample, flow_shift: float) -> tuple[torch.Tensor, dict[str, float]]:
         """Loss for one cached sample. Returns (loss, parts for logging)."""
         train_config = self.config["train"]
 
@@ -982,7 +981,7 @@ class MiniMaxH3LoRATrainer:
                     audio_target, uncond_output.audio, sigma_a, scale, schedule, cfg_zero
                 )
 
-        parts: Dict[str, float] = {"sigma": float(sigma_v)}
+        parts: dict[str, float] = {"sigma": float(sigma_v)}
         loss = None
         if train_video:
             # Not 0 * loss for audio-only items: their video is a placeholder, and even a

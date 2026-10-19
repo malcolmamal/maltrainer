@@ -21,18 +21,19 @@ in a grid), stepNNNNNN_<trigger>.png each, and stepNNNNNN.txt (trigger, prompt, 
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 import random
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, ContextManager, Dict, List
 
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROMPTS: Dict[str, List[str]] = {
+DEFAULT_PROMPTS: dict[str, list[str]] = {
     "woman": [
         "photo of {trigger}, a woman smiling slightly, close-up with face visible, soft natural light from a window",
         "photo of {trigger}, a woman sitting in a cozy cafe"
@@ -60,7 +61,7 @@ DEFAULT_PROMPTS: Dict[str, List[str]] = {
 
 
 class Gallery:
-    def __init__(self, config, people: Dict[str, str], output_dir: Path):
+    def __init__(self, config, people: dict[str, str], output_dir: Path):
         """``people``: trigger -> class word (a finetune's prior.classes)."""
         config = config if isinstance(config, dict) else ({} if config in (None, True) else {"enabled": False})
         self.people = dict(sorted(people.items()))
@@ -70,13 +71,13 @@ class Gallery:
         self.dir = Path(output_dir) / "samples" / "gallery"
         self._random = random.Random()  # its own generator: a press never moves the training RNG
 
-    def prompts_for(self, trigger: str) -> List[str]:
+    def prompts_for(self, trigger: str) -> list[str]:
         cls = self.people[trigger]
         templates = self.templates.get(cls) or self.templates["default"]
         return [t.replace("{trigger}", trigger).replace("{class}", cls) for t in templates]
 
     @property
-    def captions(self) -> List[str]:
+    def captions(self) -> list[str]:
         """Every prompt a press may use, to encode at the start."""
         if not self.enabled:
             return []
@@ -86,7 +87,7 @@ class Gallery:
         self,
         step: int,
         render_one: Callable[[str, int, str], Image.Image],
-        weights: Callable[[], ContextManager],
+        weights: Callable[[], contextlib.AbstractContextManager],
         ready: Callable[[str], bool] = lambda _prompt: True,
         label: str = "",
     ) -> float:

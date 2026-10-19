@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import math
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from maltrainer.data.minimax_dataset import _media_kind
 from maltrainer.data.walk import walk_visible
@@ -26,8 +26,8 @@ class Group:
     label: str
     root: str
     repeats: float  # the default for every folder
-    folders: List[Tuple[str, int]] = field(default_factory=list)  # (sub-folder, images)
-    folder_repeats: Dict[str, float] = field(default_factory=dict)  # dataset.folder_repeats
+    folders: list[tuple[str, int]] = field(default_factory=list)  # (sub-folder, images)
+    folder_repeats: dict[str, float] = field(default_factory=dict)  # dataset.folder_repeats
 
     @property
     def images(self) -> int:
@@ -41,7 +41,7 @@ class Group:
         return sum(samples_per_epoch(n, self.repeats_for(name)) for name, n in self.folders)
 
 
-def folder_counts(root: Union[str, Path], kinds: Sequence[str] = ("image",)) -> List[Tuple[str, int]]:
+def folder_counts(root: str | Path, kinds: Sequence[str] = ("image",)) -> list[tuple[str, int]]:
     """Images per folder that holds them directly, at any depth below ``root``, as paths relative
     to it ("people/feliciaday", "body/eyes"; "." for ``root`` itself). Hidden folders such as
     .maltrainer_cache are skipped."""
@@ -60,7 +60,7 @@ def folder_counts(root: Union[str, Path], kinds: Sequence[str] = ("image",)) -> 
 def report(
     groups: Sequence[Group],
     train_config: dict,
-    epochs: Optional[float] = None,
+    epochs: float | None = None,
     notes: Sequence[str] = (),
 ) -> str:
     """The per-folder counts, the epoch size and the suggested max_steps, as printable text."""

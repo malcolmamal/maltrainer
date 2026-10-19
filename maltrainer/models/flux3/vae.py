@@ -19,8 +19,8 @@ decoder, [-1, 1] -> [0, 1]. The decoder's layout follows BFL's reference autoenc
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, Union
 
 import torch
 import torch.nn.functional as F
@@ -205,7 +205,7 @@ class Flux2VAEEncoder(nn.Module):
         )
 
 
-def _read_vae_state(path: Union[str, Path]) -> dict:
+def _read_vae_state(path: str | Path) -> dict:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Flux2 VAE not found at {path}")
@@ -221,7 +221,7 @@ def _read_vae_state(path: Union[str, Path]) -> dict:
 
 
 def load_flux2_vae_decoder(
-    path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32
+    path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32
 ) -> Flux2VAEDecoder:
     """The decoder half of ComfyUI's flux2_vae.safetensors, for previews."""
     state = _read_vae_state(path)
@@ -244,7 +244,7 @@ def load_flux2_vae_decoder(
 
 
 def load_flux2_vae_encoder(
-    path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32
+    path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32
 ) -> Flux2VAEEncoder:
     path = Path(path)
     if not path.exists():

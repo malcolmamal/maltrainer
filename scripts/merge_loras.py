@@ -48,7 +48,6 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import torch
 import yaml
@@ -59,7 +58,7 @@ LAYOUTS = ((".lora_A.weight", ".lora_B.weight"), (".lora_down.weight", ".lora_up
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 
 
-def parse_input(spec: str) -> Tuple[Path, float]:
+def parse_input(spec: str) -> tuple[Path, float]:
     """``path`` or ``path:strength``. A Windows drive colon (C:\\...) is not a strength separator."""
     head, sep, tail = spec.rpartition(":")
     if sep and head and not head.endswith(("\\", "/")) and len(head) > 1:
@@ -70,7 +69,7 @@ def parse_input(spec: str) -> Tuple[Path, float]:
     return Path(spec), 1.0
 
 
-def read_lora(path: Path) -> Tuple[Dict[str, Tuple[torch.Tensor, torch.Tensor, float]], Dict[str, str], str]:
+def read_lora(path: Path) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor, float]], dict[str, str], str]:
     """module -> (down [r, in], up [out, r], alpha); the file's metadata; the down/up layout."""
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
@@ -117,8 +116,8 @@ def sha256_prefix(path: Path, length: int = 12) -> str:
 
 
 def merge(
-    inputs: List[Tuple[Path, float]], dtype: torch.dtype, verify: bool
-) -> Tuple[Dict[str, torch.Tensor], dict, list]:
+    inputs: list[tuple[Path, float]], dtype: torch.dtype, verify: bool
+) -> tuple[dict[str, torch.Tensor], dict, list]:
     loras = []
     for path, strength in inputs:
         modules, metadata, layout = read_lora(path)
@@ -129,7 +128,7 @@ def merge(
 
     out_down, out_up = loras[0]["layout"].split("/")
     names = sorted(set().union(*(lora["modules"] for lora in loras)))
-    state: Dict[str, torch.Tensor] = {}
+    state: dict[str, torch.Tensor] = {}
     worst = 0.0
     partial = 0
     for name in names:
@@ -201,9 +200,9 @@ def load_config(path: Path) -> dict:
     }
 
 
-def merged_metadata(loras: list, info: dict, dtype: torch.dtype, config_file: Path | None = None) -> Dict[str, str]:
+def merged_metadata(loras: list, info: dict, dtype: torch.dtype, config_file: Path | None = None) -> dict[str, str]:
     """Carry the inputs' shared ``ss_*`` identity, fix the network size, and record the recipe."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     first = loras[0]["metadata"]
     for key in ("ss_base_model_version", "ss_network_module", "modelspec.architecture"):
         values = {lora["metadata"].get(key) for lora in loras}

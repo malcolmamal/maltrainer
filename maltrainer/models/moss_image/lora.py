@@ -11,7 +11,7 @@ weight (comfy/lora.py).
 from __future__ import annotations
 
 import logging
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable
 
 import torch
 from torch import nn
@@ -52,14 +52,14 @@ TARGET_PRESETS = ("blocks", "attn", "all")
 DEFAULT_SKIP_BLOCKS: tuple = ()
 
 
-def _block_leaf(name: str) -> Optional[str]:
+def _block_leaf(name: str) -> str | None:
     parts = name.split(".")
     if len(parts) == 4 and parts[0] == "layers" and parts[2] == "proj":
         return parts[3]
     return None
 
 
-def _text_leaf(name: str) -> Optional[str]:
+def _text_leaf(name: str) -> str | None:
     parts = name.split(".")
     if len(parts) == 4 and parts[:2] == ["text_embedder", "blocks"]:
         return parts[3]
@@ -107,7 +107,7 @@ class MOSSImageLoRANetwork(nn.Module):
         self.skip_blocks = tuple(sorted({int(i) for i in skip_blocks}))
         skipped = tuple(f"layers.{i}." for i in self.skip_blocks)
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
 
         for name, module in list(transformer.named_modules()):
             if not isinstance(module, nn.Linear) or name.startswith(skipped):
@@ -125,7 +125,7 @@ class MOSSImageLoRANetwork(nn.Module):
         if not self.lora_layers:
             raise ValueError("No MOSS-Image modules matched the LoRA targets")
 
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for name in self.name_map.values():
             counts[param_group_of(name)] = counts.get(param_group_of(name), 0) + 1
         logger.info(
@@ -146,7 +146,7 @@ class MOSSImageLoRANetwork(nn.Module):
         return layer
 
     @staticmethod
-    def _wrap(module: nn.Module, loras: List[nn.Module], concat: bool = False) -> None:
+    def _wrap(module: nn.Module, loras: list[nn.Module], concat: bool = False) -> None:
         original = module.forward
 
         def forward(x, _orig=original, _loras=loras):
@@ -162,15 +162,15 @@ class MOSSImageLoRANetwork(nn.Module):
     def trainable_parameters(self):
         return self.lora_layers.parameters()
 
-    def param_groups(self, split: bool) -> List[dict]:
+    def param_groups(self, split: bool) -> list[dict]:
         if not split:
             return [{"params": list(self.lora_layers.parameters()), "name": "lora"}]
-        groups: Dict[str, List[nn.Parameter]] = {}
+        groups: dict[str, list[nn.Parameter]] = {}
         for safe, layer in self.lora_layers.items():
             groups.setdefault(param_group_of(self.name_map[safe]), []).extend(layer.parameters())
         return [{"params": params, "name": name} for name, params in groups.items()]
 
-    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+    def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         out = {}
         for safe, layer in self.lora_layers.items():
             key = f"{self.prefix}{self.name_map[safe]}"

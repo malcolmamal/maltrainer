@@ -2,7 +2,7 @@
 Textual Inversion embedding implementation for Z-Image.
 """
 
-from typing import Iterator, List
+from collections.abc import Iterator
 
 import torch
 import torch.nn as nn
@@ -36,7 +36,7 @@ class TextualInversionEmbedding(nn.Module):
         # Initialize with init_text embeddings
         self._initialize_embeddings()
 
-    def _add_tokens(self) -> List[int]:
+    def _add_tokens(self) -> list[int]:
         """Add placeholder tokens to the tokenizer."""
         tokens = [self.trigger_token]
 

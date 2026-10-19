@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import List, Sequence
+from collections.abc import Sequence
 
 import torch
 
 logger = logging.getLogger(__name__)
 
 
-def epoch_order(subjects: Sequence[int], reg: Sequence[int], repeats: int, reg_repeats: int) -> List[int]:
+def epoch_order(subjects: Sequence[int], reg: Sequence[int], repeats: int, reg_repeats: int) -> list[int]:
     """One epoch's shuffled sample indices: every subject ``repeats`` times, every regularisation
     image ``reg_repeats`` times. Uses Python's ``random`` (a resumed run restores it)."""
     order = [i for i in subjects for _ in range(max(int(repeats), 1))]

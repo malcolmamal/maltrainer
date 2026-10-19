@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Union
 
 import torch
 from accelerate import init_empty_weights
@@ -26,7 +25,7 @@ QWEN3VL_BOS_TOKEN_ID = 151643
 BUNDLED_TOKENIZER_ASSETS = Path(__file__).resolve().parent / "assets" / "text_encoder"
 
 
-def _resolve_tokenizer_assets(explicit: Union[str, Path, None]) -> Path:
+def _resolve_tokenizer_assets(explicit: str | Path | None) -> Path:
     """Return the directory holding the Qwen3-VL tokenizer assets."""
     candidate = Path(explicit) if explicit is not None else BUNDLED_TOKENIZER_ASSETS
     if not (candidate / "tokenizer.json").exists():
@@ -85,7 +84,7 @@ class MiniMaxH3TextEncoder(nn.Module):
     @torch.no_grad()
     def encode_prompts(
         self,
-        prompts: List[str],
+        prompts: list[str],
         device: torch.device,
         dtype: torch.dtype = torch.bfloat16,
         max_length: int = 1024,
@@ -149,9 +148,9 @@ class MiniMaxH3TextEncoder(nn.Module):
 
 
 def load_minimax_h3_text_encoder(
-    text_encoder_path: Union[str, Path],
-    tokenizer_path: Union[str, Path, None] = None,
-    device: Union[str, torch.device] = "cuda",
+    text_encoder_path: str | Path,
+    tokenizer_path: str | Path | None = None,
+    device: str | torch.device = "cuda",
     dtype: torch.dtype = torch.bfloat16,
 ) -> MiniMaxH3TextEncoder:
     """Load Qwen3-VL text encoder (BF16 or NVFP4/AWQ) and tokenizer."""

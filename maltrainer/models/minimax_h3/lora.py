@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -75,11 +74,11 @@ class MiniMaxH3LoRANetwork(nn.Module):
         transformer: nn.Module,
         rank: int = 16,
         alpha: float = 16.0,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
         prefix: str = "diffusion_model.",
         include_adaln: bool = False,
         include_token_refiner: bool = True,
-        block_range: Optional[Tuple[int, int]] = None,
+        block_range: tuple[int, int] | None = None,
     ):
         super().__init__()
         self.transformer = transformer
@@ -93,7 +92,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         self.block_range = tuple(block_range) if block_range is not None else None
 
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
         self._inject_lora()
 
     def _inject_lora(self):
@@ -151,7 +150,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
             self.rank,
             self.alpha,
             f", including {adaln} per-block adaln_proj" if adaln else ", adaln_proj excluded",
-            "%d-%d" % self.block_range if self.block_range else "0-49",
+            f"{self.block_range[0]}-{self.block_range[1]}" if self.block_range else "0-49",
             "" if self.include_token_refiner else ", token refiner frozen",
         )
 
@@ -189,8 +188,8 @@ class MiniMaxH3LoRANetwork(nn.Module):
         *,
         multiplier: float = 1.0,
         device=None,
-        dtype: Optional[torch.dtype] = None,
-        adaln_grid_path: Optional[str] = None,
+        dtype: torch.dtype | None = None,
+        adaln_grid_path: str | None = None,
     ) -> int:
         """Attach a frozen de-distillation ("training") adapter alongside the trainable LoRA.
 
@@ -213,7 +212,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         from safetensors.torch import load_file
 
         state = load_file(str(path))
-        pairs: Dict[str, Dict[str, torch.Tensor]] = {}
+        pairs: dict[str, dict[str, torch.Tensor]] = {}
         for key, value in state.items():
             for suffix, slot in (
                 (".lora_A.weight", "down"),
@@ -333,7 +332,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         """
         return self.lora_layers.parameters()
 
-    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+    def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         """Get LoRA state dict for saving in Kohya/AI-Toolkit safetensors format.
 
         Adapters train in fp32 so small updates survive accumulation, but the finished delta

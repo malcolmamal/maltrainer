@@ -27,7 +27,6 @@ import random
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import torch
 from accelerate import Accelerator
@@ -69,7 +68,7 @@ MOSS_UNIFORM_MIX = 0.01
 MOSS_GRID = 1000
 
 
-def plan_training_steps(num_samples: int, train_config: dict) -> Tuple[int, int, int]:
+def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
     """(steps_per_epoch, num_epochs, total_steps); ``train.max_steps`` > 0 wins over epochs."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
@@ -85,10 +84,10 @@ class MOSSImageLoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path: Optional[str] = None
+        self.last_saved_path: str | None = None
         self.lr_scheduler = None
-        self.ema: Optional[ParameterEMA] = None
-        self.run_metadata: Dict[str, object] = {
+        self.ema: ParameterEMA | None = None
+        self.run_metadata: dict[str, object] = {
             "model_type": "moss_image",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
@@ -96,17 +95,17 @@ class MOSSImageLoRATrainer:
         }
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
-        self.samples: List[Tuple[str, str]] = []  # (key, caption)
-        self.latent_cache: Dict[str, torch.Tensor] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
+        self.samples: list[tuple[str, str]] = []  # (key, caption)
+        self.latent_cache: dict[str, torch.Tensor] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
         # sample: previews of fixed prompts every N steps, rendered with the weights in training
         self.previews = Previews(config.get("sample"), Path(config.get("output", {}).get("path", "./output")))
         self._preview_decoder = None
         # The config file, watched for edits to its sample: section while training runs (set by main)
-        self.config_path: Optional[Path] = None
-        self._config_mtime: Optional[float] = None
+        self.config_path: Path | None = None
+        self._config_mtime: float | None = None
         self._cpu_encoder = None
-        self._encoding: Optional[threading.Thread] = None
+        self._encoding: threading.Thread | None = None
 
         train_config = config.get("train", {})
         if int(train_config.get("batch_size", 1) or 1) != 1:
@@ -164,7 +163,7 @@ class MOSSImageLoRATrainer:
 
         # Latents: from the disk cache where possible; the VAE loads only if something is new.
         vae_id = model_identity(model_config["vae_path"])
-        latents: Dict[str, torch.Tensor] = {}
+        latents: dict[str, torch.Tensor] = {}
         pending = []
         for source in sources:
             folder = FolderCache(source.path.parent)
@@ -193,7 +192,7 @@ class MOSSImageLoRATrainer:
             gc.collect()
             torch.cuda.empty_cache()
         # Path order whatever came from disk, so a resumed run shuffles the same samples.
-        sizes: Dict[Tuple[int, int], int] = {}
+        sizes: dict[tuple[int, int], int] = {}
         for source in sources:
             latent = latents.get(str(source.path))
             if latent is None:
@@ -210,7 +209,7 @@ class MOSSImageLoRATrainer:
 
         # A caption's embedding lives in every folder whose images use it; the empty dropout
         # prompt in the dataset folder itself.
-        prompt_folders: Dict[str, set] = {}
+        prompt_folders: dict[str, set] = {}
         for key, caption in self.samples:
             prompt_folders.setdefault(caption, set()).add(Path(key).parent)
         if float(train_config.get("caption_dropout", 0.0) or 0.0) > 0:
@@ -270,7 +269,7 @@ class MOSSImageLoRATrainer:
             lengths,
         )
 
-    def _extra_prompts(self) -> List[str]:
+    def _extra_prompts(self) -> list[str]:
         """Captions to encode beside the samples' own: the preview prompts (and the finetune's
         prior-preservation ones)."""
         return self.previews.captions
@@ -566,7 +565,7 @@ class MOSSImageLoRATrainer:
         hi = float(train_config.get("max_sigma", 1.0))
         return sigma.clamp(lo, hi)
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
         order = [i for i in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
@@ -683,13 +682,9 @@ class MOSSImageLoRATrainer:
     def _log_step(self, step, total, loss, epoch, num_epochs):
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
-        prefix = "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (
-            step,
-            total,
-            int(step / total * 100),
-            loss.item(),
-            epoch + 1,
-            num_epochs,
+        prefix = (
+            f"Step: {step}/{total} [{int(step / total * 100)}%], "
+            f"Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, "
         )
         prefix += getattr(self, "step_note", "")
         if hasattr(inner, "get_avg_learning_rate"):
@@ -742,14 +737,14 @@ class MOSSImageLoRATrainer:
         return max(count_media_files(dataset_config.get("path", ""), ["image"]), 1) * repeats
 
     @classmethod
-    def step_groups(cls, config: dict) -> List[Group]:
+    def step_groups(cls, config: dict) -> list[Group]:
         """The image folders an epoch draws from, for --suggest-steps."""
         dataset_config = config["dataset"]
         root = dataset_config.get("path", "")
         return [Group("Subjects", root, float(dataset_config.get("repeats", 1) or 1), folder_counts(root))]
 
     @classmethod
-    def step_notes(cls, config: dict) -> List[str]:  # noqa: ARG003 - overridden with the config in use
+    def step_notes(cls, config: dict) -> list[str]:  # noqa: ARG003 - overridden with the config in use
         return []
 
     @classmethod

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Callable, List, Optional
 
 import pytest
 
@@ -13,11 +13,11 @@ from tests.maltrainer.utils.keyboard_fakes import FakeClock, FakeMsvcrt, FakeTty
 
 
 class _Saver:
-    def __init__(self, result: Optional[bool] = None) -> None:
+    def __init__(self, result: bool | None = None) -> None:
         self.result = result
-        self.steps: List[int] = []
+        self.steps: list[int] = []
 
-    def __call__(self, step: int) -> Optional[bool]:
+    def __call__(self, step: int) -> bool | None:
         self.steps.append(step)
         return self.result
 
@@ -25,8 +25,8 @@ class _Saver:
 def _commands(
     monkeypatch: pytest.MonkeyPatch,
     *batches: str,
-    menu: Optional[Callable[[], None]] = None,
-    menu_seconds: Optional[float] = None,
+    menu: Callable[[], None] | None = None,
+    menu_seconds: float | None = None,
 ) -> tuple[KeyCommands, FakeClock]:
     """Key commands on a Windows console whose first batch of keys is waiting; ``menu_seconds``
     gives them a menu that stays open that long."""

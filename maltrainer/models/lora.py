@@ -3,7 +3,6 @@ LoRA (Low-Rank Adaptation) implementation for Z-Image transformers.
 """
 
 import logging
-from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -53,7 +52,7 @@ class LoRANetwork(nn.Module):
         transformer: nn.Module,
         rank: int = 4,
         alpha: float = 1.0,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
     ):
         super().__init__()
 
@@ -131,7 +130,7 @@ class LoRANetwork(nn.Module):
 LORA_SUFFIXES = ((".lora_down.weight", ".lora_up.weight"), (".lora_A.weight", ".lora_B.weight"))
 
 
-def _layer_keys(state_dict: dict, names: tuple) -> Optional[tuple]:
+def _layer_keys(state_dict: dict, names: tuple) -> tuple | None:
     """(down, up, alpha) keys of the first of ``names`` in ``state_dict``: an exact key first, then
     one behind a prefix ending in "." or "_" ("diffusion_model.", "lora_unet_")."""
     for down, up in LORA_SUFFIXES:

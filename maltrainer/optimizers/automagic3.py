@@ -3,7 +3,7 @@ Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / F
 """
 
 import itertools
-from typing import ClassVar, List
+from typing import ClassVar
 
 import torch
 
@@ -166,8 +166,8 @@ class Automagic3(torch.optim.Optimizer):
 
     def _rebuild_group_index(self) -> None:
         self._param_group_index = {p: gi for gi, group in enumerate(self.param_groups) for p in group["params"]}
-        self._group_num: List = [None] * len(self.param_groups)
-        self._group_den: List = [None] * len(self.param_groups)
+        self._group_num: list = [None] * len(self.param_groups)
+        self._group_den: list = [None] * len(self.param_groups)
 
     @classmethod
     def _stochastic_copy_(cls, dst: torch.Tensor, src_fp32: torch.Tensor) -> None:
@@ -375,7 +375,7 @@ class Automagic3(torch.optim.Optimizer):
         self._signal_sum, self._signal_steps, self._nonfinite = {}, {}, None
         return {"signal": signal, "nonfinite": nonfinite}
 
-    def get_learning_rates(self) -> List[float]:
+    def get_learning_rates(self) -> list[float]:
         out = []
         for group in self.param_groups:
             lrs = [self.state[p]["lr"] for p in group["params"] if p in self.state and "lr" in self.state[p]]

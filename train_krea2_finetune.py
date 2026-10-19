@@ -29,7 +29,6 @@ import random
 import shutil
 import time
 from pathlib import Path
-from typing import List, Optional
 
 import torch
 from tqdm import tqdm
@@ -64,7 +63,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             raise ValueError("fused Automagic3 steps inside backward, so gradient_accumulation_steps must be 1")
         resume = config.get("train", {}).get("resume_from")
         self.resume_dir = Path(resume) if resume else None
-        self.resume_state: Optional[dict] = None
+        self.resume_state: dict | None = None
         self.global_step = 0
         self.epoch = 0
         self.position = 0
@@ -149,7 +148,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             "fused": True,
         }
 
-    def _make_optimizer(self, params: List[torch.nn.Parameter], name: str) -> Automagic3:
+    def _make_optimizer(self, params: list[torch.nn.Parameter], name: str) -> Automagic3:
         return Automagic3([{"params": params, "name": name}], **self._automagic_kwargs())
 
     def setup_optimizer(self):
@@ -179,7 +178,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         root = self.config["dataset"]["path"]
         digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"))
         for key, caption in self.samples:
-            digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode("utf-8"))
+            digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode())
         return digest.hexdigest()
 
     def train(self):

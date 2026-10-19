@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import math
 from types import SimpleNamespace
-from typing import Dict
 
 import pytest
 import torch
@@ -21,7 +20,7 @@ class _Clock:
 
 
 class _Optimizer:
-    def __init__(self, signal: Dict[str, float], nonfinite: int) -> None:
+    def __init__(self, signal: dict[str, float], nonfinite: int) -> None:
         self.stats = {"signal": signal, "nonfinite": nonfinite}
 
     def pop_stats(self) -> dict:

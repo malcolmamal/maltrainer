@@ -29,7 +29,6 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -57,7 +56,7 @@ class Flux3Config:
     mlp_ratio: float = 3.0
 
     @classmethod
-    def from_state_dict(cls, state_dict: Dict[str, torch.Tensor]) -> "Flux3Config":
+    def from_state_dict(cls, state_dict: dict[str, torch.Tensor]) -> Flux3Config:
         """comfy/model_detection.py's FLUX.3 branch."""
         keys = state_dict.keys()
         if (
@@ -168,7 +167,7 @@ class Modulation(nn.Module):
         super().__init__()
         self.lin = nn.Linear(dim, 3 * dim, bias=False)
 
-    def forward(self, vec: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, vec: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         shift, scale, gate = self.lin(F.silu(vec[:, None, :])).chunk(3, dim=-1)
         return shift, scale, gate
 
@@ -229,7 +228,7 @@ class LastLayer(nn.Module):
 
 
 class Flux3Transformer(nn.Module):
-    def __init__(self, config: Optional[Flux3Config] = None):
+    def __init__(self, config: Flux3Config | None = None):
         super().__init__()
         self.config = config = config or Flux3Config()
         h = config.hidden_size

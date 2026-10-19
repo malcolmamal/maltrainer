@@ -27,7 +27,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 from safetensors import safe_open
 from safetensors.torch import save_file
@@ -86,7 +85,7 @@ def main() -> int:
         parser.error("--output works with a single input; use --suffix for several")
     suffix = args.suffix if args.suffix is not None else f"_txt{args.factor:g}"
 
-    jobs: List[Tuple[Path, Path]] = []
+    jobs: list[tuple[Path, Path]] = []
     for source in args.inputs:
         if not source.is_file():
             parser.error(f"not found: {source}")

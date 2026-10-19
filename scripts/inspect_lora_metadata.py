@@ -33,7 +33,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -106,7 +106,7 @@ def _abbreviate(value: str) -> str:
     return formatted
 
 
-def print_summary(path: Path, metadata: Dict[str, str]) -> None:
+def print_summary(path: Path, metadata: dict[str, str]) -> None:
     print(f"{path.name}")
     size_gb = path.stat().st_size / 1e9
     print(f"  file size: {size_gb:.2f} GB, {len(metadata)} metadata keys")
@@ -143,7 +143,7 @@ def print_summary(path: Path, metadata: Dict[str, str]) -> None:
     print(f"\n  embedded maltrainer config: {'yes (--config to recover)' if CONFIG_KEY in metadata else 'no'}")
 
 
-def dump_config(metadata: Dict[str, str], out: Optional[Path]) -> int:
+def dump_config(metadata: dict[str, str], out: Path | None) -> int:
     config: Any = extract_config(metadata)
     if config is None:
         print(f"No embedded config (looked for '{CONFIG_KEY}').", file=sys.stderr)
@@ -163,7 +163,7 @@ def dump_config(metadata: Dict[str, str], out: Optional[Path]) -> int:
     return 0
 
 
-def diff(left: Dict[str, str], right: Dict[str, str], left_name: str, right_name: str) -> None:
+def diff(left: dict[str, str], right: dict[str, str], left_name: str, right_name: str) -> None:
     # The config blob restates everything else, and saved_at always differs, so comparing
     # them adds noise rather than information.
     ignore = {CONFIG_KEY, "maltrainer_saved_at", "maltrainer_started_at", "step"}

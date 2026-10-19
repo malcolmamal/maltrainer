@@ -20,8 +20,8 @@ input/output layers stay frozen.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
 from safetensors.torch import save_file
@@ -31,7 +31,7 @@ from maltrainer.finetune.rotation import Window, WindowRotator
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WINDOWS: Tuple[Window, ...] = (
+DEFAULT_WINDOWS: tuple[Window, ...] = (
     ("attention", ("attn.",)),
     ("mlp.gate", ("mlp.gate",)),
     ("mlp.up", ("mlp.up",)),
@@ -40,7 +40,7 @@ DEFAULT_WINDOWS: Tuple[Window, ...] = (
 DEFAULT_ALWAYS_ON = ("txtfusion",)
 
 
-def parse_windows(config: Optional[Sequence]) -> Tuple[Window, ...]:
+def parse_windows(config: Sequence | None) -> tuple[Window, ...]:
     """finetune.windows: [{name: attention, prefixes: ["attn."]}, ...] or [[name, [prefixes]], ...]."""
     if not config:
         return DEFAULT_WINDOWS
@@ -54,7 +54,7 @@ def parse_windows(config: Optional[Sequence]) -> Tuple[Window, ...]:
     return tuple(out)
 
 
-def always_on_linears(model: nn.Module, modules: Sequence[str]) -> List[Tuple[str, nn.Parameter]]:
+def always_on_linears(model: nn.Module, modules: Sequence[str]) -> list[tuple[str, nn.Parameter]]:
     """(name, weight) of every Linear under ``modules``, made trainable (weights only)."""
     out = []
     for module_name in modules:
@@ -73,13 +73,13 @@ def save_krea2_model(
     rotator: WindowRotator,
     path: Path,
     key_prefix: str = "",
-    metadata: Optional[Dict[str, str]] = None,
+    metadata: dict[str, str] | None = None,
 ) -> None:
     """A full bf16 Krea 2 file with the source's key prefix, which ComfyUI and load_krea2_transformer
     read back: the rotating weights from the master (the active window live), everything else
     (text fusion, norms, modulation, I/O) as the model holds it. Written aside, then renamed."""
     rotating = set(rotator.master)  # every block Linear, in a window or not
-    out: Dict[str, torch.Tensor] = {}
+    out: dict[str, torch.Tensor] = {}
     for name, tensor in model.state_dict().items():
         module, _, leaf = name.rpartition(".")
         if f"{module}.weight" in rotating and leaf in ("weight", "weight_scale"):

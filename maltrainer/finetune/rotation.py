@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import gc
 import logging
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
 
 import torch
 from torch import nn
@@ -31,10 +31,10 @@ from maltrainer.models.comfy_fp8 import Fp8ScaledLinear, quantize_rows
 logger = logging.getLogger(__name__)
 
 # A window: (name, Linear-name prefixes inside a block). "attn." matches blocks.N.attn.wq etc.
-Window = Tuple[str, Tuple[str, ...]]
+Window = tuple[str, tuple[str, ...]]
 
 
-def _block_leaf(key: str, blocks: str) -> Optional[str]:
+def _block_leaf(key: str, blocks: str) -> str | None:
     """``blocks.12.attn.wq.weight`` -> ``attn.wq`` (None outside the numbered blocks)."""
     parts = key.split(".")
     if len(parts) < 4 or parts[0] != blocks or not parts[1].isdigit() or parts[-1] != "weight":
@@ -70,11 +70,11 @@ class WindowRotator:
     def __init__(
         self,
         model: nn.Module,
-        master: Dict[str, torch.Tensor],
+        master: dict[str, torch.Tensor],
         windows: Sequence[Window],
         device: torch.device,
         compute_dtype: torch.dtype,
-        make_optimizer: Callable[[List[nn.Parameter], str], torch.optim.Optimizer],
+        make_optimizer: Callable[[list[nn.Parameter], str], torch.optim.Optimizer],
         blocks: str = "blocks",
     ):
         self.model = model
@@ -85,8 +85,8 @@ class WindowRotator:
         # every window's weight keys, in the model's own module order (stable across loads, so an
         # optimizer state saved by index lines up again)
         ordered = [f"{name}.weight" for name, _ in model.named_modules() if f"{name}.weight" in master]
-        self.windows: List[Tuple[str, List[str]]] = []
-        owner: Dict[str, str] = {}
+        self.windows: list[tuple[str, list[str]]] = []
+        owner: dict[str, str] = {}
         for name, prefixes in windows:
             keys = [k for k in ordered if (_block_leaf(k, blocks) or "").startswith(tuple(prefixes))]
             if not keys:
@@ -101,12 +101,12 @@ class WindowRotator:
             logger.warning(
                 "%d block Linears are in no finetune window and stay frozen, e.g. %s", len(untrained), untrained[:3]
             )
-        self.current: Optional[int] = None
-        self.optimizer: Optional[torch.optim.Optimizer] = None
-        self.optimizer_states: Dict[int, dict] = {}  # frozen windows' optimizer state, on the CPU
+        self.current: int | None = None
+        self.optimizer: torch.optim.Optimizer | None = None
+        self.optimizer_states: dict[int, dict] = {}  # frozen windows' optimizer state, on the CPU
 
     @property
-    def names(self) -> List[str]:
+    def names(self) -> list[str]:
         return [name for name, _ in self.windows]
 
     def window_parameters(self, index: int) -> int:
@@ -129,7 +129,7 @@ class WindowRotator:
         if self.current is not None:
             self.deactivate()
         name, keys = self.windows[index]
-        params: List[nn.Parameter] = []
+        params: list[nn.Parameter] = []
         for key in keys:
             frozen = self.model.get_submodule(key[: -len(".weight")])
             linear = nn.Linear(frozen.in_features, frozen.out_features, bias=False, device="meta")
@@ -184,7 +184,7 @@ class WindowRotator:
             return self.model.get_submodule(key[: -len(".weight")]).weight.detach().to("cpu", torch.bfloat16)
         return self.master[key]
 
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         return [key for _, keys in self.windows for key in keys]
 
     def state_dict(self) -> dict:

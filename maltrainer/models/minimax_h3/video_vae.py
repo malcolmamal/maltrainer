@@ -5,7 +5,6 @@ MiniMax H3 Video VAE wrapper and encoding logic.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
 
 import torch
 from safetensors.torch import load_file
@@ -77,8 +76,8 @@ class MiniMaxH3VideoCausalConv3d(nn.Conv3d):
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: int | Tuple[int, int, int],
-        stride: int | Tuple[int, int, int] = 1,
+        kernel_size: int | tuple[int, int, int],
+        stride: int | tuple[int, int, int] = 1,
         spatial_padding: int = 0,
         temporal_padding: int = 0,
         spatial_padding_mode: str = "reflect",
@@ -266,15 +265,15 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
         self,
         in_channels: int = 3,
         latent_channels: int = 24,
-        block_out_channels: Tuple[int, ...] = (128, 256, 256, 512, 512, 1024),
+        block_out_channels: tuple[int, ...] = (128, 256, 256, 512, 512, 1024),
         layers_per_block: int = 2,
-        spatial_downsample_factors: Tuple[int, ...] = (2, 2, 2, 2, 1, 1),
-        temporal_downsample_factors: Tuple[int, ...] = (1, 2, 2, 1, 1, 1),
+        spatial_downsample_factors: tuple[int, ...] = (2, 2, 2, 2, 1, 1),
+        temporal_downsample_factors: tuple[int, ...] = (1, 2, 2, 1, 1, 1),
         norm_num_groups: int = 32,
         norm_eps: float = 1e-6,
         spatial_padding_mode: str = "reflect",
-        latents_mean: Tuple[float, ...] = DEFAULT_LATENTS_MEAN,
-        latents_std: Tuple[float, ...] = DEFAULT_LATENTS_STD,
+        latents_mean: tuple[float, ...] = DEFAULT_LATENTS_MEAN,
+        latents_std: tuple[float, ...] = DEFAULT_LATENTS_STD,
     ) -> None:
         super().__init__()
         self.conv_in = MiniMaxH3VideoCausalConv3d(

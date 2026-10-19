@@ -33,8 +33,8 @@ import contextlib
 import json
 import logging
 import random
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 import torch
 from safetensors import safe_open
@@ -55,8 +55,8 @@ CONTAINER_PREFIXES = ("", "diffusion_model.", "model.diffusion_model.")
 
 @contextlib.contextmanager
 def weights_from_file(
-    named: Sequence[Tuple[str, torch.nn.Parameter]],
-    path: Union[str, Path],
+    named: Sequence[tuple[str, torch.nn.Parameter]],
+    path: str | Path,
     prefixes: Sequence[str] = CONTAINER_PREFIXES,
 ) -> Iterator[None]:
     """The parameters hold the values stored under their names in the safetensors file at
@@ -89,10 +89,10 @@ class PriorPreservation:
         self.samples_per_image = max(int(samples_per_image), 1)
         self.every = max(int(every), 1)
         self.seed = int(seed)
-        self.captions: Dict[str, str] = {}  # key -> class caption
-        self.sigmas: Dict[str, torch.Tensor] = {}  # key -> [n] float32
-        self.seeds: Dict[str, torch.Tensor] = {}  # key -> [n] int64
-        self.targets: Dict[str, torch.Tensor] = {}  # key -> [n, ...] bf16, CPU
+        self.captions: dict[str, str] = {}  # key -> class caption
+        self.sigmas: dict[str, torch.Tensor] = {}  # key -> [n] float32
+        self.seeds: dict[str, torch.Tensor] = {}  # key -> [n] int64
+        self.targets: dict[str, torch.Tensor] = {}  # key -> [n, ...] bf16, CPU
 
     def __contains__(self, key: str) -> bool:
         return key in self.targets
@@ -108,7 +108,7 @@ class PriorPreservation:
     @torch.no_grad()
     def build(
         self,
-        items: Iterable[Tuple[str, torch.Tensor, str]],
+        items: Iterable[tuple[str, torch.Tensor, str]],
         sample_sigma: Callable[[], torch.Tensor],
         predict: PredictFn,
         device: torch.device,
@@ -143,7 +143,7 @@ class PriorPreservation:
         """Whether optimizer step ``step`` (0-based) adds the prior term."""
         return self.weight > 0 and step % self.every == 0
 
-    def loss(self, key: str, x0: torch.Tensor, predict: PredictFn) -> Optional[torch.Tensor]:
+    def loss(self, key: str, x0: torch.Tensor, predict: PredictFn) -> torch.Tensor | None:
         """MSE of the model now against the original on one recorded input of ``key`` (x0 [1, ...]
         on the device), or None when ``key`` has none. Uses Python's ``random``, so a resumed run
         restores it with the other RNG state."""
@@ -158,7 +158,7 @@ class PriorPreservation:
 
     # ------------------------------------------------------------------ persistence
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(self, path: str | Path) -> None:
         """One safetensors file; a resumed run must load it, since the model it came from is gone."""
         keys = sorted(self.targets)
         tensors = {}
@@ -180,7 +180,7 @@ class PriorPreservation:
         save_file(tensors, str(tmp), metadata=metadata)
         tmp.replace(path)
 
-    def load(self, path: Union[str, Path]) -> None:
+    def load(self, path: str | Path) -> None:
         with safe_open(str(path), framework="pt", device="cpu") as handle:
             info = json.loads(handle.metadata()["maltrainer_prior"])
             saved = int(info.get("samples_per_image", self.samples_per_image))
@@ -195,5 +195,5 @@ class PriorPreservation:
                 self.seeds[key] = handle.get_tensor(f"{i}.seed")
         logger.info("Prior: %d images' recorded predictions loaded from %s", len(self.targets), path)
 
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         return list(self.targets)

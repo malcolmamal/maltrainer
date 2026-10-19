@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import random
 from pathlib import Path
-from typing import List
 
 import pytest
 from PIL import Image
@@ -13,7 +12,7 @@ from maltrainer.utils.gallery import DEFAULT_PROMPTS, Gallery
 PEOPLE = {"anna": "woman", "bob": "man", "cy": "robot", "dee": "woman"}
 
 
-def _renderer(calls: List[tuple], size: tuple = (8, 6)):
+def _renderer(calls: list[tuple], size: tuple = (8, 6)):
     def render(prompt: str, seed: int, label: str) -> Image.Image:
         calls.append((prompt, seed, label))
         return Image.new("RGB", size, (len(calls), 0, 0))
@@ -58,7 +57,7 @@ def test_the_captions_cover_every_person_and_prompt_and_nothing_when_off(tmp_pat
 
 def test_a_press_renders_count_distinct_people_and_writes_files(tmp_path: Path) -> None:
     gallery = Gallery({"count": 3}, PEOPLE, tmp_path)
-    calls: List[tuple] = []
+    calls: list[tuple] = []
 
     gallery.run(120, _renderer(calls), contextlib.nullcontext, label="EMA")
 
@@ -85,7 +84,7 @@ def test_the_grid_wraps_after_four_columns(tmp_path: Path) -> None:
 
 
 def test_the_weights_are_in_place_only_while_rendering(tmp_path: Path) -> None:
-    events: List[str] = []
+    events: list[str] = []
 
     @contextlib.contextmanager
     def weights():
@@ -104,7 +103,7 @@ def test_the_weights_are_in_place_only_while_rendering(tmp_path: Path) -> None:
 
 def test_people_whose_prompts_are_not_encoded_are_skipped(tmp_path: Path) -> None:
     gallery = Gallery({"count": 4}, PEOPLE, tmp_path)
-    calls: List[tuple] = []
+    calls: list[tuple] = []
 
     gallery.run(2, _renderer(calls), contextlib.nullcontext, ready=lambda prompt: "anna" in prompt)
 
@@ -113,7 +112,7 @@ def test_people_whose_prompts_are_not_encoded_are_skipped(tmp_path: Path) -> Non
 
 
 def test_with_nothing_encoded_a_press_renders_nothing(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    calls: List[tuple] = []
+    calls: list[tuple] = []
 
     seconds = Gallery(None, PEOPLE, tmp_path).run(2, _renderer(calls), contextlib.nullcontext, ready=lambda _p: False)
 

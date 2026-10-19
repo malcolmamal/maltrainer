@@ -20,7 +20,7 @@ import logging
 import os
 import sys
 import time
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 from maltrainer.utils.console_keys import read_key as read_key  # re-exported: the trainers import it from here
 
@@ -42,8 +42,8 @@ class KeyCommands:
     def __init__(
         self,
         keys: str = SAVE + QUIT + PAUSE + HELP,
-        menu: Optional[Callable[[], None]] = None,
-        gallery: Optional[Callable[[], None]] = None,
+        menu: Callable[[], None] | None = None,
+        gallery: Callable[[], None] | None = None,
     ):
         """``menu``: opened by ``e``; ``gallery``: run by ``g`` (each key exists only when a trainer
         offers it)."""
@@ -75,11 +75,11 @@ class KeyCommands:
                 "Keys: %s", ", ".join(f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}" for k in shown)
             )
 
-    def poll(self) -> List[str]:
+    def poll(self) -> list[str]:
         """The command keys pressed since the last poll, in order."""
         if not self.enabled:
             return []
-        pressed: List[str] = []
+        pressed: list[str] = []
         if os.name == "nt":
             import msvcrt
 
@@ -111,7 +111,7 @@ class KeyCommands:
         seconds, self.paused_seconds = self.paused_seconds, 0.0
         return seconds
 
-    def _save_keys(self, pressed: List[str], step: int, save: Callable[[int], None]) -> bool:
+    def _save_keys(self, pressed: list[str], step: int, save: Callable[[int], None]) -> bool:
         """``s`` / ``q`` among ``pressed``: at most one save, so ``s`` then ``q`` does not write the
         same step twice. True when the run should stop."""
         if SAVE not in pressed and QUIT not in pressed:
@@ -125,7 +125,7 @@ class KeyCommands:
             return False
         return stop
 
-    def _run_extras(self, pressed: List[str], count_time: bool = True) -> None:
+    def _run_extras(self, pressed: list[str], count_time: bool = True) -> None:
         """Run the menu / gallery the keys asked for. A failure is logged and training goes on.
         ``count_time``: add the time to paused_seconds (not from a pause, whose own total covers it)."""
         for key, name, action in ((MENU, "menu", self.menu), (GALLERY, "gallery", self.gallery)):

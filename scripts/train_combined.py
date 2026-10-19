@@ -39,7 +39,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
 
 import yaml
 from safetensors.torch import save_file
@@ -57,7 +56,7 @@ def load_yaml(path: Path) -> dict:
     return data
 
 
-def load_plan(path: Path) -> Tuple[Path, List[Tuple[Path, float]], Path, str]:
+def load_plan(path: Path) -> tuple[Path, list[tuple[Path, float]], Path, str]:
     """(trainer script, [(member config, strength)], merged output file, dtype name)."""
     config = load_yaml(path)
     trainer = config.get("trainer")
@@ -98,7 +97,7 @@ def trained_lora(config_path: Path) -> Path:
     return member_output(output)
 
 
-def train_member(trainer: Path, config_path: Path, extra: List[str]) -> Path:
+def train_member(trainer: Path, config_path: Path, extra: list[str]) -> Path:
     """Run the trainer on one member config; the LoRA it wrote, or SystemExit on failure."""
     lora = trained_lora(config_path)
     started = time.time()

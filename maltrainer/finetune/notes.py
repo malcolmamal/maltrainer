@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import List
 
 from maltrainer.data.minimax_dataset import scan_media_sources
 from maltrainer.finetune.prior import resolve_classes
@@ -13,7 +12,7 @@ from maltrainer.finetune.repeats import unknown_keys
 from maltrainer.utils.step_planner import folder_counts
 
 
-def names_its_folder(root: str, folder: Path, captions: List[str]) -> bool:
+def names_its_folder(root: str, folder: Path, captions: list[str]) -> bool:
     # the nearest prefix.txt decides, as it does for the captions: "[folder]" in it names
     # the person; fixed text ("extreme close-up photo of human eyes") is a concept
     stop = Path(root).resolve().parent
@@ -29,7 +28,7 @@ def names_its_folder(root: str, folder: Path, captions: List[str]) -> bool:
     return any(re.search(rf"(?<!\w){re.escape(folder.name)}(?!\w)", c, re.IGNORECASE) for c in captions)
 
 
-def step_notes(config: dict) -> List[str]:
+def step_notes(config: dict) -> list[str]:
     """Folders prior preservation would miss. People are named by their folder through
     prefix.txt's [folder] ("photo of feliciaday, ..."), so a folder whose captions name its
     own folder is a person, and needs a prior.classes entry. Folders that name nobody (e.g.

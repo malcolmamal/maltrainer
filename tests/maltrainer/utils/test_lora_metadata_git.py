@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -55,9 +55,9 @@ def test_a_repository_without_commits_has_no_commit(tmp_path: Path) -> None:
 class _FakeRun:
     def __init__(self, *outcomes: Any) -> None:
         self.outcomes = list(outcomes)
-        self.commands: List[List[str]] = []
+        self.commands: list[list[str]] = []
 
-    def __call__(self, command: List[str], **_kwargs: Any) -> subprocess.CompletedProcess:
+    def __call__(self, command: list[str], **_kwargs: Any) -> subprocess.CompletedProcess:
         self.commands.append(command)
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):

@@ -22,7 +22,6 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Dict, Optional, Union
 
 import torch
 from accelerate import init_empty_weights
@@ -60,7 +59,7 @@ QWEN3VL_4B_TEXT = {
 }
 
 
-def _text_key(key: str) -> Optional[str]:
+def _text_key(key: str) -> str | None:
     for prefix in (
         "text_encoders.qwen3vl_4b.transformer.",
         "model.language_model.",
@@ -81,7 +80,7 @@ class Flux3TextEncoder(nn.Module):
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
-        self._captured: Dict[int, torch.Tensor] = {}
+        self._captured: dict[int, torch.Tensor] = {}
         for k in TAP_LAYERS[:-1]:
             model.layers[k].register_forward_pre_hook(self._capture(k), with_kwargs=True)
 
@@ -116,10 +115,10 @@ class Flux3TextEncoder(nn.Module):
 
 
 def load_flux3_text_encoder(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
-    tokenizer_path: Union[str, Path, None] = None,
+    tokenizer_path: str | Path | None = None,
     grad_precision: str = "bf16",
 ) -> Flux3TextEncoder:
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel

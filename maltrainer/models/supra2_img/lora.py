@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -43,7 +42,7 @@ class SupraLoRANetwork(nn.Module):
         transformer: nn.Module,
         rank: int = 16,
         alpha: float = 16.0,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
         prefix: str = "",
     ):
         super().__init__()
@@ -53,7 +52,7 @@ class SupraLoRANetwork(nn.Module):
         self.target_modules = target_modules or list(DEFAULT_SUPRA_TARGET_MODULES)
         self.prefix = prefix
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
         self._inject_lora()
 
     def _matches(self, name: str) -> bool:
@@ -90,7 +89,7 @@ class SupraLoRANetwork(nn.Module):
     def trainable_parameters(self):
         return self.lora_layers.parameters()
 
-    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+    def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         state = {}
         for safe_name, layer in self.lora_layers.items():
             name = f"{self.prefix}{self.name_map[safe_name]}"
@@ -104,7 +103,7 @@ class SupraLoRANetwork(nn.Module):
             state[f"{name}.alpha"] = torch.tensor(layer.alpha, dtype=torch.float32)
         return state
 
-    def load_weights(self, path: Union[str, Path]) -> int:
+    def load_weights(self, path: str | Path) -> int:
         from safetensors.torch import load_file
 
         tensors = load_file(str(path), device="cpu")

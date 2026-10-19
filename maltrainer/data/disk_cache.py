@@ -19,7 +19,6 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 import torch
 from safetensors import SafetensorError
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 CACHE_DIR_NAME = ".maltrainer_cache"
 
 
-def content_hash(path: Union[str, Path]) -> str:
+def content_hash(path: str | Path) -> str:
     """BLAKE2b of the file's bytes: the same image matches wherever it is."""
     digest = hashlib.blake2b(digest_size=20)
     with Path(path).open("rb") as handle:
@@ -42,7 +41,7 @@ def content_hash(path: Union[str, Path]) -> str:
 IDENTITY_SAMPLE = 1 << 20
 
 
-def model_identity(path: Union[str, Path, None]) -> str:
+def model_identity(path: str | Path | None) -> str:
     """File name, size, and a hash of the first and last MiB: the same model file matches from
     any folder or machine, and two files of one size (two finetunes of a model) do not."""
     if not path:
@@ -66,7 +65,7 @@ def cache_key(*parts: object) -> str:
 class FolderCache:
     """The ``.maltrainer_cache`` of one image folder."""
 
-    def __init__(self, folder: Union[str, Path]):
+    def __init__(self, folder: str | Path):
         self.root = Path(folder) / CACHE_DIR_NAME
 
     def _path(self, kind: str, key: str) -> Path:
@@ -75,7 +74,7 @@ class FolderCache:
     def has(self, kind: str, key: str) -> bool:
         return self._path(kind, key).exists()
 
-    def get(self, kind: str, key: str) -> Optional[torch.Tensor]:
+    def get(self, kind: str, key: str) -> torch.Tensor | None:
         path = self._path(kind, key)
         if not path.exists():
             return None

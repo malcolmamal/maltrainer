@@ -3,7 +3,6 @@ Dataset for Z-Image training.
 """
 
 from pathlib import Path
-from typing import Optional
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -21,7 +20,7 @@ class ZImageDataset(Dataset):
         resolution: int = 512,
         center_crop: bool = True,
         random_flip: bool = False,
-        trigger_token: Optional[str] = None,
+        trigger_token: str | None = None,
         repeats: int = 1,
     ):
         self.data_root = Path(data_root)

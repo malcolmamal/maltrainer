@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Sequence
+from collections.abc import Sequence
 
 import torch
 from torch import nn
@@ -36,7 +36,7 @@ class Model(nn.Module):
         self.head = nn.Linear(2, 2)
 
 
-def master() -> Dict[str, torch.Tensor]:
+def master() -> dict[str, torch.Tensor]:
     out = {}
     for i in range(2):
         out[f"blocks.{i}.attn.wq.weight"] = ATTN.to(torch.bfloat16)
@@ -49,9 +49,9 @@ class Optimizers:
     """make_optimizer: SGD with momentum, remembering what it was asked for."""
 
     def __init__(self) -> None:
-        self.made: List[tuple] = []
+        self.made: list[tuple] = []
 
-    def __call__(self, params: List[nn.Parameter], name: str) -> torch.optim.Optimizer:
+    def __call__(self, params: list[nn.Parameter], name: str) -> torch.optim.Optimizer:
         optimizer = torch.optim.SGD(params, lr=0.5, momentum=0.9)
         self.made.append((name, params, optimizer))
         return optimizer

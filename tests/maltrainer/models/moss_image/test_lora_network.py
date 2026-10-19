@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, List
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -21,7 +21,7 @@ IO = [
 ]
 
 
-def _layers(*blocks: int, leaves=BLOCK_LEAVES) -> List[str]:
+def _layers(*blocks: int, leaves=BLOCK_LEAVES) -> list[str]:
     return sorted(f"layers.{i}.proj.{leaf}" for i in blocks for leaf in leaves)
 
 
@@ -46,7 +46,7 @@ def _run(model: MOSSImageTransformer) -> torch.Tensor:
     ],
 )
 def test_each_target_preset_adapts_its_linears_and_names_a_fused_qkv_as_q_k_v(
-    make_model: Maker, fused: bool, targets: str, expected: List[str]
+    make_model: Maker, fused: bool, targets: str, expected: list[str]
 ) -> None:
     network = MOSSImageLoRANetwork(make_model(fused_qkv=fused), rank=2, targets=targets)
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-from typing import List, Optional
 
 import pytest
 import torch
@@ -22,9 +21,9 @@ def _torch_with_cache_limit(monkeypatch: pytest.MonkeyPatch, limit: int) -> Simp
 
 class _Block:
     def __init__(self) -> None:
-        self.modes: List[Optional[str]] = []
+        self.modes: list[str | None] = []
 
-    def compile(self, mode: Optional[str] = None) -> None:
+    def compile(self, mode: str | None = None) -> None:
         self.modes.append(mode)
 
 

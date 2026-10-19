@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -57,7 +56,7 @@ class QwenImage21LoRANetwork(nn.Module):
         transformer: nn.Module,
         rank: int = 16,
         alpha: float = 16.0,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
         prefix: str = "diffusion_model.",
     ):
         super().__init__()
@@ -68,7 +67,7 @@ class QwenImage21LoRANetwork(nn.Module):
         self.prefix = prefix
 
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
         self._inject_lora()
 
     def _inject_lora(self):
@@ -118,16 +117,16 @@ class QwenImage21LoRANetwork(nn.Module):
 
     def load_assistant_adapter(
         self,
-        path: Union[str, Path],
+        path: str | Path,
         multiplier: float = 1.0,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ) -> int:
         """Attach a frozen assistant adapter live during training."""
         from safetensors.torch import load_file
 
         state = load_file(str(path))
-        pairs: Dict[str, Dict[str, torch.Tensor]] = {}
+        pairs: dict[str, dict[str, torch.Tensor]] = {}
         for key, value in state.items():
             for suffix, slot in (
                 (".lora_A.weight", "down"),
@@ -198,9 +197,9 @@ class QwenImage21LoRANetwork(nn.Module):
 
     def get_state_dict(
         self,
-        save_dtype: Optional[torch.dtype] = torch.bfloat16,
+        save_dtype: torch.dtype | None = torch.bfloat16,
         format_type: str = "diffusers",
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Get LoRA state dict for saving in safetensors format.
 
         Supports both standard diffusers/ai-toolkit format (.lora_A / .lora_B)

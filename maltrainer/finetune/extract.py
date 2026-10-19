@@ -25,9 +25,9 @@ splits into the modules a LoRA names (e.g. a fused qkv into q / k / v). The defa
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import torch
 from safetensors import safe_open
@@ -38,10 +38,10 @@ CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
 MODES = ("fixed", "fro", "ratio", "threshold")
 
 # module name (no ".weight"), diff [out, in] -> [(LoRA module name, diff part)]
-SplitFn = Callable[[str, torch.Tensor], List[Tuple[str, torch.Tensor]]]
+SplitFn = Callable[[str, torch.Tensor], list[tuple[str, torch.Tensor]]]
 
 
-def _one_module(name: str, diff: torch.Tensor) -> List[Tuple[str, torch.Tensor]]:
+def _one_module(name: str, diff: torch.Tensor) -> list[tuple[str, torch.Tensor]]:
     return [(name, diff)]
 
 
@@ -62,7 +62,7 @@ class ExtractProfile:
 GENERIC = ExtractProfile()
 
 
-def strip_prefix(keys: List[str]) -> str:
+def strip_prefix(keys: list[str]) -> str:
     for prefix in CONTAINER_PREFIXES:
         if keys and all(k.startswith(prefix) for k in keys):
             return prefix
@@ -106,7 +106,7 @@ def factor(diff: torch.Tensor, caps: Sequence[int], mode: str, value: float, dev
     return out
 
 
-def _check_same_tensors(base, tuned, base_names: Dict[str, str], tuned_names: Dict[str, str]) -> None:
+def _check_same_tensors(base, tuned, base_names: dict[str, str], tuned_names: dict[str, str]) -> None:
     """Both checkpoints hold the same tensors (names without their container prefix) in the same shapes."""
     if set(base_names) != set(tuned_names):
         only = sorted(set(base_names) ^ set(tuned_names))
@@ -121,24 +121,24 @@ def _check_same_tensors(base, tuned, base_names: Dict[str, str], tuned_names: Di
 
 
 def extract(
-    base_path: Union[str, Path],
-    tuned_path: Union[str, Path],
+    base_path: str | Path,
+    tuned_path: str | Path,
     caps: Sequence[int],
     mode: str = "fixed",
     value: float = 0.0,
-    profile: Optional[ExtractProfile] = None,
+    profile: ExtractProfile | None = None,
     device: str = "cpu",
     out_prefix: str = "diffusion_model.",
     dtype: torch.dtype = torch.bfloat16,
-    progress: Optional[Callable[[Iterable], Iterable]] = None,
-) -> Tuple[Dict[int, Dict[str, torch.Tensor]], dict]:
+    progress: Callable[[Iterable], Iterable] | None = None,
+) -> tuple[dict[int, dict[str, torch.Tensor]], dict]:
     """({cap: LoRA state dict}, report). Both files must have the same keys and shapes."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
     caps = sorted({int(c) for c in caps})
-    states: Dict[int, Dict[str, torch.Tensor]] = {cap: {} for cap in caps}
-    ranks: Dict[int, List[int]] = {cap: [] for cap in caps}
-    errors: Dict[int, List[float]] = {cap: [] for cap in caps}
+    states: dict[int, dict[str, torch.Tensor]] = {cap: {} for cap in caps}
+    ranks: dict[int, list[int]] = {cap: [] for cap in caps}
+    errors: dict[int, list[float]] = {cap: [] for cap in caps}
     unchanged, skipped_changed = 0, []
     with (
         safe_open(str(base_path), framework="pt", device="cpu") as base,

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
 
 import safetensors.torch
 import torch
@@ -334,9 +333,9 @@ class DupUp3D(nn.Module):
 class EncoderStage(nn.Module):
     def __init__(
         self,
-        res_blocks: List[nn.Module],
-        downsample: Optional[nn.Module] = None,
-        shortcut: Optional[nn.Module] = None,
+        res_blocks: list[nn.Module],
+        downsample: nn.Module | None = None,
+        shortcut: nn.Module | None = None,
     ):
         super().__init__()
         self.downsamples = nn.ModuleList(res_blocks)
@@ -356,9 +355,9 @@ class EncoderStage(nn.Module):
 class DecoderStage(nn.Module):
     def __init__(
         self,
-        res_blocks: List[nn.Module],
-        upsample: Optional[nn.Module] = None,
-        shortcut: Optional[nn.Module] = None,
+        res_blocks: list[nn.Module],
+        upsample: nn.Module | None = None,
+        shortcut: nn.Module | None = None,
     ):
         super().__init__()
         self.upsamples = nn.ModuleList(res_blocks)
@@ -563,8 +562,8 @@ class QwenImage21VAE(nn.Module):
 
 
 def load_qwen_image_2_1_vae(
-    vae_path: Union[str, Path],
-    device: Union[str, torch.device] = "cuda",
+    vae_path: str | Path,
+    device: str | torch.device = "cuda",
     dtype: torch.dtype = torch.bfloat16,
     include_decoder: bool = False,
 ) -> QwenImage21VAE:

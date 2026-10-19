@@ -4,9 +4,9 @@ import io
 import logging
 import os
 import re
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, List, Sequence
 
 import pytest
 
@@ -16,8 +16,8 @@ from maltrainer.utils.previews import Previews
 
 
 @pytest.fixture(autouse=True)
-def console(monkeypatch: pytest.MonkeyPatch) -> List[str]:
-    commands: List[str] = []
+def console(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    commands: list[str] = []
     monkeypatch.setattr(preview_menu, "os", SimpleNamespace(name="posix", system=commands.append))
     monkeypatch.setattr(
         preview_menu, "shutil", SimpleNamespace(get_terminal_size=lambda _: os.terminal_size((121, 20)))
@@ -33,7 +33,7 @@ def _keys(*keys: str) -> Callable[[], str]:
     return iter(keys).__next__
 
 
-def _screens(text: str) -> List[List[str]]:
+def _screens(text: str) -> list[list[str]]:
     """Each drawing of the menu as its lines (a redraw starts by moving the cursor back up)."""
     return [[piece.split("\n")[0] for piece in frame.split("\x1b[2K")[1:]] for frame in re.split(r"\x1b\[\d+F", text)]
 
@@ -141,7 +141,7 @@ def test_long_lines_are_cut_to_the_terminal_width(tmp_path: Path, monkeypatch: p
     assert _screens(text)[0][2] == "  [x] 00  " + "x" * 34 + "…"
 
 
-def test_the_windows_console_is_switched_to_ansi_first(tmp_path: Path, console: List[str]) -> None:
+def test_the_windows_console_is_switched_to_ansi_first(tmp_path: Path, console: list[str]) -> None:
     preview_menu.os.name = "nt"
 
     _run(_previews(tmp_path), ["enter"])

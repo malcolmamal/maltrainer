@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional
 
 import pytest
 
 from maltrainer.finetune.notes import names_its_folder, step_notes
 
 
-def _folder(root: Path, name: str, captions: Dict[str, str], prefix: Optional[str] = None) -> Path:
+def _folder(root: Path, name: str, captions: dict[str, str], prefix: str | None = None) -> Path:
     folder = root / name
     folder.mkdir(parents=True)
     for stem, caption in captions.items():
@@ -20,7 +19,7 @@ def _folder(root: Path, name: str, captions: Dict[str, str], prefix: Optional[st
     return folder
 
 
-def _config(root: Path, prior: Optional[dict] = None, **dataset: object) -> dict:
+def _config(root: Path, prior: dict | None = None, **dataset: object) -> dict:
     config: dict = {"dataset": {"path": str(root), **dataset}}
     if prior is not None:
         config["prior"] = prior
@@ -97,7 +96,7 @@ def test_a_person_without_a_prior_class_and_a_class_without_a_person_are_both_na
 
 
 @pytest.mark.parametrize("classes", [{"ANNA": "woman"}, {"anna": "woman"}])
-def test_class_names_match_folders_ignoring_case(tmp_path: Path, classes: Dict[str, str]) -> None:
+def test_class_names_match_folders_ignoring_case(tmp_path: Path, classes: dict[str, str]) -> None:
     _folder(tmp_path, "anna", {"a": "photo of anna"})
 
     assert step_notes(_config(tmp_path, prior={"weight": 1.0, "classes": classes})) == []

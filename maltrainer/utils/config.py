@@ -3,12 +3,12 @@ Configuration loading and validation utilities.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import yaml
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
+def load_config(config_path: str) -> dict[str, Any]:
     """Load YAML configuration file."""
     config_path = Path(config_path)
 
@@ -22,7 +22,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
             raise ValueError(f"{config_path} is not valid YAML: {error}") from error
 
 
-def save_config_to_output(config: Dict[str, Any], output_path: str):
+def save_config_to_output(config: dict[str, Any], output_path: str):
     """Save config to output directory for reproducibility."""
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)

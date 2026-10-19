@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 import torch
 import torch.nn.functional as F
@@ -56,7 +55,7 @@ class MOSSImageConfig:
     fused_qkv: bool = False
 
     @classmethod
-    def from_state_dict(cls, state_dict: Dict[str, torch.Tensor]) -> "MOSSImageConfig":
+    def from_state_dict(cls, state_dict: dict[str, torch.Tensor]) -> MOSSImageConfig:
         """comfy/model_detection.py's MOSS-Image branch."""
         keys = state_dict.keys()
         if "shared_block_modulation.weight" not in keys or "layers.0.proj.ffn_up_gate.weight" not in keys:
@@ -204,7 +203,7 @@ class Block(nn.Module):
 
 
 class MOSSImageTransformer(nn.Module):
-    def __init__(self, config: Optional[MOSSImageConfig] = None):
+    def __init__(self, config: MOSSImageConfig | None = None):
         super().__init__()
         self.config = config = config or MOSSImageConfig()
         d = config.dim

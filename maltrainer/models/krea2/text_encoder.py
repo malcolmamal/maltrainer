@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 import torch
 from accelerate import init_empty_weights
@@ -50,7 +49,7 @@ QWEN3VL_4B_TEXT = {
 }
 
 
-def _prefix_end(token_ids: List[int]) -> int:
+def _prefix_end(token_ids: list[int]) -> int:
     """Index of the first prompt token: ComfyUI's Krea2TEModel prefix strip."""
     template_end, seen = -1, 0
     for i, token in enumerate(token_ids):
@@ -65,7 +64,7 @@ def _prefix_end(token_ids: List[int]) -> int:
     return max(template_end, 0)
 
 
-def _text_key(key: str) -> Optional[str]:
+def _text_key(key: str) -> str | None:
     key = key.removeprefix("text_encoders.qwen3vl_4b.transformer.")  # a combined ComfyUI file, then its own spelling
     for prefix in (
         "model.language_model.",
@@ -86,7 +85,7 @@ class Krea2TextEncoder(nn.Module):
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
-        self._captured: Dict[int, torch.Tensor] = {}
+        self._captured: dict[int, torch.Tensor] = {}
         for k in TAP_LAYERS[:-1]:
             model.layers[k].register_forward_pre_hook(self._capture(k), with_kwargs=True)
 
@@ -124,10 +123,10 @@ class Krea2TextEncoder(nn.Module):
 
 
 def load_krea2_text_encoder(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
-    tokenizer_path: Union[str, Path, None] = None,
+    tokenizer_path: str | Path | None = None,
 ) -> Krea2TextEncoder:
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
 

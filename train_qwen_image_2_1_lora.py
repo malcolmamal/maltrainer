@@ -13,7 +13,6 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import Dict, Tuple
 
 import torch
 from accelerate import Accelerator
@@ -47,7 +46,7 @@ from maltrainer.utils.lora_metadata import build_metadata, git_commit
 logger = logging.getLogger(__name__)
 
 
-def plan_training_steps(num_batches: int, train_config: dict) -> Tuple[int, int, int]:
+def plan_training_steps(num_batches: int, train_config: dict) -> tuple[int, int, int]:
     """Return (steps_per_epoch, num_epochs, total_steps) for a run.
 
     ``train.max_steps`` (> 0) wins over ``train.num_epochs``: the run stops exactly at that
@@ -72,7 +71,7 @@ class QwenImage21LoRATrainer:
         self.dry_run_step_time = dry_run_step_time
         self.last_saved_path = None
         self.lr_scheduler = None
-        self.run_metadata: Dict[str, object] = {
+        self.run_metadata: dict[str, object] = {
             "model_type": "qwen_image_2_1",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
@@ -81,8 +80,8 @@ class QwenImage21LoRATrainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
-        self.latent_cache: Dict[str, torch.Tensor] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
+        self.latent_cache: dict[str, torch.Tensor] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
 
         # Initialize accelerator
         self.accelerator = Accelerator(

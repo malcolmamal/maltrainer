@@ -5,7 +5,7 @@ import logging
 import select
 import sys
 from types import SimpleNamespace
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -21,7 +21,7 @@ def _on(monkeypatch: pytest.MonkeyPatch, os_name: str, stdin: Any) -> None:
     monkeypatch.setattr(sys, "stdin", stdin)
 
 
-def _terminal(monkeypatch: pytest.MonkeyPatch, stdin: FakeTty, calls: List[tuple]) -> None:
+def _terminal(monkeypatch: pytest.MonkeyPatch, stdin: FakeTty, calls: list[tuple]) -> None:
     """A POSIX console: termios / tty record what they are asked, atexit records what it would run."""
 
     def tcgetattr(fd: int) -> list:
@@ -38,7 +38,7 @@ def _terminal(monkeypatch: pytest.MonkeyPatch, stdin: FakeTty, calls: List[tuple
     _on(monkeypatch, "posix", stdin)
 
 
-def _select_while_unread(readers: List[io.StringIO], _w: list, _x: list, _timeout: float) -> tuple:
+def _select_while_unread(readers: list[io.StringIO], _w: list, _x: list, _timeout: float) -> tuple:
     stream = readers[0]
     return ([stream] if stream.tell() < len(stream.getvalue()) else [], [], [])
 
@@ -120,7 +120,7 @@ def test_the_keys_are_announced_and_the_menu_key_exists_only_with_a_menu(
 
 
 def test_a_terminal_is_put_in_cbreak_mode_and_restored_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: List[tuple] = []
+    calls: list[tuple] = []
     _terminal(monkeypatch, FakeTty(), calls)
 
     commands = KeyCommands()
@@ -132,7 +132,7 @@ def test_a_terminal_is_put_in_cbreak_mode_and_restored_once(monkeypatch: pytest.
 
 
 def test_a_terminal_that_refuses_cbreak_mode_turns_the_keys_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: List[tuple] = []
+    calls: list[tuple] = []
     _terminal(monkeypatch, FakeTty("refuse"), calls)
 
     commands = KeyCommands()

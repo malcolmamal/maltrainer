@@ -27,7 +27,6 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from types import MethodType
-from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -79,10 +78,10 @@ class Qwen35TextConfig:
     conv_kernel_size: int = 4
     rms_norm_eps: float = 1e-6
     rope_theta: float = 10000000.0
-    full_attention_layers: Tuple[int, ...] = tuple(i for i in range(32) if (i + 1) % 4 == 0)
+    full_attention_layers: tuple[int, ...] = tuple(i for i in range(32) if (i + 1) % 4 == 0)
 
     @classmethod
-    def from_state_dict(cls, state: Dict[str, torch.Tensor]) -> "Qwen35TextConfig":
+    def from_state_dict(cls, state: dict[str, torch.Tensor]) -> Qwen35TextConfig:
         """Read the sizes off the weights, so a mis-picked file fails here and not deep in a matmul."""
         if "layers.0.linear_attn.A_log" not in state:
             raise ValueError("Not a Qwen3.5 text encoder (no layers.0.linear_attn.A_log)")
@@ -327,7 +326,7 @@ class Qwen35TextModel(nn.Module):
         self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps, add=True)
         self.compute_dtype = torch.float32
 
-    def rope(self, length: int, device) -> Tuple[torch.Tensor, torch.Tensor]:
+    def rope(self, length: int, device) -> tuple[torch.Tensor, torch.Tensor]:
         """Text-only positions: Qwen3.5's interleaved MRoPE collapses to 1D RoPE (all three axes equal)."""
         dim = int(self.config.head_dim * self.config.partial_rotary_factor)
         inv_freq = 1.0 / (self.config.rope_theta ** (torch.arange(0, dim, 2, device=device).float() / dim))
@@ -375,7 +374,7 @@ def _upcast_linear_forward(module: nn.Linear, x: torch.Tensor) -> torch.Tensor:
     return F.linear(x, module.weight.to(x.dtype), bias)
 
 
-def _text_key(key: str) -> Optional[str]:
+def _text_key(key: str) -> str | None:
     for prefix in KEY_PREFIXES:
         if key.startswith(prefix):
             key = key[len(prefix) :]
@@ -386,10 +385,10 @@ def _text_key(key: str) -> Optional[str]:
 
 
 def load_moss_image_text_encoder(
-    path: Union[str, Path],
+    path: str | Path,
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
-    tokenizer_path: Union[str, Path, None] = None,
+    tokenizer_path: str | Path | None = None,
     grad_precision: str = "bf16",
     compute_dtype: torch.dtype = torch.float32,
 ) -> MOSSImageTextEncoder:

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -106,7 +105,7 @@ class SwiGLU(nn.Module):
 class Attention(nn.Module):
     """GQA attention with per-head QK RMSNorm and a sigmoid output gate."""
 
-    def __init__(self, dim: int, heads: int, kvheads: Optional[int] = None, bias: bool = False):
+    def __init__(self, dim: int, heads: int, kvheads: int | None = None, bias: bool = False):
         super().__init__()
         self.heads = heads
         self.kvheads = kvheads or heads
@@ -119,7 +118,7 @@ class Attention(nn.Module):
         self.wo = nn.Linear(dim, dim, bias=bias)
 
     def forward(
-        self, x: torch.Tensor, freqs: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None
+        self, x: torch.Tensor, freqs: torch.Tensor | None = None, mask: torch.Tensor | None = None
     ) -> torch.Tensor:
         b, seq, _ = x.shape
         q = self.wq(x).view(b, seq, self.heads, self.headdim).transpose(1, 2)
@@ -223,7 +222,7 @@ class LastLayer(nn.Module):
 
 
 class Krea2Transformer(nn.Module):
-    def __init__(self, config: Optional[Krea2Config] = None):
+    def __init__(self, config: Krea2Config | None = None):
         super().__init__()
         c = self.config = config or Krea2Config()
         headdim = c.features // c.heads

@@ -7,8 +7,8 @@ Clips are lossless FFV1 in AVI, whose time base is one frame, and frame ``i`` is
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional, Tuple
 
 import av
 import numpy as np
@@ -51,10 +51,10 @@ def make_image(data_root: Path) -> Callable[..., Path]:
 
     def make(
         rel: str,
-        size: Tuple[int, int] = (40, 24),
-        color: Tuple[int, int, int] = RED,
-        right: Optional[Tuple[int, int, int]] = None,
-        caption: Optional[str] = None,
+        size: tuple[int, int] = (40, 24),
+        color: tuple[int, int, int] = RED,
+        right: tuple[int, int, int] | None = None,
+        caption: str | None = None,
     ) -> Path:
         path = data_root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,8 +109,8 @@ def make_clip(data_root: Path) -> Callable[..., Path]:
         rel: str,
         frames: int = 6,
         fps: int = 24,
-        size: Tuple[int, int] = (32, 32),
-        audio: Optional[np.ndarray] = None,
+        size: tuple[int, int] = (32, 32),
+        audio: np.ndarray | None = None,
         rate: int = 16000,
     ) -> Path:
         path = data_root / rel

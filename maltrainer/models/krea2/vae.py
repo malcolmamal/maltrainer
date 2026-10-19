@@ -17,7 +17,6 @@ from __future__ import annotations
 import itertools
 import logging
 from pathlib import Path
-from typing import Union
 
 import torch
 import torch.nn.functional as F
@@ -187,7 +186,7 @@ class Krea2VAE(nn.Module):
         return (mu - self.latents_mean.to(mu.device)) / self.latents_std.to(mu.device)
 
 
-def load_krea2_vae(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32) -> Krea2VAE:
+def load_krea2_vae(path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32) -> Krea2VAE:
     """Load the encoder from ComfyUI's wan_2.1_vae.safetensors (decoder tensors are ignored)."""
     state = load_file(str(path))
     dim = int(state["encoder.conv1.weight"].shape[0]) if "encoder.conv1.weight" in state else 96

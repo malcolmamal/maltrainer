@@ -21,7 +21,6 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import torch
 from accelerate import Accelerator
@@ -45,7 +44,7 @@ from maltrainer.utils.lora_metadata import build_metadata, git_commit
 logger = logging.getLogger(__name__)
 
 
-def plan_training_steps(num_samples: int, train_config: dict) -> Tuple[int, int, int]:
+def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
     """(steps_per_epoch, num_epochs, total_steps); ``train.max_steps`` > 0 wins over epochs."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
@@ -67,10 +66,10 @@ class Krea2LoRATrainer:
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
-        self.last_saved_path: Optional[str] = None
+        self.last_saved_path: str | None = None
         self.lr_scheduler = None
-        self.ema: Optional[ParameterEMA] = None
-        self.run_metadata: Dict[str, object] = {
+        self.ema: ParameterEMA | None = None
+        self.run_metadata: dict[str, object] = {
             "model_type": "krea2",
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "git_commit": git_commit(),
@@ -78,12 +77,12 @@ class Krea2LoRATrainer:
         }
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
-        self.samples: List[Tuple[str, str]] = []  # (key, caption)
-        self.latent_cache: Dict[str, torch.Tensor] = {}
-        self.text_cache: Dict[str, torch.Tensor] = {}
-        self.dop_captions: Dict[str, str] = {}  # sample key -> its caption with the trigger replaced
+        self.samples: list[tuple[str, str]] = []  # (key, caption)
+        self.latent_cache: dict[str, torch.Tensor] = {}
+        self.text_cache: dict[str, torch.Tensor] = {}
+        self.dop_captions: dict[str, str] = {}  # sample key -> its caption with the trigger replaced
         self.micro_step = 0
-        self.last_dop_loss: Optional[float] = None
+        self.last_dop_loss: float | None = None
 
         train_config = config.get("train", {})
         self.dop = bool(train_config.get("dop", False))
@@ -313,7 +312,7 @@ class Krea2LoRATrainer:
 
     # ------------------------------------------------------------------ training
 
-    def _sample_sigma(self, image_tokens: int) -> Tuple[torch.Tensor, float]:
+    def _sample_sigma(self, image_tokens: int) -> tuple[torch.Tensor, float]:
         """Video-free flow-matching sigma for one sample, plus the shift used."""
         train_config = self.config["train"]
         distribution = str(train_config.get("timestep_distribution", "krea2_shift")).lower()
@@ -334,14 +333,14 @@ class Krea2LoRATrainer:
         hi = float(train_config.get("max_sigma", 0.999))
         return sigma.clamp(lo, hi), shift
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         repeats = max(int(self.config["dataset"].get("repeats", 1) or 1), 1)
         order = [i for i in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
         world = self.accelerator.num_processes
         return order[self.accelerator.process_index :: world] if world > 1 else order
 
-    def _training_step(self, index: int, shift_logged: List[bool]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _training_step(self, index: int, shift_logged: list[bool]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """The flow-matching loss for one sample, and the noised latent and sigma it used."""
         train_config = self.config["train"]
         key, caption = self.samples[index]
@@ -371,7 +370,7 @@ class Krea2LoRATrainer:
         strength = float(train_config.get("loss_weight_strength", 1.0))
         return (loss * strength if strength != 1.0 else loss), noisy, sigma
 
-    def _dop_loss(self, index: int, noisy: torch.Tensor, sigma: torch.Tensor) -> Optional[torch.Tensor]:
+    def _dop_loss(self, index: int, noisy: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor | None:
         """Differential output preservation (ai-toolkit's diff_output_preservation).
 
         On the same noised latent and sigma, the caption without the trigger: the base model's
@@ -470,16 +469,12 @@ class Krea2LoRATrainer:
     def _log_step(self, step, total, loss, epoch, num_epochs):
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
-        prefix = "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (
-            step,
-            total,
-            int(step / total * 100),
-            loss.item(),
-            epoch + 1,
-            num_epochs,
+        prefix = (
+            f"Step: {step}/{total} [{int(step / total * 100)}%], "
+            f"Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, "
         )
         if self.last_dop_loss is not None:
-            prefix += "DOP: %.6f, " % self.last_dop_loss
+            prefix += f"DOP: {self.last_dop_loss:.6f}, "
         if hasattr(inner, "get_avg_learning_rate"):
             rates = ", ".join(
                 f"{g.get('name', i)} {lr:.2e}"

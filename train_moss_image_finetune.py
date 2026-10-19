@@ -36,7 +36,6 @@ import random
 import shutil
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Set
 
 import torch
 from safetensors.torch import load_file, save_file
@@ -82,10 +81,10 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         self.run_metadata["model_type"] = "moss_image_finetune"
         if self.accelerator.num_processes > 1:
             raise ValueError("MOSS-Image finetuning runs on one GPU")
-        self.ema: Optional[OffloadedParameterEMA] = None
+        self.ema: OffloadedParameterEMA | None = None
         resume = config.get("train", {}).get("resume_from")
         self.resume_dir = Path(resume) if resume else None
-        self.resume_state: Optional[dict] = None
+        self.resume_state: dict | None = None
         # Where the loop stands, for the resume state: the epoch, the next index into its
         # shuffled order, and the Python RNG state that shuffled it.
         self.global_step = 0
@@ -93,13 +92,13 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         self.position = 0
         self.epoch_rng = None
         # dataset.reg_path: regularisation images, trained at train.reg_lr_multiplier x the step
-        self.reg_keys: Set[str] = set()
+        self.reg_keys: set[str] = set()
         self.reg_multiplier = float(config.get("train", {}).get("reg_lr_multiplier", 0.2))
         # prior.weight > 0: prior preservation against the original model (maltrainer/finetune/prior.py)
         prior_config = config.get("prior", {}) or {}
-        self.prior: Optional[PriorPreservation] = None
+        self.prior: PriorPreservation | None = None
         self.prior_classes = {}
-        self.prior_path: Optional[Path] = None
+        self.prior_path: Path | None = None
         if float(prior_config.get("weight", 0.0) or 0.0) > 0:
             self.prior_classes = resolve_classes(prior_config, config.get("dataset", {}).get("trigger"))
             self.prior = PriorPreservation(
@@ -132,7 +131,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         return sources + reg
 
     @classmethod
-    def step_groups(cls, config: dict) -> List[Group]:
+    def step_groups(cls, config: dict) -> list[Group]:
         groups = super().step_groups(config)
         dataset_config = config["dataset"]
         groups[0].folder_repeats = dict(dataset_config.get("folder_repeats") or {})
@@ -149,7 +148,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         return groups
 
     @classmethod
-    def step_notes(cls, config: dict) -> List[str]:
+    def step_notes(cls, config: dict) -> list[str]:
         """Folders prior preservation would miss (see ``maltrainer.finetune.notes``)."""
         return step_notes(config)
 
@@ -175,19 +174,19 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 out[key] = replaced
         return out
 
-    def _extra_prompts(self) -> List[str]:
+    def _extra_prompts(self) -> list[str]:
         gallery = self.gallery.captions
         if gallery and self.previews.cfg != 1.0:
             gallery = [*gallery, self.previews.negative]
         return super()._extra_prompts() + sorted(set(self._prior_captions().values())) + gallery
 
-    def _repeat_groups(self) -> List[tuple]:
+    def _repeat_groups(self) -> list[tuple]:
         """(sample indices, repeats) per subject folder (dataset.folder_repeats, else
         dataset.repeats), and the regularisation images with dataset.reg_repeats."""
         dataset_config = self.config["dataset"]
         default = float(dataset_config.get("repeats", 1) or 1)
         table = dataset_config.get("folder_repeats") or {}
-        folders: Dict[str, List[int]] = {}
+        folders: dict[str, list[int]] = {}
         reg = []
         for i, (key, _) in enumerate(self.samples):
             if key in self.reg_keys:
@@ -199,7 +198,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         groups = [(indices, folder_repeats(folder, table, default)) for folder, indices in sorted(folders.items())]
         return [*groups, (reg, float(max(dataset_config.get("reg_repeats", 1), 0)))]
 
-    def _epoch_order(self) -> List[int]:
+    def _epoch_order(self) -> list[int]:
         return repeat_order(self._repeat_groups())
 
     def _epoch_size(self) -> int:
@@ -405,8 +404,8 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         stopped = False
         micro = 0
         loss = None
-        scales: List[float] = []
-        prior_losses: List[float] = []
+        scales: list[float] = []
+        prior_losses: list[float] = []
         # train.monitor_every: a health summary line (loss by noise band, prior, the optimizer's
         # direction signal, weight drift, NaN counts, speed, VRAM); maltrainer/utils/train_monitor.py
         drift = None
@@ -617,9 +616,9 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             digest.update(repr(sorted(self.config["dataset"]["folder_repeats"].items())).encode("utf-8"))
         for key, caption in self.samples:
             if key in self.reg_keys:  # marked only then, so states without regularisation keep their fingerprint
-                digest.update(f"\x1ereg:{self._rel(key)}\x1f{caption}".encode("utf-8"))
+                digest.update(f"\x1ereg:{self._rel(key)}\x1f{caption}".encode())
             else:
-                digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode("utf-8"))
+                digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode())
         return digest.hexdigest()
 
     def _name(self) -> str:
@@ -726,7 +725,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                     )
         return True
 
-    def _save_state(self, state_dir: Path, weights: Optional[Path] = None) -> None:
+    def _save_state(self, state_dir: Path, weights: Path | None = None) -> None:
         """Everything train.resume_from needs, written aside and swapped in whole.
 
         ``weights``: a checkpoint holding exactly the raw weights. The state then hard-links it

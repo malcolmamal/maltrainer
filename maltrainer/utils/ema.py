@@ -5,8 +5,8 @@ Exponential moving average of trainable weights: adapters on the GPU, whole mode
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 import torch
 
@@ -20,7 +20,7 @@ class ParameterEMA:
     """
 
     def __init__(self, parameters: Iterable[torch.nn.Parameter], decay: float = 0.98, warmup: bool = True):
-        self.parameters: List[torch.nn.Parameter] = [p for p in parameters if p.requires_grad]
+        self.parameters: list[torch.nn.Parameter] = [p for p in parameters if p.requires_grad]
         self.decay = float(decay)
         self.warmup = bool(warmup)
         self.updates = 0
@@ -64,14 +64,14 @@ class OffloadedParameterEMA:
 
     def __init__(
         self,
-        named_parameters: Iterable[Tuple[str, torch.nn.Parameter]],
+        named_parameters: Iterable[tuple[str, torch.nn.Parameter]],
         decay: float = 0.999,
         warmup: bool = True,
         every: int = 1,
     ):
         named = [(name, p) for name, p in named_parameters if p.requires_grad]
-        self.names: List[str] = [name for name, _ in named]
-        self.parameters: List[torch.nn.Parameter] = [p for _, p in named]
+        self.names: list[str] = [name for name, _ in named]
+        self.parameters: list[torch.nn.Parameter] = [p for _, p in named]
         self.decay = float(decay)
         self.warmup = bool(warmup)
         self.every = max(int(every), 1)
@@ -82,7 +82,7 @@ class OffloadedParameterEMA:
         # "average" would then be the live weights.
         self.shadow = [p.detach().to("cpu", torch.float32, copy=True) for p in self.parameters]
         self.staging = [torch.empty(p.shape, dtype=p.dtype, pin_memory=pin) for p in self.parameters]
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     def current_decay(self) -> float:
         decay = self.decay if not self.warmup else min(self.decay, (1.0 + self.updates) / (10.0 + self.updates))
@@ -117,7 +117,7 @@ class OffloadedParameterEMA:
                 for i in range(0, flat_shadow.numel(), chunk):
                     flat_shadow[i : i + chunk].lerp_(flat_staged[i : i + chunk].float(), weight)
 
-    def averaged(self) -> Dict[str, torch.Tensor]:
+    def averaged(self) -> dict[str, torch.Tensor]:
         """name -> fp32 CPU average (the live shadow tensors; do not modify)."""
         self.wait()
         return dict(zip(self.names, self.shadow, strict=False))
@@ -144,10 +144,10 @@ class OffloadedParameterEMA:
                 if torch.cuda.is_available():
                     torch.cuda.current_stream().synchronize()
 
-    def state(self) -> Tuple[Dict[str, torch.Tensor], Dict[str, int]]:
+    def state(self) -> tuple[dict[str, torch.Tensor], dict[str, int]]:
         return self.averaged(), {"updates": self.updates, "calls": self.calls}
 
-    def load_state(self, tensors: Dict[str, torch.Tensor], counters: Dict[str, int]) -> None:
+    def load_state(self, tensors: dict[str, torch.Tensor], counters: dict[str, int]) -> None:
         self.wait()
         missing = [name for name in self.names if name not in tensors]
         if missing:

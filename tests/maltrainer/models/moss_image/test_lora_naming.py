@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Dict, List
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -126,7 +126,7 @@ def test_weights_are_saved_in_the_requested_dtype_and_alpha_always_in_float32(
 
     state = network.get_state_dict(save_dtype)
 
-    dtypes: Dict[str, List[torch.dtype]] = {}
+    dtypes: dict[str, list[torch.dtype]] = {}
     for key, value in state.items():
         dtypes.setdefault(key.rsplit(".", 1)[-1], []).append(value.dtype)
     assert set(dtypes["weight"]) == {expected}

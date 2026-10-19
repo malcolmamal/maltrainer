@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, List
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -16,8 +16,8 @@ def _inputs(batch: int = 1, h: int = 3, w: int = 2, tokens: int = 4):
     return torch.randn(batch, 128, h, w), torch.full((batch,), 0.4), torch.randn(batch, tokens, 8)
 
 
-def _count_block_calls(model: MOSSImageTransformer) -> List[int]:
-    calls: List[int] = []
+def _count_block_calls(model: MOSSImageTransformer) -> list[int]:
+    calls: list[int] = []
     for index, block in enumerate(model.layers):
         original = block.forward
 

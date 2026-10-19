@@ -46,7 +46,7 @@ def test_a_cache_key_is_a_stable_sha1_of_its_parts() -> None:
     key = cache_key("latent/v1", "abc", 512, "bucket")
 
     assert key == cache_key("latent/v1", "abc", 512, "bucket")
-    assert key == hashlib.sha1("latent/v1\x1fabc\x1f512\x1fbucket".encode()).hexdigest()
+    assert key == hashlib.sha1(b"latent/v1\x1fabc\x1f512\x1fbucket").hexdigest()
 
 
 @pytest.mark.parametrize(

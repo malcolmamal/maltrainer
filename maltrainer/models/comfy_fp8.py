@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 FP8_FORMATS = {"float8_e4m3fn": torch.float8_e4m3fn, "float8_e5m2": torch.float8_e5m2}
 
 
-def _layer_configs(handle, keys) -> Dict[str, dict]:
+def _layer_configs(handle, keys) -> dict[str, dict]:
     """prefix -> per-layer quant config, from whichever marker style the file uses."""
     metadata = handle.metadata() or {}
     if "_quantization_metadata" in metadata:
         return dict(json.loads(metadata["_quantization_metadata"]).get("layers", {}))
 
-    configs: Dict[str, dict] = {}
+    configs: dict[str, dict] = {}
     for key in keys:
         if key.endswith(".comfy_quant"):
             blob = handle.get_tensor(key)
@@ -53,14 +53,14 @@ def _layer_configs(handle, keys) -> Dict[str, dict]:
     return configs
 
 
-def read_comfy_checkpoint(path: str | Path) -> Tuple[Dict[str, torch.Tensor], Dict[str, dict]]:
+def read_comfy_checkpoint(path: str | Path) -> tuple[dict[str, torch.Tensor], dict[str, dict]]:
     """All tensors of a ComfyUI checkpoint plus its quantized-layer table.
 
     Marker tensors (``comfy_quant``, ``scaled_fp8``) are dropped; legacy ``scale_weight``
     is renamed to ``weight_scale``. fp8 weights stored as raw uint8 are viewed as fp8.
     """
     path = Path(path)
-    tensors: Dict[str, torch.Tensor] = {}
+    tensors: dict[str, torch.Tensor] = {}
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
         layers = _layer_configs(handle, keys)
@@ -99,7 +99,7 @@ def container_prefix(keys, candidates=CONTAINER_PREFIXES) -> str:
     return ""
 
 
-def strip_prefix(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], candidates=CONTAINER_PREFIXES):
+def strip_prefix(tensors: dict[str, torch.Tensor], layers: dict[str, dict], candidates=CONTAINER_PREFIXES):
     """Drop a ComfyUI container prefix if every key carries it."""
     prefix = container_prefix(tensors, candidates)
     if prefix:
@@ -111,7 +111,7 @@ def strip_prefix(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], cand
 FP8_MAX = float(torch.finfo(torch.float8_e4m3fn).max)  # 448
 
 
-def quantize_rows(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def quantize_rows(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """bf16/fp32 weight -> (fp8 e4m3, per-output-row fp32 scale [out, 1])."""
     w = weight.float()
     scale = (w.abs().amax(dim=1, keepdim=True) / FP8_MAX).clamp(min=1e-12)
@@ -124,8 +124,8 @@ def dequantize(weight: torch.Tensor, scale: torch.Tensor, dtype: torch.dtype) ->
 
 
 def dequantize_checkpoint(
-    tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], dtype: torch.dtype
-) -> Dict[str, torch.Tensor]:
+    tensors: dict[str, torch.Tensor], layers: dict[str, dict], dtype: torch.dtype
+) -> dict[str, torch.Tensor]:
     """Plain state dict with every fp8 layer dequantized (for small frozen encoders)."""
     out = dict(tensors)
     for prefix in layers:
@@ -184,10 +184,10 @@ class Fp8ScaledLinear(nn.Module):
 
 def swap_in_fp8_linears(
     model: nn.Module,
-    layers: Dict[str, dict],
+    layers: dict[str, dict],
     compute_dtype: torch.dtype,
-    key_map: Optional[Callable[[str], str]] = None,
-    tensors: Optional[Dict[str, torch.Tensor]] = None,
+    key_map: Callable[[str], str] | None = None,
+    tensors: dict[str, torch.Tensor] | None = None,
 ) -> int:
     """Replace every nn.Linear named in ``layers`` with an Fp8ScaledLinear of the same shape.
 

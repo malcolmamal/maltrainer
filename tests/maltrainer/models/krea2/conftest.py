@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, Optional
 
 import pytest
 import torch
@@ -31,11 +31,11 @@ def write_checkpoint(tmp_path: Path) -> Callable[..., Path]:
         prefix: str = "",
         fp8: bool = False,
         drop=(),
-        extra: Optional[Dict[str, torch.Tensor]] = None,
+        extra: dict[str, torch.Tensor] | None = None,
         name: str = "krea2.safetensors",
     ) -> Path:
-        tensors: Dict[str, torch.Tensor] = {}
-        layers: Dict[str, dict] = {}
+        tensors: dict[str, torch.Tensor] = {}
+        layers: dict[str, dict] = {}
         for key, value in tiny_model().state_dict().items():
             if key in drop:
                 continue

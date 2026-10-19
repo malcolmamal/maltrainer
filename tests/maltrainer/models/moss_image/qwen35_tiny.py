@@ -8,7 +8,6 @@ Layers 0-2 are Gated DeltaNet, layer 3 is gated full attention.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
 
 import torch
 from safetensors.torch import save_file
@@ -54,10 +53,10 @@ def tiny_text_model(seed: int = 0, layers: int = 4) -> Qwen35TextModel:
     return randomize(Qwen35TextModel(tiny_text_config(layers)), seed)
 
 
-def quantized_tensors(model: Qwen35TextModel) -> Dict[str, torch.Tensor]:
+def quantized_tensors(model: Qwen35TextModel) -> dict[str, torch.Tensor]:
     """The MLP Linears and the embedding as a ComfyUI INT8 ConvRot file stores them."""
     marker = json_tensor({"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": GROUP})
-    out: Dict[str, torch.Tensor] = {}
+    out: dict[str, torch.Tensor] = {}
     for key, value in model.state_dict().items():
         if key.endswith(MLP_SUFFIXES) or key == "embed_tokens.weight":
             out.update(_quantize(key, value, marker))
@@ -66,7 +65,7 @@ def quantized_tensors(model: Qwen35TextModel) -> Dict[str, torch.Tensor]:
     return out
 
 
-def _quantize(key: str, value: torch.Tensor, marker: torch.Tensor) -> Dict[str, torch.Tensor]:
+def _quantize(key: str, value: torch.Tensor, marker: torch.Tensor) -> dict[str, torch.Tensor]:
     base = key[: -len(".weight")]
     rotated = rotate_activation(value, GROUP)
     scale = (rotated.abs().amax(dim=-1, keepdim=True) / 127.0).clamp(min=1e-30)
@@ -77,6 +76,6 @@ def _quantize(key: str, value: torch.Tensor, marker: torch.Tensor) -> Dict[str, 
     }
 
 
-def write_text_checkpoint(tensors: Dict[str, torch.Tensor], path: Path, prefix: str = "") -> Path:
+def write_text_checkpoint(tensors: dict[str, torch.Tensor], path: Path, prefix: str = "") -> Path:
     save_file({prefix + k: v.detach().contiguous() for k, v in tensors.items()}, str(path))
     return path

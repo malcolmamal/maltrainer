@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -172,8 +171,8 @@ class Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rotary_emb: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
+        rotary_emb: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         b, s, _ = hidden_states.shape
         q = self.to_q(hidden_states).view(b, s, self.heads, self.dim_head)
@@ -211,8 +210,8 @@ class TransformerBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         mod_params: torch.Tensor,
-        target_token_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        target_token_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         scale, gate = mod_params.chunk(2, dim=-1)
         if target_token_mask is None:
             scale = scale.unsqueeze(1)
@@ -228,9 +227,9 @@ class TransformerBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         modulation: torch.Tensor,
-        rotary_emb: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
-        target_token_mask: Optional[torch.Tensor] = None,
+        rotary_emb: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
+        target_token_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         mod1, mod2 = modulation.chunk(2, dim=-1)
         img_modulated, img_gate1 = self._modulate(self.img_norm1(hidden_states), mod1, target_token_mask)
@@ -255,7 +254,7 @@ class AdaLayerNormContinuous(nn.Module):
         self,
         hidden_states: torch.Tensor,
         conditioning_embedding: torch.Tensor,
-        target_token_mask: Optional[torch.Tensor] = None,
+        target_token_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         scale = self.linear(self.silu(conditioning_embedding).to(hidden_states.dtype))
         if target_token_mask is None:
@@ -270,8 +269,8 @@ def build_rope_frequencies(
     text_len: int,
     latent_h: int,
     latent_w: int,
-    axes_dim: Tuple[int, int, int] = (16, 56, 56),
-    device: Optional[torch.device] = None,
+    axes_dim: tuple[int, int, int] = (16, 56, 56),
+    device: torch.device | None = None,
 ) -> torch.Tensor:
     """Build 3D RoPE complex frequencies for Qwen-Image-2.1 [text | image] sequence."""
     img_tokens = latent_h * latent_w
@@ -320,7 +319,7 @@ class QwenImage21Transformer(nn.Module):
         dim_head: int = 128,
         mlp_ratio: int = 3,
         context_in_dim: int = 4096,
-        axes_dims_rope: Tuple[int, int, int] = (16, 56, 56),
+        axes_dims_rope: tuple[int, int, int] = (16, 56, 56),
         eps: float = 1e-6,
     ):
         super().__init__()
@@ -412,8 +411,8 @@ class QwenImage21Transformer(nn.Module):
 
 
 def load_qwen_image_2_1_transformer(
-    model_path: Union[str, Path],
-    device: Union[str, torch.device] = "cuda",
+    model_path: str | Path,
+    device: str | torch.device = "cuda",
     dtype: torch.dtype = torch.bfloat16,
     grad_precision: str = "bf16",
 ) -> QwenImage21Transformer:
