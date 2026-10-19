@@ -131,5 +131,5 @@ def test_a_saved_finetune_loads_back_as_a_base_and_extracts_to_a_lora_of_what_ch
         states[4]["diffusion_model.layers.1.proj.k.lora_B.weight"],
         states[4]["diffusion_model.layers.1.proj.k.lora_A.weight"],
     )
-    torch.testing.assert_close(up @ down, torch.ones(128, 128), atol=1e-4, rtol=0)
+    torch.testing.assert_close(up @ down, torch.ones(128, 128), atol=1e-3, rtol=0)  # SVD rounding differs by LAPACK
     assert report["profile"] == "moss_image"
