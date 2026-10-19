@@ -327,7 +327,9 @@ the weights instead (point `model.transformer_path` at the checkpoint; the optim
 Every checkpoint is a full ComfyUI model file with the same key layout as the base:
 - **In ComfyUI:** put it in `models/diffusion_models/` and load it like
   `moss_image_base_bf16`. ComfyUI's MOSS template uses res_multistep, simple schedule, 30 steps,
-  CFG 4, with SkipLayerGuidance on layer 22 for the first half.
+  CFG 4, with SkipLayerGuidance on layer 22 for the first half. With the 8-step DMD LoRA it takes
+  8 steps; see [moss-image-comfyui-prompting.md](moss-image-comfyui-prompting.md) for that setup
+  and how to prompt the finetune.
 - **In maltrainer:** as `model.transformer_path` for LoRAs or further finetuning.
 - **As a LoRA** (smaller, stackable with other LoRAs, loads on the base):
 
