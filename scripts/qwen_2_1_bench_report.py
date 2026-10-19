@@ -145,7 +145,7 @@ def main() -> None:
         c = color(name)
         axes[0].plot(d["step"], ema(d["loss"]), color=c, label=name, lw=1.6)
         axes[1].plot(d["step"], d["lr"], color=c, label=name, lw=1.6)
-        xs, ys = zip(*d["dw"])
+        xs, ys = zip(*d["dw"], strict=False)
         axes[2].plot(xs, ys, "o-", color=c, label=name, lw=1.6, ms=4)
     axes[0].set(title="Training loss (EMA, alpha 0.02)", xlabel="step", ylabel="MSE")
     axes[1].set(title="Effective learning rate", xlabel="step", ylabel="LR", yscale="log")
@@ -173,7 +173,7 @@ def main() -> None:
         ),
     ]
     fig, axes = plt.subplots(1, 4, figsize=(21, 4.6))
-    for ax, (key, title, refs) in zip(axes, panels):
+    for ax, (key, title, refs) in zip(axes, panels, strict=False):
         for name in runs:
             pts = sorted(
                 (step_num(r["step"], final_steps[name]), r[key])
@@ -181,7 +181,7 @@ def main() -> None:
                 if r["run"] == name and r.get(key) is not None
             )
             if pts:
-                ax.plot(*zip(*pts), "o-", color=color(name), label=name, lw=1.6, ms=4)
+                ax.plot(*zip(*pts, strict=False), "o-", color=color(name), label=name, lw=1.6, ms=4)
         for y, label in refs:
             if y is not None:
                 ax.axhline(y, color="#adb5bd", ls="--", lw=1)

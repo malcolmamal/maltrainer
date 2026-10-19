@@ -75,7 +75,9 @@ def test_the_loader_returns_a_frozen_eval_encoder_that_reproduces_the_saved_weig
     assert encoder.ctx_len == 5 and not encoder.model.training
     assert not any(p.requires_grad for p in encoder.model.parameters())
     reference = tiny_t5()
-    for (name, loaded), (_, original) in zip(encoder.model.state_dict().items(), reference.state_dict().items()):
+    for (name, loaded), (_, original) in zip(
+        encoder.model.state_dict().items(), reference.state_dict().items(), strict=False
+    ):
         assert torch.equal(loaded, original), name
 
 

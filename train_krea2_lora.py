@@ -483,7 +483,7 @@ class Krea2LoRATrainer:
         if hasattr(inner, "get_avg_learning_rate"):
             rates = ", ".join(
                 f"{g.get('name', i)} {lr:.2e}"
-                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates()))
+                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates(), strict=False))
             )
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
         elif group.get("d") is not None:

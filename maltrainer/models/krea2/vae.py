@@ -150,7 +150,7 @@ class WanImageEncoder(nn.Module):
         dims = [dim * u for u in (1,) + tuple(dim_mult)]
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
         layers = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:], strict=False)):
             for _ in range(num_res_blocks):
                 layers.append(ResidualBlock(in_dim, out_dim))
                 in_dim = out_dim

@@ -3,7 +3,7 @@
   "maltrainer/data/minimax_dataset.py": 288,
   "maltrainer/finetune/rotation.py": 206,
   "maltrainer/models/comfy_fp8.py": 213,
-  "maltrainer/models/flux3/model.py": 307,
+  "maltrainer/models/flux3/model.py": 306,
   "maltrainer/models/flux3/vae.py": 275,
   "maltrainer/models/krea2/model.py": 299,
   "maltrainer/models/krea2/vae.py": 207,

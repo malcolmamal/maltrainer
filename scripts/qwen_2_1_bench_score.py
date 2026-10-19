@@ -172,7 +172,7 @@ class FaceEmbedder:
             index.append(i)
         out: list[np.ndarray | None] = [None] * len(images)
         if crops:
-            for i, emb in zip(index, self.clip(crops)):
+            for i, emb in zip(index, self.clip(crops), strict=False):
                 out[i] = emb
         return out
 
@@ -262,7 +262,7 @@ def main() -> None:
     print(f"training faces {len(train_faces)}/{len(train_images)}, likeness ceiling {ceiling:.4f}")
 
     image_clip = clip(images)
-    for r, emb, face in zip(records, image_clip, faces(images)):
+    for r, emb, face in zip(records, image_clip, faces(images), strict=False):
         r["face_found"] = face is not None
         r["likeness"] = float(face @ centroid) if face is not None else None
         r["memorization"] = float((train_clip @ emb).max())
@@ -273,7 +273,7 @@ def main() -> None:
     # ---- VLM adherence judge ------------------------------------------------------------
     if not args.no_judge:
         judge = YesNoJudge(args.device)
-        for i, (r, image) in enumerate(zip(records, images)):
+        for i, (r, image) in enumerate(zip(records, images, strict=False)):
             qs = checks.get(r["prompt"], [])
             r["checks"] = {q: judge(image, q) for q in qs}
             r["judge"] = float(np.mean(list(r["checks"].values()))) if qs else None

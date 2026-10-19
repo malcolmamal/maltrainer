@@ -67,7 +67,7 @@ def test_repeats_multiply_the_samples_with_their_captions(
     dataset = ZImageDataset(str(data_root), repeats=repeats)
 
     assert len(dataset) == length
-    assert dict(zip(_names(dataset), dataset.captions)) == {"a.png": "first", "b.png": "second"}
+    assert dict(zip(_names(dataset), dataset.captions, strict=False)) == {"a.png": "first", "b.png": "second"}
 
 
 def test_a_sample_is_a_centre_cropped_square_normalised_to_minus_one_one(

@@ -177,7 +177,7 @@ def main() -> None:
     grid: list[tuple[str, list[Image.Image]]] = []
     for label, latents_list in rows:
         images = []
-        for seed, latents in zip(args.seeds, latents_list):
+        for seed, latents in zip(args.seeds, latents_list, strict=False):
             with torch.no_grad():
                 decoded = vae.decode(latents.to(dtype))
             array = decoded[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255

@@ -47,7 +47,7 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
     else:
         # Try to find the embedding tensor
         embedding_vectors = None
-        for key, tensor in embedding_data.items():
+        for _key, tensor in embedding_data.items():
             if tensor.dim() == 2 and tensor.shape[0] <= 8:  # num_vectors x dim
                 embedding_vectors = tensor
                 break

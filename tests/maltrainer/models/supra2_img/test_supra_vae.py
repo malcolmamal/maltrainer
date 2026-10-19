@@ -45,7 +45,7 @@ def test_the_loader_reproduces_the_saved_weights_frozen_and_in_eval_mode(tmp_pat
 
     loaded = load_sd_vae(weights, config, CPU, torch.float32)
 
-    for (name, value), reference in zip(loaded.state_dict().items(), source.state_dict().values()):
+    for (name, value), reference in zip(loaded.state_dict().items(), source.state_dict().values(), strict=False):
         assert torch.equal(value, reference), name
     assert not loaded.training and not any(p.requires_grad for p in loaded.parameters())
 

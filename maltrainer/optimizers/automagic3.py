@@ -156,7 +156,7 @@ class Automagic3(torch.optim.Optimizer):
         all_set = rows[0].clone()
         any_set = rows[0].clone()
         alternating = rows[0] ^ rows[1]
-        for prev, cur in zip(rows[1:], rows[2:]):
+        for prev, cur in zip(rows[1:], rows[2:], strict=False):
             alternating.bitwise_and_(prev ^ cur)
         for row in rows[1:]:
             all_set.bitwise_and_(row)
@@ -400,7 +400,7 @@ class Automagic3(torch.optim.Optimizer):
             st = self.state.get(params[int(idx)])
             if st is not None:
                 st["lr"] = lr.to(device=params[int(idx)].device, dtype=torch.float32)
-        for group, built in zip(self.param_groups, self._built):
+        for group, built in zip(self.param_groups, self._built, strict=False):
             group.update(built)
             lrs = [
                 st["lr"]

@@ -69,7 +69,7 @@ def test_a_press_renders_count_distinct_people_and_writes_files(tmp_path: Path) 
     assert len(singles) == 3
     notes = (folder / "step000120.txt").read_text(encoding="utf-8").splitlines()
     assert sorted(line.split()[0] for line in notes) == [p.split("_", 1)[1][:-4] for p in singles]
-    for line, (prompt, seed, _) in zip(notes, calls):
+    for line, (prompt, seed, _) in zip(notes, calls, strict=False):
         assert line.endswith(f"seed {seed}  {prompt}")
     with Image.open(folder / "step000120.png") as grid:
         assert grid.size == (3 * 8, 6)

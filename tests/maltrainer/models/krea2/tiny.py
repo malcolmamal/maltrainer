@@ -28,7 +28,7 @@ def tiny_model(seed: int = 0) -> Krea2Transformer:
     """Float32 weights with every zero-initialised parameter randomised, so no path is dead."""
     torch.manual_seed(seed)
     model = Krea2Transformer(CONFIG)
-    for name, param in model.named_parameters():
+    for param in model.parameters():
         if not param.any():
             torch.nn.init.normal_(param, std=0.1)
     model.compute_dtype = torch.float32

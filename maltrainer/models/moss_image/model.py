@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 import torch.nn.functional as F
@@ -204,9 +204,9 @@ class Block(nn.Module):
 
 
 class MOSSImageTransformer(nn.Module):
-    def __init__(self, config: MOSSImageConfig = MOSSImageConfig()):
+    def __init__(self, config: Optional[MOSSImageConfig] = None):
         super().__init__()
-        self.config = config
+        self.config = config = config or MOSSImageConfig()
         d = config.dim
         self.head_dim = d // config.num_heads
         self.video_embedder = nn.Linear(LATENT_CHANNELS, d)

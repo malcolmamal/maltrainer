@@ -564,7 +564,7 @@ class QwenImage21VAE(nn.Module):
 
 def load_qwen_image_2_1_vae(
     vae_path: Union[str, Path],
-    device: torch.device = torch.device("cuda"),
+    device: Union[str, torch.device] = "cuda",
     dtype: torch.dtype = torch.bfloat16,
     include_decoder: bool = False,
 ) -> QwenImage21VAE:

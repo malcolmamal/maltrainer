@@ -74,7 +74,7 @@ def weights_from_file(
         yield
     finally:
         with torch.no_grad():
-            for (_, param), saved in zip(named, backup):
+            for (_, param), saved in zip(named, backup, strict=False):
                 param.copy_(saved.to(param.device))
 
 
@@ -188,7 +188,7 @@ class PriorPreservation:
                 logger.warning(
                     "Prior: %s has %d inputs per image; new images get %d", path, saved, self.samples_per_image
                 )
-            for i, (key, caption) in enumerate(zip(info["keys"], info["captions"])):
+            for i, (key, caption) in enumerate(zip(info["keys"], info["captions"], strict=False)):
                 self.captions[key] = caption
                 self.targets[key] = handle.get_tensor(f"{i}.target")
                 self.sigmas[key] = handle.get_tensor(f"{i}.sigma")

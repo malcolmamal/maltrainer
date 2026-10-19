@@ -32,7 +32,7 @@ def small_encoder(monkeypatch: pytest.MonkeyPatch) -> None:
 def _model(seed: int = 0) -> MiniMaxH3AudioEncoder:
     torch.manual_seed(seed)
     model = MiniMaxH3AudioEncoder()
-    for name, p in model.named_parameters():
+    for p in model.parameters():
         p.data = torch.randn_like(p) * 0.3
     return model.eval()
 

@@ -124,7 +124,7 @@ def test_encode_maps_pixels_to_minus_one_one_and_normalizes_the_posterior_mean()
     out = vae.encode(torch.tensor([0.0, 0.5, 1.0]).view(1, 3, 1, 1).expand(1, 3, 2, 2))
     assert vae.encoder.seen[0, :, 0, 0].tolist() == [-1.0, 0.0, 1.0]
     assert out.shape == (1, 16, 1, 1) and out.dtype == torch.float32  # logvar half dropped
-    expected = [(5.0 - m) / s for m, s in zip(LATENTS_MEAN, LATENTS_STD)]
+    expected = [(5.0 - m) / s for m, s in zip(LATENTS_MEAN, LATENTS_STD, strict=False)]
     assert out[0, :, 0, 0].tolist() == pytest.approx(expected, rel=1e-5)
 
 

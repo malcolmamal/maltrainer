@@ -129,7 +129,7 @@ def _split_fused_qkv(name: str, diff: torch.Tensor) -> List[Tuple[str, torch.Ten
     fused weight, and an unfused model (the diffusers shards) takes them as they are."""
     if name.startswith("layers.") and name.endswith(".proj.qkv"):
         base = name[: -len(".qkv")]
-        return [(f"{base}.{part}", chunk) for part, chunk in zip(("q", "k", "v"), diff.chunk(3, dim=0))]
+        return [(f"{base}.{part}", chunk) for part, chunk in zip(("q", "k", "v"), diff.chunk(3, dim=0), strict=False)]
     return [(name, diff)]
 
 

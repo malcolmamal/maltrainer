@@ -223,9 +223,9 @@ class LastLayer(nn.Module):
 
 
 class Krea2Transformer(nn.Module):
-    def __init__(self, config: Krea2Config = Krea2Config()):
+    def __init__(self, config: Optional[Krea2Config] = None):
         super().__init__()
-        c = self.config = config
+        c = self.config = config or Krea2Config()
         headdim = c.features // c.heads
         self.axes_dim = [headdim - 12 * (headdim // 16), 6 * (headdim // 16), 6 * (headdim // 16)]
         self.first = nn.Linear(c.channels * c.patch**2, c.features, bias=True)

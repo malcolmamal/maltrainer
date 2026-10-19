@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -229,9 +229,9 @@ class LastLayer(nn.Module):
 
 
 class Flux3Transformer(nn.Module):
-    def __init__(self, config: Flux3Config = Flux3Config()):
+    def __init__(self, config: Optional[Flux3Config] = None):
         super().__init__()
-        self.config = config
+        self.config = config = config or Flux3Config()
         h = config.hidden_size
         self.emb_in = nn.ModuleDict({m: nn.Linear(LATENT_CHANNELS, h, bias=False) for m in CONTENT_MODES})
         self.txt_in = nn.Linear(CONTEXT_DIM, h, bias=False)
@@ -297,9 +297,8 @@ class Flux3Transformer(nn.Module):
         img_mod = self.single_stream_modulations["image"](vec_img)
         txt_mod = self.single_stream_modulations["txt"](vec_zero)
         n_txt = txt.shape[1]
-        shift, scale, gate = (
-            torch.cat([i.expand(B, n_img, -1), t.expand(B, n_txt, -1)], dim=1) for i, t in zip(img_mod, txt_mod)
-        )
+        pairs = zip(img_mod, txt_mod, strict=False)
+        shift, scale, gate = (torch.cat([i.expand(B, n_img, -1), t.expand(B, n_txt, -1)], dim=1) for i, t in pairs)
         for block in self.single_blocks:
             joint = self._run(block, joint, shift, scale, gate, pe)
 

@@ -104,7 +104,9 @@ def main() -> None:
     for sigma in SIGMAS:
         totals = {"matched": 0.0, "mismatched": 0.0, "zero": 0.0, "noise": 0.0}
         count = 0
-        for latent, embed, wrong in tqdm(list(zip(latents, embeds, shuffled)), desc=f"sigma {sigma:.2f}", leave=False):
+        for latent, embed, wrong in tqdm(
+            list(zip(latents, embeds, shuffled, strict=False)), desc=f"sigma {sigma:.2f}", leave=False
+        ):
             x0 = latent.to(device, dtype)
             b, c, h, w = x0.shape
             mu = calculate_shift(h * w)

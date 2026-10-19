@@ -68,7 +68,7 @@ class ZImageTextEncodeWithEmbeddings:
             embedding_vectors = embedding_data["embedding"]
         # Priority 3: Heuristic search for correct shape
         else:
-            for key, tensor in embedding_data.items():
+            for _key, tensor in embedding_data.items():
                 if tensor.dim() == 2 and tensor.shape[0] <= 16:  # num_vectors x dim
                     embedding_vectors = tensor
                     break

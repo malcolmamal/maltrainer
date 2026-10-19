@@ -136,7 +136,7 @@ def _map_te_key(k: str) -> str:
 def load_qwen_image_2_1_text_encoder(
     text_encoder_path: Union[str, Path],
     asset_dir: Optional[Union[str, Path]] = None,
-    device: torch.device = torch.device("cuda"),
+    device: Union[str, torch.device] = "cuda",
     grad_precision: str = "bf16",
 ) -> Qwen3VLTextEncoder:
     """Load Qwen3-VL 8B text encoder from INT8 ConvRot safetensors (no dtype: the file fixes it)."""

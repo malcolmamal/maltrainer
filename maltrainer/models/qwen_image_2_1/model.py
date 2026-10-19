@@ -413,7 +413,7 @@ class QwenImage21Transformer(nn.Module):
 
 def load_qwen_image_2_1_transformer(
     model_path: Union[str, Path],
-    device: torch.device = torch.device("cuda"),
+    device: Union[str, torch.device] = "cuda",
     dtype: torch.dtype = torch.bfloat16,
     grad_precision: str = "bf16",
 ) -> QwenImage21Transformer:
