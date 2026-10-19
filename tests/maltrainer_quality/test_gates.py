@@ -48,6 +48,7 @@ def test_the_table_runs_every_gate_in_order() -> None:
         "complexity",
         "file length",
         "types",
+        "dead code",
         "tests",
         "coverage",
         "lock",

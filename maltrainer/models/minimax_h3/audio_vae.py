@@ -32,7 +32,6 @@ SAMPLE_RATE = 32000
 HOP_LENGTH = 800  # prod(encoder strides)
 LATENTS_PER_SECOND = SAMPLE_RATE // HOP_LENGTH  # 40
 LATENT_CHANNELS = 32
-AUDIO_CHANNELS = 2
 
 # Per-channel latent statistics from the released FL2VA/audio_vae/config.json. ComfyUI's
 # single file carries them as buffers; these are only the fallback for the original release.

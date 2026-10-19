@@ -17,7 +17,6 @@ from safetensors import safe_open
 from safetensors.torch import load_file
 from torch import nn
 
-IMG_SIZE = 256
 LATENT_SIZE = 32
 LATENT_CH = 4
 PATCH = 2
