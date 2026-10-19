@@ -102,3 +102,23 @@ def test_loading_writes_the_vectors_into_only_the_trigger_rows() -> None:
     table = encoder.get_input_embeddings().weight.detach()
     torch.testing.assert_close(table[embedding.token_ids], vectors)
     torch.testing.assert_close(table[: len(VOCAB)], torch.arange(len(VOCAB) * 3, dtype=torch.float32).view(-1, 3))
+
+
+def test_an_optimizer_takes_the_parameters_and_moves_the_trigger_vector() -> None:
+    _, encoder, embedding = _embedding(trigger_token="sks", init_text="dog")
+    optimizer = torch.optim.SGD(embedding.parameters(), lr=1.0)
+    trigger = embedding.token_ids[0]
+
+    embedding(torch.tensor([trigger])).sum().backward()
+    optimizer.step()
+
+    assert list(embedding.parameters()) == [encoder.get_input_embeddings().weight]
+    torch.testing.assert_close(embedding.get_embeddings()[0], _row("dog") - 1.0)
+
+
+def test_forward_looks_up_the_vectors_of_its_token_ids() -> None:
+    _, _, embedding = _embedding(trigger_token="sks", init_text="photo")
+
+    vectors = embedding(torch.tensor([VOCAB.index("a"), embedding.token_ids[0]]))
+
+    torch.testing.assert_close(vectors, torch.stack([_row("a"), _row("photo")]))

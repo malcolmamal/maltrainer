@@ -2,7 +2,7 @@
 Textual Inversion embedding implementation for Z-Image.
 """
 
-from typing import List
+from typing import Iterator, List
 
 import torch
 import torch.nn as nn
@@ -98,10 +98,11 @@ class TextualInversionEmbedding(nn.Module):
         embeddings = state_dict["embedding"]
         self.set_embeddings(embeddings)
 
-    def parameters(self):
-        """Return only the embedding parameters."""
-        embedding_layer = self.text_encoder.get_input_embeddings()
-        return [embedding_layer.weight[tid] for tid in self.token_ids]
+    def parameters(self, recurse: bool = True) -> Iterator[nn.Parameter]:  # noqa: ARG002 - nn.Module's signature
+        """The text encoder's embedding table, the one leaf tensor an optimizer can take: rows other
+        than the trigger's are put back after each step (``restore_original_embeddings``)."""
+        yield self.text_encoder.get_input_embeddings().weight
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        """Forward is handled by text encoder, this is just for optimizer."""
+        """The embedding vectors of ``input_ids``, the trigger's learned ones included."""
+        return self.text_encoder.get_input_embeddings()(input_ids)
