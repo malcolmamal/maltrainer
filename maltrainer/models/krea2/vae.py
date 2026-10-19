@@ -195,7 +195,7 @@ def load_krea2_vae(path: Union[str, Path], device: torch.device, dtype: torch.dt
     wanted = {
         key: value
         for key, value in state.items()
-        if (key.startswith("encoder.") or key.startswith("conv1.")) and ".time_conv." not in key
+        if key.startswith(("encoder.", "conv1.")) and ".time_conv." not in key
     }
     info = model.load_state_dict(wanted, strict=False)
     if info.missing_keys or info.unexpected_keys:

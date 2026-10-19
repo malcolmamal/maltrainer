@@ -51,9 +51,13 @@ TOKENIZER_ASSETS = Path(__file__).resolve().parents[1] / "minimax_h3" / "assets"
 
 # comfy/text_encoders/llama.py Qwen3VL_4BConfig. Heads, rope and eps are shared with the
 # vendored Qwen3-VL config and inherited from it.
-QWEN3VL_4B_TEXT = dict(
-    hidden_size=2560, intermediate_size=9728, num_attention_heads=32, num_key_value_heads=8, head_dim=128
-)
+QWEN3VL_4B_TEXT = {
+    "hidden_size": 2560,
+    "intermediate_size": 9728,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "head_dim": 128,
+}
 
 
 def _text_key(key: str) -> Optional[str]:

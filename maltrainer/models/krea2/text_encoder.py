@@ -41,9 +41,13 @@ TOKENIZER_ASSETS = Path(__file__).resolve().parents[1] / "minimax_h3" / "assets"
 
 # comfy/text_encoders/llama.py Qwen3VL_4BConfig (the rest -- heads, rope, eps -- is shared
 # with the vendored Qwen3-VL config and inherited from it).
-QWEN3VL_4B_TEXT = dict(
-    hidden_size=2560, intermediate_size=9728, num_attention_heads=32, num_key_value_heads=8, head_dim=128
-)
+QWEN3VL_4B_TEXT = {
+    "hidden_size": 2560,
+    "intermediate_size": 9728,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "head_dim": 128,
+}
 
 
 def _prefix_end(token_ids: List[int]) -> int:
@@ -72,7 +76,7 @@ def _text_key(key: str) -> Optional[str]:
         if key.startswith(prefix):
             key = key[len(prefix) :]
             break
-    if key.startswith(("visual.", "lm_head.")) or key.startswith("model.visual"):
+    if key.startswith(("visual.", "lm_head.", "model.visual")):
         return None
     return key
 

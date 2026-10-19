@@ -41,16 +41,16 @@ class Automagic3(torch.optim.Optimizer):
             raise ValueError(f"min_lr ({min_lr}) must be <= max_lr ({max_lr})")
         if lr > 1e-3:
             print(f"Note: start lr {lr} is high; the controller will correct it (the pooled vote will walk it down).")
-        defaults = dict(
-            lr=lr,
-            min_lr=min_lr,
-            max_lr=max_lr,
-            beta2=beta2,
-            eps=eps,
-            clip_threshold=clip_threshold,
-            weight_decay=weight_decay,
-            polarity_history=max(2, min(64, int(polarity_history))),
-        )
+        defaults = {
+            "lr": lr,
+            "min_lr": min_lr,
+            "max_lr": max_lr,
+            "beta2": beta2,
+            "eps": eps,
+            "clip_threshold": clip_threshold,
+            "weight_decay": weight_decay,
+            "polarity_history": max(2, min(64, int(polarity_history))),
+        }
         super().__init__(params, defaults)
 
         self.fused = fused

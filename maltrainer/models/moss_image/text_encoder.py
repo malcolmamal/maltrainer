@@ -188,7 +188,7 @@ def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> 
     core_attn_out = torch.zeros_like(value)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
 
-    for i in range(0, total_sequence_length // chunk_size):
+    for i in range(total_sequence_length // chunk_size):
         q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
         attn = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
         v_new = v_i - k_cumdecay[:, :, i] @ state

@@ -105,4 +105,3 @@ class TextualInversionEmbedding(nn.Module):
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """Forward is handled by text encoder, this is just for optimizer."""
-        pass

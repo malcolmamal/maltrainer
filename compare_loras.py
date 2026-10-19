@@ -72,8 +72,8 @@ def analyze_lora(path):
     return {
         "size_mb": os.path.getsize(path) / (1024 * 1024),
         "params": total_params,
-        "modules": sorted(list(modules)),
-        "ranks": sorted(list(ranks)),
+        "modules": sorted(modules),
+        "ranks": sorted(ranks),
     }
 
 

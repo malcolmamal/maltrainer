@@ -121,7 +121,7 @@ class LoRANetwork(nn.Module):
             if not loaded:
                 # Handle potential prefixes like diffusion_model.
                 for k in state_dict.keys():
-                    if k.endswith(f"{name}.lora_down.weight") or k.endswith(f"{safe_name}.lora_down.weight"):
+                    if k.endswith((f"{name}.lora_down.weight", f"{safe_name}.lora_down.weight")):
                         prefix = k.replace(f"{name}.lora_down.weight", "").replace(f"{safe_name}.lora_down.weight", "")
                         lora_layer.lora_down.weight.data = state_dict[
                             f"{prefix}{name}.lora_down.weight"

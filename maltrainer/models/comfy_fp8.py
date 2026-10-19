@@ -65,9 +65,9 @@ def read_comfy_checkpoint(path: str | Path) -> Tuple[Dict[str, torch.Tensor], Di
         keys = list(handle.keys())
         layers = _layer_configs(handle, keys)
         for key in keys:
-            if key.endswith(".comfy_quant") or key == "scaled_fp8" or key.endswith(".scaled_fp8"):
+            if key.endswith((".comfy_quant", ".scaled_fp8")) or key == "scaled_fp8":
                 continue
-            if key.endswith(".scale_input") or key.endswith(".input_scale"):
+            if key.endswith((".scale_input", ".input_scale")):
                 continue  # activation scales only matter to fp8 matmul kernels, not to dequant
             tensor = handle.get_tensor(key)
             if key.endswith(".scale_weight"):
