@@ -127,3 +127,17 @@ def test_hooks_are_registered_only_where_they_are_needed() -> None:
     assert len(fused._hook_handles) == 2
     for handle in plain._hook_handles + fused._hook_handles:
         handle.remove()
+
+
+def test_a_parameter_whose_gradient_was_cleared_is_left_alone() -> None:
+    p = nn.Parameter(torch.ones(2, dtype=torch.bfloat16))
+    opt = Automagic3([p], fused=True)
+
+    opt._update_param(p, opt.param_groups[0])
+    opt._make_accum_hook()(p)
+
+    assert len(opt.state[p]) == 0
+    assert not hasattr(p, "_accum_grad")
+    torch.testing.assert_close(p.detach(), torch.ones(2, dtype=torch.bfloat16))
+    for handle in opt._hook_handles:
+        handle.remove()

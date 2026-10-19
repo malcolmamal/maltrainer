@@ -51,9 +51,10 @@ class Automagic3(torch.optim.Optimizer):
             "weight_decay": weight_decay,
             "polarity_history": max(2, min(64, int(polarity_history))),
         }
+        self.fused = fused  # set before super().__init__, which calls add_param_group per group
+        self._built, self._hook_handles = [], []
         super().__init__(params, defaults)
 
-        self.fused = fused
         # Multiplies every update's step size (not the learned rates): regularisation images train
         # at a fraction of the step (maltrainer/finetune/regularisation.py). 1 = off.
         self.lr_scale = 1.0
@@ -63,26 +64,26 @@ class Automagic3(torch.optim.Optimizer):
         self._signal_sum: dict = {}
         self._signal_steps: dict = {}
         self._nonfinite = None
-        self._rebuild_group_index()
-        self._hook_handles = []
-        for group in self.param_groups:
-            for p in group["params"]:
-                if not p.requires_grad:
-                    continue
-                if self.fused:
-                    # Fused: update each param the moment its grad is ready.
-                    handle = p.register_post_accumulate_grad_hook(self._make_backward_hook(group))
-                    self._hook_handles.append(handle)
-                elif p.dtype != torch.float32:
-                    # Non-fused: the actual update happens in .step(); here we
-                    # only stochastically accumulate low-precision grads across
-                    # micro-batches so repeated round-to-nearest doesn't drop
-                    # small grads (fp32 grads accumulate losslessly on their own).
-                    handle = p.register_post_accumulate_grad_hook(self._make_accum_hook())
-                    self._hook_handles.append(handle)
 
         total = sum(p.numel() for g in self.param_groups for p in g["params"])
         print(f"Total training parameters: {total:,}")
+
+    def add_param_group(self, param_group: dict) -> None:
+        super().add_param_group(param_group)
+        group = self.param_groups[-1]
+        # As built, overrides included: a reload restores these, not the previous run's saved ones.
+        self._built.append({k: group[k] for k in self.defaults})
+        self._rebuild_group_index()
+        for p in group["params"]:
+            if not p.requires_grad:
+                continue
+            if self.fused:
+                # Fused: update each param the moment its grad is ready.
+                self._hook_handles.append(p.register_post_accumulate_grad_hook(self._make_backward_hook(group)))
+            elif p.dtype != torch.float32:
+                # Non-fused: .step() updates; here low-precision grads accumulate stochastically across
+                # micro-batches, so repeated round-to-nearest doesn't drop small ones (fp32 is lossless).
+                self._hook_handles.append(p.register_post_accumulate_grad_hook(self._make_accum_hook()))
 
     # ------------------------------------------------------------------ utils
 
@@ -399,9 +400,8 @@ class Automagic3(torch.optim.Optimizer):
             st = self.state.get(params[int(idx)])
             if st is not None:
                 st["lr"] = lr.to(device=params[int(idx)].device, dtype=torch.float32)
-        for group in self.param_groups:
-            for k, v in self.defaults.items():
-                group[k] = v
+        for group, built in zip(self.param_groups, self._built):
+            group.update(built)
             lrs = [
                 st["lr"]
                 for p in group["params"]
