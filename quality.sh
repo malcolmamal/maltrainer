@@ -2,7 +2,7 @@
 # maltrainer quality gate (Linux / macOS / Git Bash): every gate, as CI runs it.
 #
 # Uses the dev environment .venv when it exists, then venv, then python3 / python on PATH.
-# That interpreter needs the tools in requirements-dev.txt. Extra arguments pass through, e.g.
+# That interpreter needs the tools in pyproject.toml's dev group. Extra arguments pass through, e.g.
 #   ./quality.sh --junit reports
 
 set -u

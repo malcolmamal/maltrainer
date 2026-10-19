@@ -72,8 +72,11 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 ### 2. Install remaining requirements
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.lock
 ```
+
+`requirements.lock` pins every runtime dependency except PyTorch (hence step 1). With [uv](https://docs.astral.sh/uv/) the same
+resolution is `uv sync --extra cu130` (or `--extra cpu`), which installs PyTorch too.
 
 ## Web UI (Trainer Frontend)
 
@@ -328,12 +331,12 @@ One command runs every check, and CI will run the same one. The tests need no GP
 a separate CPU-only environment, `.venv`. That keeps CPU torch out of the training `venv/`:
 
 ```bash
-python -m venv .venv
-.venv/Scripts/python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-.venv/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt
+uv sync --extra cpu --group dev      # creates .venv: CPU torch, the pinned runtime dependencies and the gate tools
 ```
 
-(`.venv/bin/python` on Linux and macOS.) Then:
+(`.venv/bin/python` on Linux and macOS.) Without uv: `python -m venv .venv`, then install CPU torch from
+`https://download.pytorch.org/whl/cpu`, `pip install -r requirements.lock` and the tools pinned under
+`[dependency-groups] dev` in `pyproject.toml`. Then:
 
 ```bash
 .venv/Scripts/python -m maltrainer_quality      # or quality.bat / ./quality.sh, which pick .venv
@@ -358,6 +361,18 @@ python -m maltrainer_quality.typing_gate --tighten
 `--tighten` only lowers entries or removes them. Never add an entry or raise one to make a change
 pass: split the file or the function instead. The coverage floor (`fail_under` in `pyproject.toml`)
 works the same way: raise it when tests land, and never lower it.
+
+**Dependencies.** `pyproject.toml` is the one list (runtime dependencies, the `cpu` / `cu130` PyTorch extras, the
+pinned dev tools). `uv.lock` pins everything for every platform and `requirements.lock` is its pip-installable runtime
+half. After changing dependencies:
+
+```bash
+uv lock
+python -m maltrainer_quality.requirements --write
+```
+
+The gate fails when either lock is stale (`uv lock --check`, then a byte comparison with `uv export`) and when
+`pip-audit` finds a known vulnerability in `requirements.lock`; the audit needs network access, like `uv lock --check`.
 
 ## Documentation
 

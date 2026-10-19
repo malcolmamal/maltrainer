@@ -71,7 +71,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 ```
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.lock
 ```
 
 Optional: `triton-windows` makes `train.compile: true` work on Windows. It is 3-7% faster and

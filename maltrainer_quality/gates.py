@@ -46,6 +46,14 @@ def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
         # pytest-cov can print the shortfall without failing the session; `coverage report`
         # exits non-zero on its own.
         Gate("coverage", "the floor in pyproject.toml", "coverage", ("report",)),
+        Gate("lock", "uv.lock is what pyproject.toml resolves to", "uv", ("lock", "--check")),
+        Gate("requirements", "requirements.lock is what uv.lock exports", "maltrainer_quality.requirements"),
+        Gate(
+            "audit",
+            "no known vulnerabilities in the runtime lock (dev tools excluded)",
+            "pip_audit",
+            ("-r", "requirements.lock", "--no-deps", "--disable-pip"),
+        ),
     )
 
 

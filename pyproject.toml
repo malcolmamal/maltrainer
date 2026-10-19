@@ -1,5 +1,71 @@
-# Tool configuration only. Dependencies are still in requirements.txt; the quality gate
-# (python -m maltrainer_quality) reads the settings below.
+# Dependencies and tool configuration. The code is run from a checkout, not installed: nothing
+# here builds a package. uv.lock pins everything for every platform; requirements.lock is its
+# runtime half for pip users (torch excluded: install the build for your GPU first, see README).
+# The quality gate (python -m maltrainer_quality) reads the settings below and checks the locks.
+
+[project]
+name = "maltrainer"
+version = "0.0.0"
+description = "LoRA and finetune trainers for image and video diffusion models"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "diffusers>=0.28.0",
+    "transformers>=4.57.0",  # Qwen3-VL text encoder (Qwen-Image 2.1, MiniMax H3); tested with 5.0.0
+    "accelerate>=0.27.0",
+    "safetensors>=0.4.0",
+    "bitsandbytes>=0.43.0",
+    "prodigyopt>=1.1.2",
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "av>=12.0.0",  # MiniMax H3 video clips and audio files (bundles FFmpeg)
+    "PyYAML>=6.0",
+    "tqdm>=4.65.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.23.0",
+]
+
+# torch is an extra so the build can be chosen: `uv sync --extra cu130` for the RTX 50 series,
+# `--extra cpu` for CI and the test environment. Not both.
+[project.optional-dependencies]
+cpu = ["torch>=2.10", "torchvision"]
+cu130 = ["torch>=2.10", "torchvision"]
+
+[dependency-groups]
+# Pinned so every checkout runs the same gate.
+dev = [
+    "coverage==7.14.1",
+    "mypy==2.4.0",
+    "pip-audit==2.10.1",
+    "pytest==9.1.0",
+    "pytest-cov==7.1.0",
+    "ruff==0.15.18",
+    "uv==0.12.13",
+]
+
+[tool.uv]
+package = false
+conflicts = [[{ extra = "cpu" }, { extra = "cu130" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu130", extra = "cu130" },
+]
+torchvision = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu130", extra = "cu130" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [tool.ruff]
 target-version = "py310"
