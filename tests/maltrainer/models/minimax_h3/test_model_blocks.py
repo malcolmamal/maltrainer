@@ -44,7 +44,14 @@ def test_the_feed_forward_is_a_swiglu_with_the_gate_in_the_first_half_of_fc1() -
 
 def test_the_adaln_zero_block_modulates_and_gates_each_token_by_its_timestep_and_tag_row() -> None:
     rows = [
-        {"shift_attn": 0.25, "scale_attn": 0.5, "gate_attn": 1.0, "shift_mlp": -0.5, "scale_mlp": 0.25, "gate_mlp": 2.0},
+        {
+            "shift_attn": 0.25,
+            "scale_attn": 0.5,
+            "gate_attn": 1.0,
+            "shift_mlp": -0.5,
+            "scale_mlp": 0.25,
+            "gate_mlp": 2.0,
+        },
         {"gate_attn": 0.0, "gate_mlp": 0.5, "scale_mlp": -0.5},
         {"gate_attn": -1.0, "shift_attn": 1.0},
     ]
@@ -76,7 +83,9 @@ def test_the_block_modulation_is_computed_in_the_dtype_of_the_activations() -> N
     block = _block_with_rows([{"gate_attn": 1.0, "gate_mlp": 1.0}] * 3).to(torch.bfloat16)
     rotary = MiniMaxH3RotaryPosEmbed(1, 10000.0)(torch.zeros(2, 3))
 
-    out = block(torch.randn(1, 2, HIDDEN, dtype=torch.bfloat16), torch.zeros(1, 10), torch.zeros(2).long(), rotary, None)
+    out = block(
+        torch.randn(1, 2, HIDDEN, dtype=torch.bfloat16), torch.zeros(1, 10), torch.zeros(2).long(), rotary, None
+    )
 
     assert out.dtype == torch.bfloat16
 
@@ -100,7 +109,9 @@ def test_each_head_of_the_final_layer_answers_in_its_own_weight_dtype() -> None:
     layer = MiniMaxH3FinalLayer(tiny_config()).eval()
     layer.video_out.to(torch.bfloat16)
 
-    out = layer(torch.randn(1, 2, HIDDEN), torch.zeros(1, 10), torch.zeros(2).long(), torch.tensor([0]), torch.tensor([1]))
+    out = layer(
+        torch.randn(1, 2, HIDDEN), torch.zeros(1, 10), torch.zeros(2).long(), torch.tensor([0]), torch.tensor([1])
+    )
 
     assert (out.video.dtype, out.audio.dtype) == (torch.bfloat16, torch.float32)
 

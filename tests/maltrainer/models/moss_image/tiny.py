@@ -37,7 +37,7 @@ def json_tensor(value: object) -> torch.Tensor:
 
 
 def int8_tensors(model: MOSSImageTransformer) -> Dict[str, torch.Tensor]:
-    """The block Linears as a ComfyUI INT8 ConvRot file stores them: Hadamard-rotated int8 rows, a per-row scale, a marker."""
+    """The block Linears as an INT8 ConvRot file stores them: rotated int8 rows, a row scale, a marker."""
     marker = json_tensor({"format": "int8_tensorwise", "convrot": True, "convrot_groupsize": GROUP_SIZE})
     out: Dict[str, torch.Tensor] = {}
     for key, value in model.state_dict().items():
@@ -49,5 +49,5 @@ def int8_tensors(model: MOSSImageTransformer) -> Dict[str, torch.Tensor]:
         scale = (rotated.abs().amax(dim=-1, keepdim=True) / 127.0).clamp(min=1e-30)
         out[key] = (rotated / scale).round().clamp(-127, 127).to(torch.int8)
         out[f"{base}.weight_scale"] = scale.reshape(-1)
-        out[f"{base}.comfy_quant"] = marker
+        out[f"{base}.comfy_quant"] = marker.clone()
     return out

@@ -31,7 +31,7 @@ class _Probe(nn.Module):
 
 def test_modality_tags_name_the_three_token_kinds_the_adaln_table_is_indexed_by() -> None:
     assert (MiniMaxH3TokenTag.VIDEO, MiniMaxH3TokenTag.TEXT, MiniMaxH3TokenTag.AUDIO) == (0, 1, 2)
-    assert MINIMAX_H3_MODALITY_COUNT == len(MiniMaxH3TokenTag)
+    assert len(MiniMaxH3TokenTag) == MINIMAX_H3_MODALITY_COUNT
 
 
 def test_the_default_config_describes_the_full_h3_transformer() -> None:
