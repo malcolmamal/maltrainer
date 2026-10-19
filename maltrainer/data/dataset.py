@@ -3,6 +3,7 @@ Dataset for Z-Image training.
 """
 
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -74,10 +75,10 @@ class ZImageDataset(Dataset):
             self.image_paths = self.image_paths * self.repeats
             self.captions = self.captions * self.repeats
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         # Load image
         image = Image.open(self.image_paths[idx]).convert("RGB")
         pixel_values = self.transform(image)

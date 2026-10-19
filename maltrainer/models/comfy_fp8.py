@@ -18,20 +18,21 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from safetensors import safe_open
-from torch import nn
+from torch import Tensor, nn
 
 logger = logging.getLogger(__name__)
 
 FP8_FORMATS = {"float8_e4m3fn": torch.float8_e4m3fn, "float8_e5m2": torch.float8_e5m2}
 
 
-def _layer_configs(handle, keys) -> dict[str, dict]:
+def _layer_configs(handle: Any, keys: Iterable[str]) -> dict[str, dict]:
     """prefix -> per-layer quant config, from whichever marker style the file uses."""
     metadata = handle.metadata() or {}
     if "_quantization_metadata" in metadata:
@@ -69,9 +70,8 @@ def read_comfy_checkpoint(path: str | Path) -> tuple[dict[str, torch.Tensor], di
                 continue
             if key.endswith((".scale_input", ".input_scale")):
                 continue  # activation scales only matter to fp8 matmul kernels, not to dequant
-            tensor = handle.get_tensor(key)
             name = key[: -len(".scale_weight")] + ".weight_scale" if key.endswith(".scale_weight") else key
-            tensors[name] = tensor
+            tensors[name] = handle.get_tensor(key)
 
     for prefix, config in layers.items():
         fmt = config.get("format")
@@ -89,7 +89,7 @@ def read_comfy_checkpoint(path: str | Path) -> tuple[dict[str, torch.Tensor], di
 CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
 
 
-def container_prefix(keys, candidates=CONTAINER_PREFIXES) -> str:
+def container_prefix(keys: Iterable[str], candidates: Iterable[str] = CONTAINER_PREFIXES) -> str:
     """The ComfyUI container prefix every key carries ("" if none), so a save can write it back."""
     keys = list(keys)
     for prefix in candidates:
@@ -98,7 +98,9 @@ def container_prefix(keys, candidates=CONTAINER_PREFIXES) -> str:
     return ""
 
 
-def strip_prefix(tensors: dict[str, torch.Tensor], layers: dict[str, dict], candidates=CONTAINER_PREFIXES):
+def strip_prefix(
+    tensors: dict[str, torch.Tensor], layers: dict[str, dict], candidates: Iterable[str] = CONTAINER_PREFIXES
+) -> tuple[dict[str, torch.Tensor], dict[str, dict]]:
     """Drop a ComfyUI container prefix if every key carries it."""
     prefix = container_prefix(tensors, candidates)
     if prefix:
@@ -122,9 +124,7 @@ def dequantize(weight: torch.Tensor, scale: torch.Tensor, dtype: torch.dtype) ->
     return (weight.float() * scale.float()).to(dtype)
 
 
-def dequantize_checkpoint(
-    tensors: dict[str, torch.Tensor], layers: dict[str, dict], dtype: torch.dtype
-) -> dict[str, torch.Tensor]:
+def dequantize_checkpoint(tensors: dict[str, Tensor], layers: dict[str, dict], dtype: torch.dtype) -> dict[str, Tensor]:
     """Plain state dict with every fp8 layer dequantized (for small frozen encoders)."""
     out = dict(tensors)
     for prefix in layers:
@@ -142,15 +142,15 @@ class _Fp8LinearFunction(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, x, weight, scale, bias, compute_dtype):
-        w = dequantize(weight, scale, compute_dtype)
+    def forward(ctx: Any, x: Tensor, weight: Tensor, scale: Tensor, bias: Tensor | None, dtype: torch.dtype) -> Tensor:
+        w = dequantize(weight, scale, dtype)
         ctx.save_for_backward(weight, scale)
-        ctx.compute_dtype = compute_dtype
+        ctx.compute_dtype = dtype
         ctx.input_dtype = x.dtype
-        return F.linear(x.to(compute_dtype), w, None if bias is None else bias.to(compute_dtype))
+        return F.linear(x.to(dtype), w, None if bias is None else bias.to(dtype))
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: Tensor) -> tuple[Tensor | None, ...]:
         weight, scale = ctx.saved_tensors
         grad_input = None
         if ctx.needs_input_grad[0]:

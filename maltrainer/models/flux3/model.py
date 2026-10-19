@@ -33,7 +33,7 @@ from typing import cast
 
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import Tensor, nn
 from torch.utils.checkpoint import checkpoint
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ def apply_rope(x: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
     return out.reshape(*x.shape).type_as(x)
 
 
-def image_ids(h: int, w: int, index: int, device) -> torch.Tensor:
+def image_ids(h: int, w: int, index: int, device: torch.device | str) -> torch.Tensor:
     ids = torch.zeros(h, w, 4, device=device, dtype=torch.float32)
     ids[..., 1] = torch.arange(h, device=device, dtype=torch.float32)[:, None] * IMAGE_ROPE_SCALE
     ids[..., 2] = torch.arange(w, device=device, dtype=torch.float32)[None, :] * IMAGE_ROPE_SCALE
@@ -124,7 +124,7 @@ def image_ids(h: int, w: int, index: int, device) -> torch.Tensor:
     return ids.flatten(0, 1)
 
 
-def text_ids(length: int, device) -> torch.Tensor:
+def text_ids(length: int, device: torch.device | str) -> torch.Tensor:
     ids = torch.zeros(length, 4, device=device, dtype=torch.float32)
     ids[:, 3] = torch.arange(length, device=device, dtype=torch.float32)
     return ids
@@ -258,7 +258,7 @@ class Flux3Transformer(nn.Module):
     def enable_gradient_checkpointing(self) -> None:
         self.gradient_checkpointing = True
 
-    def _run(self, block: nn.Module, x, shift, scale, gate, pe):
+    def _run(self, block: nn.Module, x: Tensor, shift: Tensor, scale: Tensor, gate: Tensor, pe: Tensor) -> Tensor:
         if self.gradient_checkpointing and torch.is_grad_enabled():
             return checkpoint(block, x, shift, scale, gate, pe, use_reentrant=False)
         return block(x, shift, scale, gate, pe)

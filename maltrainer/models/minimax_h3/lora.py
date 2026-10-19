@@ -5,6 +5,7 @@ LoRA network injection for MiniMax H3 Transformer blocks.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -96,7 +97,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         self.name_map: dict[str, str] = {}
         self._inject_lora()
 
-    def _inject_lora(self):
+    def _inject_lora(self) -> None:
         """Inject LoRA layers into target linear modules of MiniMaxH3TransformerBlock.
 
         Targets are matched against the final component of the module path, not as a
@@ -155,9 +156,8 @@ class MiniMaxH3LoRANetwork(nn.Module):
         )
 
     def _add_lora_layer(self, name: str, module: nn.Linear) -> None:
-        lora_layer = MiniMaxH3LoRALayer(module, self.rank, self.alpha)
         safe_name = name.replace(".", "_")
-        self.lora_layers[safe_name] = lora_layer
+        self.lora_layers[safe_name] = lora_layer = MiniMaxH3LoRALayer(module, self.rank, self.alpha)
         self.name_map[safe_name] = name
         self._wrap_forward(module, lora_layer)
 
@@ -171,7 +171,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         """
         original_forward = module.forward
 
-        def forward(x, _orig=original_forward, _lora=lora):
+        def forward(x: torch.Tensor, _orig: Any = original_forward, _lora: nn.Module = lora) -> torch.Tensor:
             base = _orig(x)
             delta = _lora(x)
             if delta.dtype == base.dtype:
@@ -187,7 +187,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         path: str,
         *,
         multiplier: float = 1.0,
-        device=None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
         adaln_grid_path: str | None = None,
     ) -> int:
@@ -312,7 +312,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         )
         return attached
 
-    def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
+    def set_lora_dtype(self, device: torch.device | str, dtype: torch.dtype) -> None:
         """Move/cast only the adapters, leaving the frozen base untouched.
 
         ``self.transformer`` is a submodule, so ``network.to(dtype=...)`` would also
@@ -321,7 +321,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         """
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         """Only the adapter parameters, for the optimizer and gradient clipping.
 
         ``parameters()`` also yields the frozen transformer's tensors. They carry no grads so
@@ -353,5 +353,5 @@ class MiniMaxH3LoRANetwork(nn.Module):
             state_dict[f"{full_name}.alpha"] = torch.tensor(lora_layer.alpha, dtype=torch.float32)
         return state_dict
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -79,15 +80,15 @@ class SupraLoRANetwork(nn.Module):
     def _wrap_forward(module: nn.Linear, lora: nn.Module) -> None:
         original_forward = module.forward
 
-        def forward(x, _orig=original_forward, _lora=lora):
+        def forward(x: torch.Tensor, _orig: Any = original_forward, _lora: Any = lora) -> torch.Tensor:
             return _orig(x) + _lora(x)
 
-        module.forward = forward  # type: ignore[method-assign]  # monkeypatching the instance forward is the point; the stub types forward as a method
+        module.forward = forward  # type: ignore[method-assign, assignment]  # monkeypatching the instance forward is the point; the stub types forward as a method
 
     def set_lora_dtype(self, device: torch.device, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
     def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
@@ -130,5 +131,5 @@ class SupraLoRANetwork(nn.Module):
         logger.info("Loaded %d Supra2-IMG LoRA layers from %s", loaded, path)
         return loaded
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

@@ -44,7 +44,7 @@ def _resolve_tokenizer_assets(explicit: str | Path | None) -> Path:
 MINIMAX_H3_TEXT_LAYERS = 50
 
 
-def _describe_text_config(text_config) -> str:
+def _describe_text_config(text_config: Any) -> str:
     """Compact summary of the resolved text tower, for a startup sanity check.
 
     Read defensively: transformers has reshuffled where RoPE settings live between

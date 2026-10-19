@@ -14,7 +14,7 @@ class TextualInversionEmbedding(nn.Module):
 
     def __init__(
         self,
-        tokenizer,
+        tokenizer: Any,
         text_encoder: Any,  # a transformers model: nn.Module hides its methods from mypy
         trigger_token: str = "sks",
         num_vectors: int = 1,
@@ -59,7 +59,7 @@ class TextualInversionEmbedding(nn.Module):
 
         return token_ids
 
-    def _initialize_embeddings(self):
+    def _initialize_embeddings(self) -> None:
         """Initialize new embeddings with init_text embeddings."""
         # Encode init text to get initial embeddings
         init_token_ids = self.tokenizer.encode(self.init_text, add_special_tokens=False)
@@ -79,7 +79,7 @@ class TextualInversionEmbedding(nn.Module):
         embeddings = torch.stack([embedding_layer.weight[tid] for tid in self.token_ids])
         return embeddings
 
-    def set_embeddings(self, embeddings: torch.Tensor):
+    def set_embeddings(self, embeddings: torch.Tensor) -> None:
         """Set the embedding vectors."""
         embedding_layer = self.text_encoder.get_input_embeddings()
         with torch.no_grad():
@@ -94,7 +94,7 @@ class TextualInversionEmbedding(nn.Module):
             "embedding": embeddings,
         }
 
-    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False):  # noqa: ARG002 - nn.Module's signature
+    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False) -> Any:  # noqa: ARG002 - nn.Module's signature
         """Load embeddings from state dict."""
         embeddings = state_dict["embedding"]
         self.set_embeddings(embeddings)

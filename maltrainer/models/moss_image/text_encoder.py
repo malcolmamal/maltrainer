@@ -33,7 +33,7 @@ import torch
 import torch.nn.functional as F
 from accelerate import init_empty_weights
 from safetensors.torch import load_file
-from torch import nn
+from torch import Tensor, nn
 
 from maltrainer.models.flux3.loading import is_int8_convrot
 from maltrainer.models.minimax_h3.int8_convrot import (
@@ -146,7 +146,9 @@ class MLP(nn.Module):
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
 
 
-def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> torch.Tensor:
+def chunk_gated_delta_rule(
+    query: Tensor, key: Tensor, value: Tensor, g: Tensor, beta: Tensor, chunk_size: int = 64
+) -> Tensor:
     """ComfyUI's torch_chunk_gated_delta_rule from a zero state. [B, L, H, D] in, [B, L, H, Dv] out."""
     initial_dtype = query.dtype
     query = F.normalize(query, dim=-1)
@@ -158,9 +160,7 @@ def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> 
     batch_size, num_heads, sequence_length, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
     pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
-    query = F.pad(query, (0, 0, 0, pad_size))
-    key = F.pad(key, (0, 0, 0, pad_size))
-    value = F.pad(value, (0, 0, 0, pad_size))
+    query, key, value = [F.pad(x, (0, 0, 0, pad_size)) for x in (query, key, value)]
     beta = F.pad(beta, (0, pad_size))
     g = F.pad(g, (0, pad_size))
     total_sequence_length = sequence_length + pad_size
@@ -327,7 +327,7 @@ class Qwen35TextModel(nn.Module):
         self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps, add=True)
         self.compute_dtype = torch.float32
 
-    def rope(self, length: int, device) -> tuple[torch.Tensor, torch.Tensor]:
+    def rope(self, length: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
         """Text-only positions: Qwen3.5's interleaved MRoPE collapses to 1D RoPE (all three axes equal)."""
         dim = int(self.config.head_dim * self.config.partial_rotary_factor)
         inv_freq = 1.0 / (self.config.rope_theta ** (torch.arange(0, dim, 2, device=device).float() / dim))
@@ -351,7 +351,7 @@ class Qwen35TextModel(nn.Module):
 
 
 class MOSSImageTextEncoder(nn.Module):
-    def __init__(self, model: Qwen35TextModel, tokenizer):
+    def __init__(self, model: Qwen35TextModel, tokenizer: Any):
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer

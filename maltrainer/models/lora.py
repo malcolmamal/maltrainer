@@ -3,7 +3,7 @@ LoRA (Low-Rank Adaptation) implementation for Z-Image transformers.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, cast
 
 import torch
@@ -40,7 +40,7 @@ class LoRALayer(nn.Module):
         """Forward pass through LoRA layer."""
         return self.lora_up(self.lora_down(x)) * self.scale
 
-    def set_alpha(self, alpha: float):
+    def set_alpha(self, alpha: float) -> None:
         """Update alpha and scaling factor."""
         self.alpha = float(alpha)
         self.scale = self.alpha / self.rank
@@ -68,7 +68,7 @@ class LoRANetwork(nn.Module):
         self.name_map: dict[str, str] = {}  # Map safe_name to original dot_name
         self._inject_lora()
 
-    def _inject_lora(self):
+    def _inject_lora(self) -> None:
         """Inject LoRA layers into the transformer."""
         for name, module in self.transformer.named_modules():
             # Check if this module should have LoRA
@@ -84,13 +84,15 @@ class LoRANetwork(nn.Module):
                 # Monkey-patch the forward method
                 original_forward = module.forward
 
-                def make_forward(orig_fwd, lora):
-                    def forward(x):
+                def make_forward(
+                    orig_fwd: Callable[[torch.Tensor], torch.Tensor], lora: nn.Module
+                ) -> Callable[[torch.Tensor], torch.Tensor]:
+                    def forward(x: torch.Tensor) -> torch.Tensor:
                         return orig_fwd(x) + lora(x)
 
                     return forward
 
-                module.forward = make_forward(original_forward, lora_layer)
+                cast(Any, module).forward = make_forward(original_forward, lora_layer)
 
     def get_state_dict(self) -> dict:
         """Get LoRA state dict for saving in Kohya/AI-Toolkit format."""
@@ -105,7 +107,7 @@ class LoRANetwork(nn.Module):
             state_dict[f"{full_name}.alpha"] = torch.tensor(lora_layer.alpha)
         return state_dict
 
-    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False):  # noqa: ARG002 - nn.Module's signature
+    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False) -> Any:  # noqa: ARG002 - nn.Module's signature
         """Load LoRA weights from a state dict: kohya's lora_down / lora_up names or the lora_A /
         lora_B ones get_state_dict writes, by dot or safe name, with or without a prefix."""
         missing = []
@@ -125,7 +127,7 @@ class LoRANetwork(nn.Module):
                 "LoRA: %d of %d layers not in the state dict, e.g. %s", len(missing), len(self.lora_layers), missing[:3]
             )
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         """Forward pass through transformer with LoRA."""
         return self.transformer(*args, **kwargs)
 

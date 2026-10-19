@@ -22,7 +22,7 @@ def load_config(config_path: str) -> dict[str, Any]:
             raise ValueError(f"{path} is not valid YAML: {error}") from error
 
 
-def save_config_to_output(config: dict[str, Any], output_path: str):
+def save_config_to_output(config: dict[str, Any], output_path: str) -> None:
     """Save config to output directory for reproducibility."""
     output_dir = Path(output_path)
     output_dir.mkdir(parents=True, exist_ok=True)

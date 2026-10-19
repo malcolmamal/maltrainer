@@ -18,6 +18,7 @@ from torch.nn import functional as F
 
 logger = logging.getLogger(__name__)
 
+_T = torch.Tensor
 _HADAMARD_CACHE: dict[tuple[int, str, torch.dtype], torch.Tensor] = {}
 
 
@@ -47,11 +48,7 @@ def _hadamard(size: int, device: torch.device, dtype: torch.dtype) -> torch.Tens
     cached = _HADAMARD_CACHE.get(key)
     if cached is not None:
         return cached
-    base = torch.tensor(
-        ((1, 1, 1, -1), (1, 1, -1, 1), (1, -1, 1, 1), (-1, 1, 1, 1)),
-        device=device,
-        dtype=dtype,
-    )
+    base = torch.tensor(((1, 1, 1, -1), (1, 1, -1, 1), (1, -1, 1, 1), (-1, 1, 1, 1)), device=device, dtype=dtype)
     matrix = base
     current = 4
     while current < size:
@@ -110,7 +107,9 @@ def _resolve_grad_precision(value: str | None) -> str:
 
 class _Int8ConvRotFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision):
+    def forward(
+        ctx: Any, inputs: _T, weight: _T, scale: _T, bias: _T | None, group_size: int, grad_precision: str
+    ) -> _T:
         group_size = int(group_size)
         rotated = rotate_activation(inputs, group_size)
         flat = rotated.reshape(-1, rotated.shape[-1])
@@ -127,7 +126,7 @@ class _Int8ConvRotFunction(torch.autograd.Function):
         return output.to(inputs.dtype).reshape(*inputs.shape[:-1], weight.shape[0])
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: _T) -> tuple[_T | None, ...]:
         weight, scale = ctx.saved_tensors
         precision = ctx.grad_precision
 
@@ -155,7 +154,9 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
     """Eager fallback for CPU or builds without torch._int_mm. Always computes in float."""
 
     @staticmethod
-    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision=None):  # noqa: ARG004 - same as the int_mm path
+    def forward(
+        ctx: Any, inputs: _T, weight: _T, scale: _T, bias: _T | None, group_size: int, _grad_precision: object = None
+    ) -> _T:
         group_size = int(group_size)
         rotated = rotate_activation(inputs, group_size)
         dense_weight = (weight.float() * scale.float()).to(inputs.dtype)
@@ -167,7 +168,7 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
         return output
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: _T) -> tuple[_T | None, ...]:
         weight, scale = ctx.saved_tensors
         dense_weight = weight.float() * scale.float()
         grad_input = grad_output.reshape(-1, grad_output.shape[-1]).float() @ dense_weight
@@ -182,9 +183,7 @@ def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tenso
     return operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size, grad_precision)
 
 
-def load_comfy_int8_convrot_state_dict(
-    checkpoint_path: str, *, device: torch.device
-) -> tuple[dict[str, torch.Tensor], int]:
+def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.device) -> tuple[dict[str, _T], int]:
     state_dict: dict[str, torch.Tensor] = {}
     marker_config: dict[str, dict] = {}
     with safe_open(str(checkpoint_path), framework="pt", device="cpu") as handle:

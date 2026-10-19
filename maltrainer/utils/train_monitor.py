@@ -35,6 +35,7 @@ import logging
 import math
 import time
 from collections.abc import Sequence
+from typing import Any
 
 import torch
 
@@ -125,7 +126,7 @@ class TrainMonitor:
         """Time spent outside training (preview rounds), kept out of s/step."""
         self.excluded += float(seconds)
 
-    def step_done(self, step: int, total: int, optimizer=None) -> None:
+    def step_done(self, step: int, total: int, optimizer: Any = None) -> None:
         """Call once per optimizer step; logs the summary every ``every`` steps."""
         self.steps += 1
         self.steps_total += 1
@@ -134,7 +135,7 @@ class TrainMonitor:
         logger.info("[monitor] %s", self.summary(step, total, optimizer))
         self._reset()
 
-    def summary(self, step: int, total: int, optimizer=None) -> str:
+    def summary(self, step: int, total: int, optimizer: Any = None) -> str:
         parts = [f"step {step}/{total}"]
         if self.losses:
             bands = ", ".join(

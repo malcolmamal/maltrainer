@@ -43,7 +43,7 @@ def _block_leaf(key: str, blocks: str) -> str | None:
     return ".".join(parts[2:-1])
 
 
-def _to_cpu(value):
+def _to_cpu(value: Any) -> Any:
     if torch.is_tensor(value):
         return value.detach().to("cpu", copy=True)
     if isinstance(value, dict):
@@ -53,7 +53,7 @@ def _to_cpu(value):
     return value
 
 
-def _remove_hooks(optimizer) -> None:
+def _remove_hooks(optimizer: Any) -> None:
     """Fused optimizers (Automagic3) step from grad hooks; a frozen window's must not fire."""
     for handle in getattr(optimizer, "_hook_handles", []):
         handle.remove()

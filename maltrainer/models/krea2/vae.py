@@ -104,7 +104,7 @@ class ResidualBlock(nn.Module):
         )
         self.shortcut = CausalConv2d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.residual(x) + self.shortcut(x)
 
 
@@ -115,7 +115,7 @@ class AttentionBlock(nn.Module):
         self.to_qkv = nn.Conv2d(dim, dim * 3, 1)
         self.proj = nn.Conv2d(dim, dim, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, h, w = x.shape
         q, k, v = self.to_qkv(self.norm(x)).chunk(3, dim=1)
         q, k, v = (t.reshape(b, 1, c, h * w).transpose(-1, -2) for t in (q, k, v))
@@ -131,7 +131,7 @@ class Resample(nn.Module):
         self.resample = nn.Sequential(nn.ZeroPad2d((0, 1, 0, 1)), nn.Conv2d(dim, dim, 3, stride=2))
         self.temporal = temporal
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.resample(x)
 
 
@@ -140,11 +140,11 @@ class WanImageEncoder(nn.Module):
         self,
         dim: int = 96,
         z_dim: int = 16,
-        dim_mult=(1, 2, 4, 4),
+        dim_mult: tuple[int, ...] = (1, 2, 4, 4),
         num_res_blocks: int = 2,
-        temporal_downsample=(False, True, True),
+        temporal_downsample: tuple[bool, ...] = (False, True, True),
         image_channels: int = 3,
-    ):
+    ) -> None:
         super().__init__()
         dims = [dim * u for u in (1, *tuple(dim_mult))]
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
@@ -161,7 +161,7 @@ class WanImageEncoder(nn.Module):
             RMSNorm(out_dim, images=False), nn.SiLU(), CausalConv2d(out_dim, z_dim * 2, 3, padding=1)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.middle(self.downsamples(self.conv1(x))))
 
 

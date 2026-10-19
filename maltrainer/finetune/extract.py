@@ -90,7 +90,9 @@ def keep_count(s: torch.Tensor, mode: str, value: float, cap: int) -> int:
     return max(1, min(k, cap))
 
 
-def factor(diff: torch.Tensor, caps: Sequence[int], mode: str, value: float, device: str):
+def factor(
+    diff: torch.Tensor, caps: Sequence[int], mode: str, value: float, device: str
+) -> dict[int, tuple[torch.Tensor, torch.Tensor, int, float]]:
     """{cap: (down [k, in], up [out, k], k, dropped share of ||diff||)} from one SVD, in fp32 on the CPU."""
     u, s, vh = torch.linalg.svd(diff.to(device, torch.float32), full_matrices=False)
     energy = s.double() ** 2
@@ -106,15 +108,15 @@ def factor(diff: torch.Tensor, caps: Sequence[int], mode: str, value: float, dev
     return out
 
 
-def _check_same_tensors(base, tuned, base_names: dict[str, str], tuned_names: dict[str, str]) -> None:
+def _check_same_tensors(base: safe_open, tuned: safe_open, base_map: dict[str, str], tuned_map: dict[str, str]) -> None:
     """Both checkpoints hold the same tensors (names without their container prefix) in the same shapes."""
-    if set(base_names) != set(tuned_names):
-        only = sorted(set(base_names) ^ set(tuned_names))
+    if set(base_map) != set(tuned_map):
+        only = sorted(set(base_map) ^ set(tuned_map))
         raise ValueError(f"the checkpoints have different tensors, e.g. {only[:3]} ({len(only)} differ)")
     reshaped = sorted(
         name
-        for name in base_names
-        if base.get_slice(base_names[name]).get_shape() != tuned.get_slice(tuned_names[name]).get_shape()
+        for name in base_map
+        if base.get_slice(base_map[name]).get_shape() != tuned.get_slice(tuned_map[name]).get_shape()
     )
     if reshaped:
         raise ValueError(f"the checkpoints' tensors differ in shape, e.g. {reshaped[:3]} ({len(reshaped)} differ)")
@@ -151,14 +153,12 @@ def extract(
         _check_same_tensors(base, tuned, base_names, tuned_names)
         profile = profile or GENERIC
         names = [n for n in base_names if n.endswith(".weight")]
-        iterator = progress(names) if progress else names
-        for name in iterator:
+        for name in progress(names) if progress else names:
             b = base.get_slice(base_names[name])
             shape, stored = b.get_shape(), b.get_dtype()
             if stored in ("I8", "U8", "F8_E4M3", "F8_E5M2"):
                 raise ValueError(f"{name} is stored as {stored}; extraction needs plain (bf16/fp16/fp32) checkpoints")
-            w_base = base.get_tensor(base_names[name])
-            w_tuned = tuned.get_tensor(tuned_names[name])
+            w_base, w_tuned = base.get_tensor(base_names[name]), tuned.get_tensor(tuned_names[name])
             if torch.equal(w_base, w_tuned):
                 unchanged += 1
                 continue

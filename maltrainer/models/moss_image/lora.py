@@ -11,8 +11,8 @@ weight (comfy/lora.py).
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
-from typing import cast
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -150,17 +150,17 @@ class MOSSImageLoRANetwork(nn.Module):
     def _wrap(module: nn.Module, loras: Sequence[nn.Module], concat: bool = False) -> None:
         original = module.forward
 
-        def forward(x, _orig=original, _loras=loras):
+        def forward(x: torch.Tensor, _orig: Any = original, _loras: Sequence[nn.Module] = loras) -> torch.Tensor:
             base = _orig(x)
             delta = torch.cat([lora(x) for lora in _loras], dim=-1) if concat else _loras[0](x)
             return (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta
 
         module.forward = forward
 
-    def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
+    def set_lora_dtype(self, device: torch.device | str, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
     def param_groups(self, split: bool) -> list[dict]:
@@ -183,5 +183,5 @@ class MOSSImageLoRANetwork(nn.Module):
             out[f"{key}.alpha"] = torch.tensor(float(layer.alpha), dtype=torch.float32)
         return out
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

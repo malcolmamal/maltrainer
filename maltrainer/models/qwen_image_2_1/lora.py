@@ -5,8 +5,9 @@ LoRA network injection for Qwen-Image-2.1 Transformer.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -64,7 +65,7 @@ class QwenImage21LoRANetwork(nn.Module):
         self.name_map: dict[str, str] = {}
         self._inject_lora()
 
-    def _inject_lora(self):
+    def _inject_lora(self) -> None:
         """Inject LoRA layers into target linear modules of Qwen-Image-2.1 Transformer blocks."""
         injected = 0
         for name, module in self.transformer.named_modules():
@@ -72,11 +73,7 @@ class QwenImage21LoRANetwork(nn.Module):
                 continue
 
             # Check if module matches any target pattern
-            matched = False
-            for target in self.target_modules:
-                if name.endswith(f".{target}") or name == target:
-                    matched = True
-                    break
+            matched = any(name.endswith(f".{target}") or name == target for target in self.target_modules)
 
             if matched and isinstance(module, nn.Linear):
                 self._add_lora_layer(name, module)
@@ -100,14 +97,14 @@ class QwenImage21LoRANetwork(nn.Module):
     def _wrap_forward(module: nn.Linear, lora: nn.Module) -> None:
         original_forward = module.forward
 
-        def forward(x, _orig=original_forward, _lora=lora):
+        def forward(x: torch.Tensor, _orig: Any = original_forward, _lora: Any = lora) -> torch.Tensor:
             base = _orig(x)
             delta = _lora(x)
             if delta.dtype == base.dtype:
                 return base + delta
             return (base + delta).to(base.dtype)
 
-        module.forward = forward  # type: ignore[method-assign]  # monkeypatching the instance forward is the point; the stub types forward as a method
+        module.forward = forward  # type: ignore[method-assign, assignment]  # monkeypatching the instance forward is the point; the stub types forward as a method
 
     def load_assistant_adapter(
         self,
@@ -185,7 +182,7 @@ class QwenImage21LoRANetwork(nn.Module):
         """Move and cast only the LoRA adapters."""
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         """Yield only the adapter parameters for optimization."""
         return self.lora_layers.parameters()
 
@@ -218,5 +215,5 @@ class QwenImage21LoRANetwork(nn.Module):
             state_dict[f"{full_name}.alpha"] = torch.tensor(lora_layer.alpha, dtype=torch.float32)
         return state_dict
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

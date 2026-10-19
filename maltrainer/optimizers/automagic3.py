@@ -4,6 +4,7 @@ Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / F
 
 import itertools
 import logging
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 import torch
@@ -28,7 +29,7 @@ class Automagic3(torch.optim.Optimizer):
 
     def __init__(
         self,
-        params,
+        params: Any,
         lr: float = 1e-6,
         min_lr: float = 1e-8,
         max_lr: float = 1e3,
@@ -38,7 +39,7 @@ class Automagic3(torch.optim.Optimizer):
         weight_decay: float = 0.0,
         polarity_history: int = 8,
         fused: bool = False,
-    ):
+    ) -> None:
         if min_lr > max_lr:
             raise ValueError(f"min_lr ({min_lr}) must be <= max_lr ({max_lr})")
         if lr > 1e-3:
@@ -118,7 +119,7 @@ class Automagic3(torch.optim.Optimizer):
     _PACK_CONSTS: ClassVar[dict] = {}
 
     @classmethod
-    def _pack_consts(cls, device):
+    def _pack_consts(cls, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
         consts = cls._PACK_CONSTS.get(device)
         if consts is None:
             consts = (
@@ -144,7 +145,7 @@ class Automagic3(torch.optim.Optimizer):
         return vals.view(-1)[:numel]
 
     @classmethod
-    def _vote_masks(cls, hist: torch.Tensor, start: int, numel: int):
+    def _vote_masks(cls, hist: torch.Tensor, start: int, numel: int) -> tuple[torch.Tensor, torch.Tensor]:
         """(up, down) 0/1 masks from the packed sign history, oldest row at ``start``.
 
         up: the sign was the same in all H steps. down: it flipped at every step. Both are
@@ -178,8 +179,8 @@ class Automagic3(torch.optim.Optimizer):
         else:
             dst.copy_(cls._stochastic_round(src_fp32, dst.dtype))
 
-    def _make_accum_hook(self):
-        def _hook(p: Any):  # Any: _accum_grad is an attribute set on the parameter
+    def _make_accum_hook(self) -> Callable[[Any], None]:
+        def _hook(p: Any) -> None:  # Any: _accum_grad is an attribute set on the parameter
             if p.grad is None:
                 return
             if hasattr(p, "_accum_grad"):
@@ -208,8 +209,8 @@ class Automagic3(torch.optim.Optimizer):
         else:
             state["exp_avg_sq"] = torch.zeros(p.shape, dtype=p.dtype, device=p.device)
 
-    def _make_backward_hook(self, group):
-        def _hook(p: torch.Tensor):
+    def _make_backward_hook(self, group: dict) -> Callable[[torch.Tensor], None]:
+        def _hook(p: torch.Tensor) -> None:
             self._update_param(p, group)
 
         return _hook
@@ -234,8 +235,7 @@ class Automagic3(torch.optim.Optimizer):
         self._nonfinite = bad if self._nonfinite is None else self._nonfinite.add_(bad.to(self._nonfinite.device))
         grad.nan_to_num_(nan=0.0, posinf=0.0, neginf=0.0)
 
-        beta2 = group["beta2"]
-        eps = group["eps"]
+        beta2, eps = group["beta2"], group["eps"]
         sq = grad * grad
 
         if p.dim() >= 2:
@@ -316,7 +316,7 @@ class Automagic3(torch.optim.Optimizer):
     # ----------------------------------------------------------- optimizer API
 
     @torch.no_grad()
-    def step(self, closure=None):
+    def step(self, closure: Callable[[], Any] | None = None) -> Any:
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -384,7 +384,7 @@ class Automagic3(torch.optim.Optimizer):
         lrs = self.get_learning_rates()
         return sum(lrs) / len(lrs) if lrs else float(self.defaults["lr"])
 
-    def load_state_dict(self, state_dict):
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         # torch casts floating state to each param's dtype, which would round the fp32 rates
         # of bf16 params (a full finetune) to bf16; put the saved values back afterwards.
         saved_lrs = {

@@ -77,7 +77,7 @@ def _text_key(key: str) -> str | None:
 
 
 class Flux3TextEncoder(nn.Module):
-    def __init__(self, model: Any, tokenizer):
+    def __init__(self, model: Any, tokenizer: Any) -> None:
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
@@ -85,8 +85,8 @@ class Flux3TextEncoder(nn.Module):
         for k in TAP_LAYERS[:-1]:
             model.layers[k].register_forward_pre_hook(self._capture(k), with_kwargs=True)
 
-    def _capture(self, index: int):
-        def hook(_module, args, kwargs):
+    def _capture(self, index: int) -> Any:
+        def hook(_module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
             hidden = args[0] if args else kwargs["hidden_states"]
             self._captured[index] = hidden.detach()
 

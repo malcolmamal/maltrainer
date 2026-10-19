@@ -28,6 +28,7 @@ import random
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
@@ -61,7 +62,7 @@ DEFAULT_PROMPTS: dict[str, list[str]] = {
 
 
 class Gallery:
-    def __init__(self, config, people: dict[str, str], output_dir: Path):
+    def __init__(self, config: Any, people: dict[str, str], output_dir: Path):
         """``people``: trigger -> class word (a finetune's prior.classes)."""
         config = config if isinstance(config, dict) else ({} if config in (None, True) else {"enabled": False})
         self.people = dict(sorted(people.items()))

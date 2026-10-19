@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from maltrainer.data.minimax_dataset import AUDIO_SAMPLE_RATE, FPS, bucket_size, resize_and_crop
 
 
-def _require_av():
+def _require_av() -> Any:
     try:
         import av
     except ImportError as e:
@@ -53,7 +54,7 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
         last_time = 0.0
         target = 0
 
-        def convert(frame) -> np.ndarray:
+        def convert(frame: Any) -> np.ndarray:
             nonlocal size
             image = frame.to_image()
             if size is None:

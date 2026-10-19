@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 ROPE_THETA = 10000
 ROPE_AXES = 4
+_T = torch.Tensor
 LATENT_CHANNELS = 128
 TIME_FREQ_DIM = 256
 TIME_FACTOR = 1000.0
@@ -91,7 +93,7 @@ def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     return out.reshape(*out.shape[:-1], 2, 2).float()
 
 
-def position_ids(h: int, w: int, text_len: int, device) -> torch.Tensor:
+def position_ids(h: int, w: int, text_len: int, device: torch.device) -> torch.Tensor:
     """[h*w + text_len, 4] (r, f, h, w): the image first, at f = text_len, rows/cols centred; then text."""
     ids = torch.zeros(h * w + text_len, 4, device=device, dtype=torch.float32)
     ids[: h * w, 1] = text_len
@@ -132,14 +134,13 @@ class RMSNorm(nn.Module):
         return F.rms_norm(x, (x.shape[-1],), self.weight.to(x.dtype), self.eps)
 
 
-def attention(q, k, v, q_norm: RMSNorm, k_norm: RMSNorm, pe: torch.Tensor, heads: int) -> torch.Tensor:
+def attention(q: _T, k: _T, v: _T, q_norm: RMSNorm, k_norm: RMSNorm, pe: _T, heads: int) -> torch.Tensor:
     """[B, N, H*D] q/k/v -> [B, N, H*D]. QK-norm and RoPE in fp32, rounded once, as ComfyUI's
     fused rms_rope_split_half kernel does at inference."""
     B, N, _ = q.shape
     q = apply_rope(q_norm(q.view(B, N, heads, -1).float()), pe).to(v.dtype)
     k = apply_rope(k_norm(k.view(B, N, heads, -1).float()), pe).to(v.dtype)
-    v = v.view(B, N, heads, -1)
-    out = F.scaled_dot_product_attention(q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2))
+    out = F.scaled_dot_product_attention(q.transpose(1, 2), k.transpose(1, 2), v.view(B, N, heads, -1).transpose(1, 2))
     return out.transpose(1, 2).reshape(B, N, -1)
 
 
@@ -188,7 +189,7 @@ class Block(nn.Module):
         self.proj["ffn_down"] = nn.Linear(ffn_dim, dim, bias=False)
 
     def forward(
-        self, x: torch.Tensor, shift_a, scale_a, gate_a, shift_f, scale_f, gate_f, pe: torch.Tensor
+        self, x: _T, shift_a: _T, scale_a: _T, gate_a: _T, shift_f: _T, scale_f: _T, gate_f: _T, pe: _T
     ) -> torch.Tensor:
         """The six adaLN vectors are [B, 1, D], shared by every token."""
         y = self.norm1(x) * (1 + scale_a) + shift_a
@@ -226,20 +227,19 @@ class MOSSImageTransformer(nn.Module):
     def enable_gradient_checkpointing(self) -> None:
         self.gradient_checkpointing = True
 
-    def _run(self, block: nn.Module, *args):
+    def _run(self, block: nn.Module, *args: Any) -> Any:
         if self.gradient_checkpointing and torch.is_grad_enabled():
             return checkpoint(block, *args, use_reentrant=False)
         return block(*args)
 
-    def forward(self, x: torch.Tensor, sigma: torch.Tensor, context: torch.Tensor, skip_layers=()) -> torch.Tensor:
+    def forward(self, x: _T, sigma: _T, context: _T, skip_layers: tuple[int, ...] = ()) -> torch.Tensor:
         """x [B, 128, H, W] noisy latent, sigma [B] in [0, 1], context [B, L, 4096] -> v [B, 128, H, W].
 
         skip_layers: joint blocks to leave out (CFG's negative branch skips block 22 in the reference
         sampler; ComfyUI's SkipLayerGuidanceDiTSimple)."""
         B, _, H, W = x.shape
         dtype, device = self.compute_dtype, x.device
-        x = x.to(dtype)
-        context = context.to(dtype)
+        x, context = x.to(dtype), context.to(dtype)
         if context.shape[0] != B:
             context = context.expand(B, -1, -1)
         n_img, n_txt = H * W, context.shape[1]

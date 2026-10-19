@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from typing import cast
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -30,7 +30,7 @@ IO_LAYERS = ("first", "tmlp.0", "tmlp.2", "txtmlp.1", "txtmlp.3", "tproj.1", "la
 TARGET_PRESETS = ("attn-mlp", "blocks+txt", "all")
 
 
-def _selected(name: str, preset: str, block_range) -> bool:
+def _selected(name: str, preset: str, block_range: tuple[int, ...] | None) -> bool:
     if name.startswith("blocks."):
         index = int(name.split(".", 2)[1])
         if block_range is not None and not block_range[0] <= index <= block_range[1]:
@@ -117,7 +117,7 @@ class Krea2LoRANetwork(nn.Module):
     def _wrap(module: nn.Module, lora: nn.Module, active: list[bool]) -> None:
         original = module.forward
 
-        def forward(x, _orig=original, _lora=lora, _active=active):
+        def forward(x: torch.Tensor, _orig: Any = original, _lora: Any = lora, _active: Any = active) -> torch.Tensor:
             base = _orig(x)
             if not _active[0]:
                 return base
@@ -135,10 +135,10 @@ class Krea2LoRANetwork(nn.Module):
         finally:
             self._active[0] = True
 
-    def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
+    def set_lora_dtype(self, device: torch.device | str, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
     def param_groups(self, split: bool) -> list[dict]:
@@ -160,5 +160,5 @@ class Krea2LoRANetwork(nn.Module):
             out[f"{key}.alpha"] = torch.tensor(float(layer.alpha), dtype=torch.float32)
         return out
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

@@ -57,9 +57,9 @@ SETTINGS = ("every", "at_start", "negative", "steps", "cfg", "width", "height", 
 ROWS = ("raw", "ema")
 
 
-def _entries(prompts) -> list[tuple[str, bool]]:
+def _entries(prompts: Sequence[object] | None) -> list[tuple[str, bool]]:
     """``prompts`` items as (prompt, enabled): a string, or {prompt: ..., enabled: ...}."""
-    out = []
+    out: list[tuple[str, bool]] = []
     for item in prompts or []:
         if isinstance(item, dict):
             text = str(item.get("prompt", "")).strip()

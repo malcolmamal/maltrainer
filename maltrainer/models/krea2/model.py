@@ -58,7 +58,7 @@ def rope(pos: torch.Tensor, dim: int, theta: float) -> torch.Tensor:
     return out.reshape(*out.shape[:-1], 2, 2).float()
 
 
-def embed_nd(ids: torch.Tensor, axes_dim, theta: float) -> torch.Tensor:
+def embed_nd(ids: torch.Tensor, axes_dim: list[int] | tuple[int, ...], theta: float) -> torch.Tensor:
     emb = torch.cat([rope(ids[..., i], axes_dim[i], theta) for i in range(ids.shape[-1])], dim=-3)
     return emb.unsqueeze(1)  # [B, 1, L, headdim/2, 2, 2]
 
@@ -142,7 +142,7 @@ class DoubleSharedModulation(nn.Module):
         super().__init__()
         self.lin = nn.Parameter(torch.zeros(6 * dim))
 
-    def forward(self, vec: torch.Tensor):
+    def forward(self, vec: torch.Tensor) -> tuple[torch.Tensor, ...]:
         return (vec + self.lin.to(vec.dtype)).chunk(6, dim=-1)
 
 
@@ -151,20 +151,20 @@ class SimpleModulation(nn.Module):
         super().__init__()
         self.lin = nn.Parameter(torch.zeros(2, dim))
 
-    def forward(self, vec: torch.Tensor):
+    def forward(self, vec: torch.Tensor) -> tuple[torch.Tensor, ...]:
         out = vec + self.lin.to(vec.dtype).unsqueeze(0)
         return out.chunk(2, dim=1)
 
 
 class TextFusionBlock(nn.Module):
-    def __init__(self, features, heads, multiplier, bias=False, kvheads=None):
+    def __init__(self, features: int, heads: int, multiplier: int, bias: bool = False, kvheads: int | None = None):
         super().__init__()
         self.prenorm = RMSNorm(features)
         self.postnorm = RMSNorm(features)
         self.attn = Attention(features, heads, kvheads=kvheads, bias=bias)
         self.mlp = SwiGLU(features, multiplier, bias)
 
-    def forward(self, x, mask=None):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         x = x + self.attn(self.prenorm(x), mask=mask)
         return x + self.mlp(self.postnorm(x))
 
@@ -172,17 +172,19 @@ class TextFusionBlock(nn.Module):
 class TextFusionTransformer(nn.Module):
     """Fuses the 12-layer Qwen stack: per-token attention across layers, a learned layer mix, then refiners."""
 
-    def __init__(self, num_txt_layers, txt_dim, heads, multiplier, bias=False, kvheads=None):
+    def __init__(
+        self, n_layers: int, txt_dim: int, heads: int, multiplier: int, bias: bool = False, kvheads: int | None = None
+    ) -> None:
         super().__init__()
         self.layerwise_blocks = nn.ModuleList(
             [TextFusionBlock(txt_dim, heads, multiplier, bias, kvheads) for _ in range(2)]
         )
-        self.projector = nn.Linear(num_txt_layers, 1, bias=False)
+        self.projector = nn.Linear(n_layers, 1, bias=False)
         self.refiner_blocks = nn.ModuleList(
             [TextFusionBlock(txt_dim, heads, multiplier, bias, kvheads) for _ in range(2)]
         )
 
-    def forward(self, x, mask=None):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         b, seq, n, d = x.shape
         x = x.reshape(b * seq, n, d)
         for block in self.layerwise_blocks:
@@ -195,7 +197,7 @@ class TextFusionTransformer(nn.Module):
 
 
 class SingleStreamBlock(nn.Module):
-    def __init__(self, features, heads, multiplier, bias=False, kvheads=None):
+    def __init__(self, features: int, heads: int, multiplier: int, bias: bool = False, kvheads: int | None = None):
         super().__init__()
         self.mod = DoubleSharedModulation(features)
         self.prenorm = RMSNorm(features)
@@ -203,20 +205,20 @@ class SingleStreamBlock(nn.Module):
         self.attn = Attention(features, heads, kvheads=kvheads, bias=bias)
         self.mlp = SwiGLU(features, multiplier, bias)
 
-    def forward(self, x, vec, freqs):
+    def forward(self, x: torch.Tensor, vec: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
         prescale, preshift, pregate, postscale, postshift, postgate = self.mod(vec)
         x = x + pregate * self.attn((1 + prescale) * self.prenorm(x) + preshift, freqs)
         return x + postgate * self.mlp((1 + postscale) * self.postnorm(x) + postshift)
 
 
 class LastLayer(nn.Module):
-    def __init__(self, features, patch, channels):
+    def __init__(self, features: int, patch: int, channels: int) -> None:
         super().__init__()
         self.norm = RMSNorm(features)
         self.linear = nn.Linear(features, patch * patch * channels, bias=True)
         self.modulation = SimpleModulation(features)
 
-    def forward(self, x, tvec):
+    def forward(self, x: torch.Tensor, tvec: torch.Tensor) -> torch.Tensor:
         scale, shift = self.modulation(tvec)
         return self.linear((1 + scale) * self.norm(x) + shift)
 
@@ -251,7 +253,7 @@ class Krea2Transformer(nn.Module):
     def enable_gradient_checkpointing(self) -> None:
         self.gradient_checkpointing = True
 
-    def patchify(self, x: torch.Tensor):
+    def patchify(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int, int]:
         """[B, C, H, W] latent -> ([B, h*w, C*p*p] tokens, [B, h*w, 3] positions, h, w)."""
         p = self.config.patch
         b, c, H, W = x.shape
@@ -272,16 +274,14 @@ class Krea2Transformer(nn.Module):
 
         No text attention mask, as in ComfyUI: every sample carries its own unpadded prompt.
         """
-        bs = x.shape[0]
-        dtype = self.compute_dtype
+        bs, dtype = x.shape[0], self.compute_dtype
         img, imgpos, h, w = self.patchify(x)
         img = self.first(img.to(dtype))
 
         t = self.tmlp(timestep_embedding(sigma, self.config.tdim).unsqueeze(1).to(dtype))
         tvec = self.tproj(t)
 
-        context = self.txtfusion(context.to(dtype))
-        context = self.txtmlp(context)
+        context = self.txtmlp(self.txtfusion(context.to(dtype)))
         txtlen = context.shape[1]
 
         txtpos = torch.zeros(bs, txtlen, 3, device=x.device, dtype=torch.float32)

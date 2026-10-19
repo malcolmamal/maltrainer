@@ -156,7 +156,7 @@ class EncoderBlock(nn.Module):
 
 
 class DacEncoder(nn.Module):
-    def __init__(self, d_model: int = 64, strides=(2, 4, 4, 5, 5), d_latent: int = 2048):
+    def __init__(self, d_model: int = 64, strides: tuple[int, ...] = (2, 4, 4, 5, 5), d_latent: int = 2048):
         super().__init__()
         block: list[nn.Module] = [nn.Conv1d(1, d_model, kernel_size=7, padding=3)]
         for stride in strides:
@@ -223,7 +223,7 @@ class AttnProjection(nn.Module):
 class MiniMaxH3AudioEncoder(nn.Module):
     """Stereo 32 kHz waveform -> normalized H3 audio latents. Frozen, fp32."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.encoder = DacEncoder(64, (2, 4, 4, 5, 5), 2048)
         self.pre_block = AttnProjection(2048, LATENT_CHANNELS, num_heads=8)

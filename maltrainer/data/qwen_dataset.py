@@ -59,7 +59,7 @@ class QwenImage21Dataset(Dataset):
             ]
         )
 
-    def _load_dataset(self):
+    def _load_dataset(self) -> None:
         if not self.data_root.exists():
             logger.warning("Dataset root does not exist: %s", self.data_root)
             return
