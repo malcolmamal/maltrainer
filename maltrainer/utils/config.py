@@ -15,10 +15,11 @@ def load_config(config_path: str) -> Dict[str, Any]:
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    with Path(config_path).open("r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-
-    return config
+    with config_path.open("r", encoding="utf-8") as f:
+        try:
+            return yaml.safe_load(f)
+        except yaml.YAMLError as error:
+            raise ValueError(f"{config_path} is not valid YAML: {error}") from error
 
 
 def save_config_to_output(config: Dict[str, Any], output_path: str):
@@ -28,5 +29,5 @@ def save_config_to_output(config: Dict[str, Any], output_path: str):
 
     config_save_path = output_path / "config.yaml"
 
-    with Path(config_save_path).open("w", encoding="utf-8") as f:
+    with config_save_path.open("w", encoding="utf-8") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)

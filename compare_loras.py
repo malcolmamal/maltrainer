@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import safetensors.torch as safetensors
+from safetensors import SafetensorError
 
 
 def analyze_lora(path):
@@ -11,7 +12,7 @@ def analyze_lora(path):
 
     try:
         tensors = safetensors.load_file(path)
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, KeyError, SafetensorError) as e:
         print(f"Error loading {path}: {e}")
         return None
 

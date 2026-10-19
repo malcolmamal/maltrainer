@@ -148,7 +148,7 @@ class Krea2LoRATrainer:
                 pixels = load_krea2_image(source.path, resolution, aspect_mode).unsqueeze(0).to(self.device)
                 self.latent_cache[str(source.path)] = vae.encode(pixels).cpu()
                 self.samples.append((str(source.path), source.caption))
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 logger.warning("Skipping %s: %s", source.path.name, e)
         del vae
         gc.collect()

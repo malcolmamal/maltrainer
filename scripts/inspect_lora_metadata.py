@@ -222,7 +222,7 @@ def main() -> int:
 
     try:
         metadata = read_metadata(args.model)
-    except Exception as error:  # safetensors raises a variety of types on malformed input
+    except (OSError, ValueError) as error:  # malformed input
         print(f"Could not read metadata from {args.model}: {error}", file=sys.stderr)
         return 1
 

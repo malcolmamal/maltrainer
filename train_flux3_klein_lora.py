@@ -143,7 +143,7 @@ class Flux3KleinLoRATrainer:
                 self.samples.append((str(source.path), source.caption))
                 size = (pixels.shape[-1], pixels.shape[-2])
                 sizes[size] = sizes.get(size, 0) + 1
-            except Exception as e:
+            except (OSError, ValueError, RuntimeError) as e:
                 logger.warning("Skipping %s: %s", source.path.name, e)
         del vae
         gc.collect()

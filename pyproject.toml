@@ -14,7 +14,7 @@ include = ["*.py", "*.pyi", "**/pyproject.toml"]
 [tool.ruff.lint]
 # ruff's defaults plus import order. More families are added one at a time, each with its
 # fixes, so the gate passes on every commit.
-select = ["E4", "E501", "PTH", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
+select = ["E4", "E501", "PTH", "BLE", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
 ignore = [
     # A named result before `return` documents what a model step produces.
     "RET504",

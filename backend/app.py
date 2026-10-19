@@ -448,7 +448,7 @@ class TrainingJob:
         for ws in self.websockets:
             try:
                 await ws.send_json(payload)
-            except Exception:
+            except (RuntimeError, OSError, WebSocketDisconnect):  # the socket is gone
                 stale.append(ws)
         for ws in stale:
             self.websockets.discard(ws)
@@ -561,7 +561,7 @@ def scan_images(path: Path) -> tuple[int, int, Optional[tuple[int, int]]]:
             try:
                 with Image.open(Path(root) / fname) as img:
                     width, height = img.size
-            except Exception:
+            except (OSError, ValueError, Image.DecompressionBombError):
                 continue
             if abs(width - height) / max(width, height, 1) > NON_SQUARE_TOLERANCE:
                 non_square += 1
@@ -997,6 +997,6 @@ async def job_ws(ws: WebSocket, job_id: str) -> None:
             await ws.receive_text()
     except WebSocketDisconnect:
         job.websockets.discard(ws)
-    except Exception:
+    except (RuntimeError, OSError, KeyError):  # an error on the socket (or a binary frame): forget it and close
         job.websockets.discard(ws)
         await ws.close()

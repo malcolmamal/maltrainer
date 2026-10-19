@@ -18,8 +18,8 @@ def test_load(lora_path, prompt):
         pipe.load_lora_weights(lora_path)
         pipe.fuse_lora()
         logger.info("LoRA loaded and fused successfully.")
-    except Exception as e:
-        logger.error(f"Failed to load LoRA: {e}")
+    except Exception:
+        logger.exception("Failed to load LoRA")
         return
 
     logger.info(f"Generating with prompt: {prompt}")

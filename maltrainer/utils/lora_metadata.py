@@ -161,10 +161,13 @@ def build_metadata(
 
 def read_metadata(path: str | Path) -> Dict[str, str]:
     """Read just the metadata header of a safetensors file, without loading tensors."""
-    from safetensors import safe_open
+    from safetensors import SafetensorError, safe_open
 
-    with safe_open(str(path), framework="pt", device="cpu") as handle:
-        return dict(handle.metadata() or {})
+    try:
+        with safe_open(str(path), framework="pt", device="cpu") as handle:
+            return dict(handle.metadata() or {})
+    except SafetensorError as error:  # one type for the callers to catch with the OS and value errors
+        raise ValueError(f"not a readable safetensors file: {error}") from error
 
 
 def extract_config(metadata: Dict[str, str]) -> Optional[Dict[str, Any]]:

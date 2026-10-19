@@ -387,11 +387,9 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         if bool(self.config["train"].get("save_state", True)):
             try:
                 self._save_state(output_dir / f"{name}_state", save_path)
-            except Exception as error:
+            except Exception:  # logged with its traceback; the run goes on
                 shutil.rmtree(output_dir / f"{name}_state.tmp", ignore_errors=True)
-                logger.error(
-                    "Writing the resume state for step %s failed (%s); the previous state is kept.", step, error
-                )
+                logger.exception("Writing the resume state for step %s failed; the previous state is kept.", step)
         return True
 
     def _save_state(self, state_dir: Path, weights: Path) -> None:

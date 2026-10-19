@@ -2,6 +2,7 @@ import sys
 
 import safetensors.torch as safetensors
 import torch
+from safetensors import SafetensorError
 
 
 def check_weights(path):
@@ -35,7 +36,7 @@ def check_weights(path):
         else:
             print(f"Non-zero elements in UP/B: {all_up.count_nonzero().item()} / {all_up.numel()}")
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, KeyError, SafetensorError) as e:
         print(f"Error reading {path}: {e}")
 
 

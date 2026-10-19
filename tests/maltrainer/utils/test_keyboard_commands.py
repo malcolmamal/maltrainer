@@ -129,7 +129,7 @@ def test_a_failing_menu_does_not_end_the_run(monkeypatch: pytest.MonkeyPatch, ca
         stop = commands.handle(3, _Saver())
 
     assert stop is False
-    assert caplog.messages == ["The menu failed ('prompt'); training continues"]
+    assert caplog.messages == ["The menu failed; training continues"]
 
 
 def test_p_waits_until_p_again_and_counts_the_pause(

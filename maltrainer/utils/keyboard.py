@@ -66,7 +66,7 @@ class KeyCommands:
                 tty.setcbreak(fd)
                 self._restore = lambda: termios.tcsetattr(fd, termios.TCSADRAIN, saved)
                 atexit.register(self.close)
-            except Exception as e:
+            except (ImportError, OSError, ValueError) as e:
                 logger.info("Key commands unavailable: %s", e)
                 self.enabled = False
         if self.enabled:
@@ -134,8 +134,8 @@ class KeyCommands:
             started = time.time()
             try:
                 action()
-            except Exception as error:  # a menu or gallery problem must not end the run
-                logger.error("The %s failed (%s); training continues", name, error)
+            except Exception:  # a menu or gallery problem must not end the run
+                logger.exception("The %s failed; training continues", name)
             finally:
                 if count_time:
                     self.paused_seconds += time.time() - started

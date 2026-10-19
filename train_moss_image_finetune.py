@@ -717,13 +717,12 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             else:
                 try:
                     self._save_state(output_dir / f"{name}_state", weights=save_path if same_weights else None)
-                except Exception as error:
+                except Exception:  # logged with its traceback; the run goes on
                     shutil.rmtree(output_dir / f"{name}_state.tmp", ignore_errors=True)
-                    logger.error(
-                        "Writing the resume state for step %s failed (%s); the partial copy is removed and "
+                    logger.exception(
+                        "Writing the resume state for step %s failed; the partial copy is removed and "
                         "the previous state kept.",
                         step,
-                        error,
                     )
         return True
 

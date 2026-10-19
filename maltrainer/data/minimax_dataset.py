@@ -128,7 +128,7 @@ def _read_text(path: Path, one_line: bool = False) -> str:
     try:
         text = path.read_text(encoding="utf-8")
         return " ".join(text.split()) if one_line else text.strip()
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logger.warning("Error reading %s: %s", path, e)
         return ""
 

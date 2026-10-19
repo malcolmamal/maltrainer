@@ -751,7 +751,7 @@ class MiniMaxH3LoRATrainer:
                 self.optimizer = optimizer_cls(params, lr=lr)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
                 self.run_metadata["optimizer_resolved"] = {"name": optimizer_name, "lr": lr}
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr)
         elif optimizer_name.startswith("prodigy"):
@@ -828,7 +828,7 @@ class MiniMaxH3LoRATrainer:
                         "%s those are too coarse to steer it. Set lora.dtype: float32.",
                         self.lora_dtype,
                     )
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr)
         elif optimizer_name in {"automagic3", "automagic", "automagic_v3"}:

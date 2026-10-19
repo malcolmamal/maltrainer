@@ -187,7 +187,7 @@ class MOSSImageLoRATrainer:
                     latents[str(source.path)] = latent
                     if use_disk:
                         folder.put("latents", key, latent)
-                except Exception as e:
+                except (OSError, ValueError, RuntimeError) as e:
                     logger.warning("Skipping %s: %s", source.path.name, e)
             del vae
             gc.collect()
@@ -321,7 +321,7 @@ class MOSSImageLoRATrainer:
         self._config_mtime = mtime
         try:
             fresh = load_config(str(self.config_path))
-        except Exception as error:  # e.g. a half-edited YAML file
+        except (OSError, ValueError) as error:  # e.g. a half-edited YAML file
             logger.warning(
                 "[sample] %s changed but could not be read (%s); the previous settings stay",
                 self.config_path.name,
@@ -368,8 +368,8 @@ class MOSSImageLoRATrainer:
                     logger.info(
                         "[sample] encoded on the CPU in %.0fs: %s", time.time() - started, caption or "(empty negative)"
                     )
-            except Exception as error:
-                logger.error("[sample] encoding new prompts failed: %s", error)
+            except Exception:  # a background thread: log it with its traceback, do not die silently
+                logger.exception("[sample] encoding new prompts failed")
 
         logger.info("[sample] encoding %d new prompt(s) on the CPU in the background", len(missing))
         self._encoding = threading.Thread(target=work, daemon=True)

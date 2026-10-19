@@ -80,7 +80,7 @@ class QwenImage21Dataset(Dataset):
             if txt_path.exists():
                 try:
                     caption = txt_path.read_text(encoding="utf-8").strip()
-                except Exception as e:
+                except (OSError, ValueError) as e:
                     logger.warning("Error reading caption for %s: %s", img_path, e)
 
             if caption:
@@ -117,7 +117,7 @@ class QwenImage21Dataset(Dataset):
         try:
             image = Image.open(img_path).convert("RGB")
             pixel_values = self.transform(image)
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error("Failed to load image %s: %s", img_path, e)
             pixel_values = torch.zeros((3, self.height, self.width), dtype=torch.float32)
 

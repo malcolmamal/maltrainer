@@ -284,7 +284,7 @@ class QwenImage21LoRATrainer:
                 self.optimizer = optimizer_cls(params, lr=lr, weight_decay=weight_decay)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
                 self.run_metadata["optimizer_resolved"] = {"name": optimizer_name, "lr": lr}
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
         elif optimizer_name.startswith("prodigy"):
@@ -326,7 +326,7 @@ class QwenImage21LoRATrainer:
                     requested["d0"],
                 )
                 self.run_metadata["optimizer_resolved"] = {"name": "prodigy", **supported}
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
                 self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
         elif optimizer_name in {"automagic3", "automagic", "automagic_v3"}:

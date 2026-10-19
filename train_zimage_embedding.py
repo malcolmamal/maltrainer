@@ -347,7 +347,7 @@ class ZImageEmbeddingTrainer:
                     slice_p=slice_p,
                 )
                 logger.info("Using optimizer: %s", optimizer_name)
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError) as e:
                 logger.warning(
                     "Failed to load prodigy optimizer (%s). Falling back to AdamW. Error: %s",
                     optimizer_name,

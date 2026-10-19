@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 import torch
+from safetensors import SafetensorError
 from safetensors.torch import load_file, save_file
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ class FolderCache:
             return None
         try:
             return load_file(str(path))["tensor"]
-        except Exception as e:  # a truncated or foreign file: re-encode it
+        except (OSError, ValueError, RuntimeError, KeyError, SafetensorError) as e:  # truncated or foreign: re-encode
             logger.warning("Unreadable cache entry %s (%s); re-encoding", path, e)
             return None
 
