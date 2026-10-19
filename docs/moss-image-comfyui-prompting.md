@@ -10,13 +10,16 @@ necessarily the best possible, but a strong default to start from.
 |---|---|
 | **Load Diffusion Model** | the finetune, e.g. `MOSS/moss_image_ft_people.safetensors` |
 | **Load LoRA** (model only) | `Moss/special/MOSS-Image-Base-8-steps-dmd.safetensors`, `strength_model` **1.00** |
-| **Load CLIP** | `qwen3.5_9b_int8_convrot.safetensors` (the encoder the finetune trained with) |
+| **SkipLayerGuidanceDiTSimple** | `single_layers` **22**, `double_layers` empty, start **0.0**, end **0.5** |
+| **Load CLIP** | `qwen3.5_9b_int8_convrot.safetensors`, type `moss_image` (the encoder the finetune trained with) |
 | **Load VAE** | `flux2_vae.safetensors` |
-| **Empty latent** | 1024 × 1024 |
+| **Negative prompt** | `bad ugly blurry` |
+| **EmptyFlux2LatentImage** | **1584 × 1776** (portrait, ~2.8 MP) |
 | **KSampler** | steps **8**, cfg **4.0**, sampler **euler**, scheduler **simple**, denoise **1.00**, seed randomize |
 
-Wiring: Load Diffusion Model → Load LoRA → KSampler `model`; the positive and negative prompts
-from CLIP Text Encode into `positive` / `negative`; KSampler → VAE Decode.
+Wiring: Load Diffusion Model → Load LoRA → SkipLayerGuidanceDiTSimple → KSampler `model`; the
+positive and negative prompts from CLIP Text Encode into `positive` / `negative`; KSampler → VAE
+Decode. A Power Lora Loader between the model and the DMD LoRA is the place for any other LoRAs.
 
 - **The DMD LoRA** is lodestones' 8-step distillation LoRA for **MOSS-Image Base** (rank 128).
   The finetune was trained from Base, so the Base version applies; there is an SFT version
@@ -24,8 +27,11 @@ from CLIP Text Encode into `positive` / `negative`; KSampler → VAE Decode.
 - **Shift** needs no node: ComfyUI runs MOSS-Image at shift 5 by default. To change it, add
   **ModelSamplingAuraFlow** (not ModelSamplingSD3, whose timestep scale is 1000x off for MOSS)
   between the LoRA and the KSampler.
-- **Resolution:** 1024 × 1024 is what the training previews used. The finetune trained on
-  512 px images, but MOSS-Image itself finished pretraining at 1024 px.
+- **Skip-layer guidance** leaves block 22 out of the negative pass for the first half of the
+  steps, as ComfyUI's MOSS template does with its SLG switch on.
+- **Resolution:** 1584 × 1776 is what the sample images (Katniss, Scully) used, and it worked
+  well, even though the finetune trained on 512 px images and the training previews were
+  1024 × 1024. For a landscape picture, swap the two numbers.
 
 ### Without the DMD LoRA
 
@@ -38,7 +44,8 @@ res_multistep / simple, 30 steps, CFG 4, with **SkipLayerGuidanceDiTSimple** on 
 The finetune can also be loaded as a LoRA on the plain Base model, extracted with
 [scripts/extract_lora.py](extract-lora.md) (`moss_image_ft_people_lora_r64/128/256` in
 `loras/Moss`): Load Diffusion Model `moss_image_base_bf16` → Load LoRA (the extracted one,
-strength 1.0) → Load LoRA (the DMD LoRA) → KSampler with the settings above. Higher ranks keep
+strength 1.0) → Load LoRA (the DMD LoRA) → SkipLayerGuidanceDiTSimple → KSampler, all with the
+settings above. Higher ranks keep
 more of the finetune; the full checkpoint keeps all of it. That stack is not tested yet: compare
 it with the full checkpoint on the same seed before relying on it.
 
@@ -81,13 +88,11 @@ Tips:
 - **Name the class word after the trigger** (`a woman`, `a man`), as the captions did. Prior
   preservation tied each trigger to it, and the class word without a trigger still makes a
   generic person, so `photo of a woman, ...` is how you get someone who is not in the finetune.
-- **Write "photo of", not "RAW photo of".** The training captions never said RAW, and previews
-  prompted with "RAW photo of ..." sometimes painted the word RAW into the background.
 - **Use the captions' framing words:** `close-up with face visible`, `head slightly tilted`,
   `looking directly at the camera`. The captions are largely close-ups, which is also what the
   training previews checked; wider shots are less tested, so describe the body and setting
   explicitly there.
 - **One person per image.** The dataset has no group shots captioned with two triggers, so two
   people in one prompt tend to blend. That is untested; expect it to need group-shot training data.
-- **Negative prompt:** with CFG 4 it has an effect. Start empty (what the training previews used)
-  or with `worst quality, bad anatomy, watermark, jpeg artifact`.
+- **Negative prompt:** with CFG 4 it has an effect. `bad ugly blurry` is what the samples used;
+  the MOSS template's `worst quality, bad anatomy, watermark, jpeg artifact` is an alternative.
