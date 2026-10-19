@@ -37,7 +37,7 @@ def test_a_saved_and_reloaded_optimizer_continues_where_it_left_off(tmp_path: Pa
         optimizer.step()
 
     torch.testing.assert_close(clone.detach(), p.detach())
-    torch.testing.assert_close(resumed.state[clone]["lr"], opt.state[p]["lr"], rtol=1e-6, atol=0)
+    torch.testing.assert_close(resumed.state[clone]["lr"], opt.state[p]["lr"], rtol=0, atol=0)
     for key in ("sign_history", "exp_avg_sq"):
         torch.testing.assert_close(resumed.state[clone][key], opt.state[p][key], rtol=0, atol=0)
     assert resumed.state[clone]["hist_idx"] == opt.state[p]["hist_idx"]
@@ -52,8 +52,8 @@ def test_the_fp32_rate_of_a_bf16_parameter_survives_a_reload() -> None:
 
     reloaded = resumed.state[clone]["lr"]
     assert reloaded.dtype == torch.float32
-    torch.testing.assert_close(reloaded, saved, rtol=1e-6, atol=0)
-    assert abs(reloaded - saved) < abs(rounded - saved) / 100
+    torch.testing.assert_close(reloaded, saved, rtol=0, atol=0)
+    assert not torch.equal(rounded, saved)
 
 
 def test_the_new_optimizers_options_replace_the_saved_ones() -> None:
@@ -78,7 +78,7 @@ def test_reloaded_rates_in_a_group_are_set_to_their_geometric_median() -> None:
     resumed = Automagic3([nn.Parameter(torch.zeros(1)) for _ in range(3)], lr=1e-4)
     resumed.load_state_dict(state)
 
-    assert resumed.get_learning_rates() == pytest.approx([1e-3], rel=1e-5)
+    assert resumed.get_learning_rates() == [torch.tensor(1e-3).item()]
 
 
 def test_a_reloaded_pinned_rate_stays_exactly_on_the_pin() -> None:
