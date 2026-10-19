@@ -20,7 +20,6 @@ input/output layers stay frozen.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -91,4 +90,4 @@ def save_krea2_model(
     path = Path(path)
     tmp = path.with_name(path.name + ".tmp")
     save_file(out, str(tmp), metadata=metadata)
-    os.replace(tmp, path)
+    Path(tmp).replace(path)

@@ -32,7 +32,7 @@ CACHE_DIR_NAME = ".maltrainer_cache"
 def content_hash(path: Union[str, Path]) -> str:
     """BLAKE2b of the file's bytes: the same image matches wherever it is."""
     digest = hashlib.blake2b(digest_size=20)
-    with open(path, "rb") as handle:
+    with Path(path).open("rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
@@ -51,7 +51,7 @@ def model_identity(path: Union[str, Path, None]) -> str:
         return path.name
     size = path.stat().st_size
     digest = hashlib.blake2b(digest_size=8)
-    with open(path, "rb") as handle:
+    with Path(path).open("rb") as handle:
         head = handle.read(IDENTITY_SAMPLE)
         handle.seek(max(size - IDENTITY_SAMPLE, len(head)))
         digest.update(head + handle.read())
@@ -92,7 +92,7 @@ class FolderCache:
         os.close(handle)
         try:
             save_file({"tensor": tensor.detach().cpu().contiguous()}, tmp)
-            os.replace(tmp, path)
+            Path(tmp).replace(path)
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
             raise

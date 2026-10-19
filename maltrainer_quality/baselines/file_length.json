@@ -36,5 +36,5 @@
   "train_moss_image_lora.py": 831,
   "train_qwen_image_2_1_lora.py": 640,
   "train_zimage_embedding.py": 648,
-  "train_zimage_lora.py": 1111
+  "train_zimage_lora.py": 1110
 }

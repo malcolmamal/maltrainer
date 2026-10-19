@@ -4,7 +4,7 @@ ComfyUI custom node for Z-Image Textual Inversion support.
 This node provides text encoding with textual inversion embeddings for Z-Image models.
 """
 
-import os
+from pathlib import Path
 
 import safetensors.torch as safetensors
 import torch
@@ -51,7 +51,7 @@ class ZImageTextEncodeWithEmbeddings:
 
     def load_embedding(self, embedding_path, token_string):
         """Load textual inversion embedding and inject into text encoder."""
-        if not embedding_path or not os.path.exists(embedding_path):
+        if not embedding_path or not Path(embedding_path).exists():
             return
 
         # Load the embedding

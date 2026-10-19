@@ -9,7 +9,6 @@ import inspect
 import json
 import logging
 import math
-import os
 import time
 from pathlib import Path
 
@@ -79,7 +78,7 @@ class ZImageLoRATrainer:
         self.progress_logger.propagate = False
 
     def _resolve_hf_path(self, path_value: str) -> str:
-        if os.path.exists(path_value):
+        if Path(path_value).exists():
             return path_value
         parts = path_value.split("/")
         if len(parts) < 3:

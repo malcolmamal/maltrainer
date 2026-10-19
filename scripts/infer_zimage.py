@@ -19,8 +19,8 @@ Usage examples:
 
 import argparse
 import logging
-import os
 from datetime import datetime
+from pathlib import Path
 
 import safetensors.torch as safetensors
 import torch
@@ -120,9 +120,8 @@ def main():
         load_textual_inversion_embedding(pipeline, args.embedding_path, args.token_string)
 
     # Generate images
-    output_dir = os.path.dirname(args.output_path) or "."
-    base_filename = os.path.basename(args.output_path)
-    base, ext = os.path.splitext(base_filename)
+    output_path = Path(args.output_path)
+    output_dir, base, ext = output_path.parent, output_path.stem, output_path.suffix
     if not ext:
         ext = ".png"
 
@@ -148,9 +147,9 @@ def main():
         # Save image with timestamp and index
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if args.num_images > 1:
-            final_output_path = os.path.join(output_dir, f"{base}_{timestamp}_{i + 1}{ext}")
+            final_output_path = output_dir / f"{base}_{timestamp}_{i + 1}{ext}"
         else:
-            final_output_path = os.path.join(output_dir, f"{base}_{timestamp}{ext}")
+            final_output_path = output_dir / f"{base}_{timestamp}{ext}"
 
         image.save(final_output_path)
         logger.info(f"Image saved to {final_output_path}")

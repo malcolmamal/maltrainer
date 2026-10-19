@@ -50,7 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_yaml(path: Path) -> dict:
-    with open(path, encoding="utf-8") as handle:
+    with Path(path).open(encoding="utf-8") as handle:
         data = yaml.safe_load(handle.read().replace("\xa0", " ")) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path}: not a YAML mapping")

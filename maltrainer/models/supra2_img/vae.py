@@ -15,7 +15,7 @@ from maltrainer.models.supra2_img.model import VAE_SCALE
 def load_sd_vae(
     weights_path: str | Path, config_path: str | Path, device: torch.device, dtype: torch.dtype
 ) -> AutoencoderKL:
-    with open(config_path, encoding="utf-8") as handle:
+    with Path(config_path).open(encoding="utf-8") as handle:
         vae = AutoencoderKL.from_config(json.load(handle))
     state = load_file(str(weights_path), device="cpu")
     vae._fix_state_dict_keys_on_load(state)

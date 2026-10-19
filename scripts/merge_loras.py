@@ -110,7 +110,7 @@ def read_lora(path: Path) -> Tuple[Dict[str, Tuple[torch.Tensor, torch.Tensor, f
 
 def sha256_prefix(path: Path, length: int = 12) -> str:
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
+    with Path(path).open("rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()[:length]
@@ -172,7 +172,7 @@ def merge(
 
 def load_config(path: Path) -> dict:
     """The YAML merge config -> {"output", "dtype", "verify", "inputs": [(Path, strength)]}."""
-    with open(path, encoding="utf-8") as handle:
+    with Path(path).open(encoding="utf-8") as handle:
         raw = handle.read().replace("\xa0", " ")
         config = yaml.safe_load(raw) or {}
     if not isinstance(config, dict) or not isinstance(config.get("loras"), list) or not config["loras"]:

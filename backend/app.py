@@ -768,7 +768,7 @@ async def spawn_process(command: list[str]) -> asyncio.subprocess.Process:
     env["PYTHONUNBUFFERED"] = "1"
     return await asyncio.create_subprocess_exec(
         *command,
-        cwd=str(Path(".").resolve()),
+        cwd=str(Path.cwd()),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=env,

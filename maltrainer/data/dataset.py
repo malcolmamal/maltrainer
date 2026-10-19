@@ -56,7 +56,7 @@ class ZImageDataset(Dataset):
                 # Look for caption file
                 caption_path = img_path.with_suffix(".txt")
                 if caption_path.exists():
-                    with open(caption_path, "r", encoding="utf-8") as f:
+                    with Path(caption_path).open("r", encoding="utf-8") as f:
                         caption = f.read().strip()
                 else:
                     caption = ""
