@@ -89,3 +89,9 @@ def test_the_package_runs_as_a_module(monkeypatch: pytest.MonkeyPatch, capsys: p
 
     assert exited.value.code == 0
     assert capsys.readouterr().out.startswith("usage: maltrainer_quality")
+
+
+def test_the_tests_run_on_four_workers_that_steal_from_each_other() -> None:
+    tests = next(gate for gate in gates.gates(None) if gate.name == "tests")
+
+    assert tests.arguments[:4] == ("-n", "4", "--dist", "worksteal")

@@ -31,7 +31,9 @@ class Gate:
 
 
 def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
-    pytest: tuple[str, ...] = ("--cov", "--cov-report=term-missing")
+    # A fixed count, not one per CPU: every worker imports torch and transformers (~25 s), so more
+    # workers than a 4-core CI runner has stop paying off (measured: 4 -> 84 s, 8 -> 111 s, serial 145 s).
+    pytest: tuple[str, ...] = ("-n", "4", "--dist", "worksteal", "--cov", "--cov-report=term-missing")
     if junit_dir is not None:
         pytest += (f"--junitxml={junit_dir / 'pytest.xml'}", f"--cov-report=xml:{junit_dir / 'coverage.xml'}")
     return (
