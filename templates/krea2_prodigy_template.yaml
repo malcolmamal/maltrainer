@@ -1,0 +1,84 @@
+# Krea 2 LoRA template -- Prodigy, mirroring the OneTrainer recipe
+# (r-ai-os-agents src/public/trainers/onetrainer/krea2prodigy_template.json).
+#
+# Placeholders as in krea2_template.yaml: [person_to_train], [comfyui_models].
+#
+# Setting by setting, as OneTrainer actually resolves that file:
+#   LoRA rank 16, alpha 1.0 (scale 1/16), on attention + MLP of the 28 blocks AND the 4
+#     text-fusion blocks: "attn,ff" = 256 Linears (projector and I/O layers untrained)
+#   prodigyopt Prodigy: lr 1.0, betas (0.9, 0.999), beta3 None, eps 1e-8, weight decay 0.01
+#     decoupled, no bias correction, no safeguard warmup, d0 1e-6, d_coef 1.0, growth inf,
+#     slice_p 11 (stochastic_rounding / weight_decay_by_lr / schedule-free keys are ignored
+#     by OneTrainer's PRODIGY)
+#   constant LR with a 200-step linear warmup from 0
+#   timesteps: logit-normal sigmoid(N(0, 1)), NO shift (dynamic shifting off)
+#   plain MSE on v = noise - x0, gradient clip 1.0, no EMA, 100 epochs
+#   batch 2 -> here gradient_accumulation_steps 2 (maltrainer trains each caption unpadded,
+#     at batch 1; the optimizer sees the same number of steps)
+# Not copied: OneTrainer feeds the DiT sigma - 0.001 (an off-by-one); its base is int8 W8A8,
+# ours the fp8 file ComfyUI runs; its buckets snap to 64 px, ours to 16 px.
+
+model:
+  transformer_path: "[comfyui_models]/diffusion_models/krea2_raw_fp8_scaled.safetensors"
+  vae_path: "[comfyui_models]/vae/qwen_image_vae.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3vl_4b_fp8_scaled.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 16
+  alpha: 1
+  prefix: "diffusion_model."
+  targets: "blocks+txt"
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 2
+  max_steps: 0
+  num_epochs: 100
+  save_every: 250
+  timestep_distribution: "logit_normal"
+  timestep_logit_mean: 0.0
+  timestep_logit_std: 1.0
+  timestep_shift: 1.0
+  max_grad_norm: 1.0
+  optimizer: "prodigy"
+  learning_rate: 1.0
+  learning_rate_warmup_steps: 200
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  prodigy_beta2: 0.999
+  prodigy_eps: 1.0e-8
+  prodigy_d0: 1.0e-6
+  prodigy_d_coef: 1.0
+  prodigy_decouple: true
+  prodigy_use_bias_correction: false
+  prodigy_safeguard_warmup: false
+  prodigy_slice_p: 11
+  ema_decay: 0.0
+  caption_dropout: 0.0            # OneTrainer's 0; the other Krea 2 templates use 0.05
+  # DOP: see krea2_template.yaml.
+  dop: false
+  dop_class: "woman"
+  dop_multiplier: 1.0
+  dop_every: 1
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/krea2/[person_to_train]"
+  name: "krea2_[person_to_train]"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

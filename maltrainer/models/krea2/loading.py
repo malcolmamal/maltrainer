@@ -6,46 +6,51 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from accelerate import init_empty_weights
 
-from maltrainer.models.comfy_fp8 import read_comfy_checkpoint, strip_prefix, swap_in_fp8_linears
+from maltrainer.models.comfy_fp8 import (container_prefix, dequantize, quantize_rows, read_comfy_checkpoint,
+                                         strip_prefix, swap_in_fp8_linears)
 from maltrainer.models.krea2.model import Krea2Config, Krea2Transformer
 
 logger = logging.getLogger(__name__)
 
-FP8_MAX = float(torch.finfo(torch.float8_e4m3fn).max)  # 448
-
-
-def _quantize_rows(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    """bf16/fp32 weight -> (fp8 e4m3, per-output-row fp32 scale)."""
-    w = weight.float()
-    scale = (w.abs().amax(dim=1, keepdim=True) / FP8_MAX).clamp(min=1e-12)
-    return (w / scale).to(torch.float8_e4m3fn), scale
-
-
-def _is_block_linear(key: str) -> bool:
+def is_block_linear(key: str) -> bool:
     return key.startswith("blocks.") and key.endswith(".weight") and (".attn.w" in key or ".attn.gate" in key or ".mlp." in key)
 
 
-def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute_dtype: torch.dtype = torch.bfloat16) -> Tuple[Krea2Transformer, Dict[str, object]]:
+def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute_dtype: torch.dtype = torch.bfloat16,
+                           master: Optional[Dict[str, torch.Tensor]] = None) -> Tuple[Krea2Transformer, Dict[str, object]]:
     """Build the DiT with fp8 block Linears.
 
     An fp8_scaled file keeps the exact fp8 weights ComfyUI runs. A bf16 file (e.g. Comfy-Org's
     krea2_raw_bf16) has its 224 block Linears quantized per output row to fp8 on load -- the
     same set Fizgig quantizes -- which keeps the 12.9B model at ~13 GB instead of ~26 GB; the
     small text-fusion and I/O layers stay bf16.
+
+    ``master``: a dict to fill with every block Linear's weight in bf16 on the CPU, for a full
+    finetune (maltrainer/finetune/rotation.py). From a bf16 file these are the file's own tensors
+    (no copy); from an fp8 file they are dequantized, so they carry fp8's rounding.
     """
     tensors, layers = read_comfy_checkpoint(path)
+    prefix_found = container_prefix(tensors)
     tensors, layers = strip_prefix(tensors, layers)
-    info: Dict[str, object] = {"source_fp8_layers": len(layers)}
+    info: Dict[str, object] = {"source_fp8_layers": len(layers), "key_prefix": prefix_found}
+
+    if master is not None:
+        for key in [k for k in tensors if is_block_linear(k)]:
+            prefix = key[: -len(".weight")]
+            if prefix in layers:
+                master[key] = dequantize(tensors[key], tensors[f"{prefix}.weight_scale"], torch.bfloat16)
+            else:
+                master[key] = tensors[key].to(torch.bfloat16)
 
     if not layers:
-        for key in [k for k in tensors if _is_block_linear(k)]:
+        for key in [k for k in tensors if is_block_linear(k)]:
             prefix = key[: -len(".weight")]
-            fp8, scale = _quantize_rows(tensors[key].to(device))  # on the GPU: ~12B elements
+            fp8, scale = quantize_rows(tensors[key].to(device))  # on the GPU: ~12B elements
             tensors[key], tensors[f"{prefix}.weight_scale"] = fp8, scale
             layers[prefix] = {"format": "float8_e4m3fn", "quantized_on_load": True}
         info["quantized_on_load"] = len(layers)

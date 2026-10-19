@@ -1,0 +1,98 @@
+# MOSS-Image LoRA template -- Prodigy (train_moss_image_lora.py).
+#
+# Placeholders as in moss_image_automagic_template.yaml: [person_to_train], [comfyui_models].
+#
+# Same model files, LoRA, timesteps and resolution as the Automagic3 template, so the two compare
+# directly. Prodigy settings are those of the FLUX.3 [klein] Prodigy run
+# (train_flux3_klein_feliciaday_prodigy.yaml): lr 1.0 (a multiplier on Prodigy's own step-size
+# estimate d), 100 warmup steps, decoupled weight decay 0.01, beta2 0.99, bias correction and
+# safeguarded warmup on, no EMA (Prodigy's step size does the smoothing).
+# 100 epochs; on Qwen-Image 2.1 Prodigy overcooked past ~1500 steps, so compare checkpoints.
+
+model:
+  transformer_path: "[comfyui_models]/diffusion_models/moss_image_base_bf16.safetensors"
+  vae_path: "[comfyui_models]/vae/flux2_vae.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3.5_9b_int8_convrot.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 16
+  alpha: 16
+  prefix: "diffusion_model."
+  targets: "blocks"          # attention + feed-forward of the 42 joint blocks (252)
+  dtype: "float32"
+  # Blocks without an adapter. [] = adapt all 42 blocks. The reference sampler skips block 22 in
+  # CFG's negative branch, and AI Toolkit leaves it out for that; Fizgig's A/B runs found that
+  # costs likeness, so it trains block 22 now, and so do we. [22] = the old behaviour.
+  skip_blocks: []
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  max_steps: 0               # 0 = train num_epochs full epochs
+  num_epochs: 20
+  save_every: 0              # 0 = only the final file
+  timestep_distribution: "logit_normal"   # the report's final pretraining interval, as in the Automagic3 template
+  timestep_logit_mean: 1.09
+  timestep_logit_std: 0.95
+  timestep_cutoff: 0.95
+  timestep_uniform_mix: 0.01
+  timestep_shift: 1.0
+  timestep_grid: 1000
+  max_grad_norm: 1.0
+  gradient_checkpointing: true
+  # torch.compile each block. Measured on a 5090 (2026-10-18): 3% faster at 512 px, 7% at
+  # 1024 px, for a 25-50 s compile at the start. Worth it only for long or large runs. Needs
+  # triton-windows on Windows; without it the run stays eager and says so.
+  compile: false
+  int8_grad_precision: "bf16"
+  optimizer: "prodigy"
+  learning_rate: 1.0         # Prodigy's multiplier on its own estimated step size
+  learning_rate_warmup_steps: 100
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  prodigy_beta2: 0.99
+  prodigy_eps: 1.0e-8
+  prodigy_d0: 1.0e-6         # initial step-size guess; Prodigy grows it
+  prodigy_d_coef: 1.0        # raise (e.g. 2.0) if a run comes out under-trained
+  prodigy_decouple: true
+  prodigy_use_bias_correction: true
+  prodigy_safeguard_warmup: true   # keeps the d estimate from overshooting during warmup
+  ema_decay: 0.0
+  caption_dropout: 0.05
+
+# Previews rendered with the weights in training (no checkpoint saved): every N steps and before
+# the first, the same seed per prompt each time. The trigger-free prompt shows whether the LoRA
+# leaks into the class. ~24 s per 1024 px image (30 steps, CFG 3). every: 0 = off.
+sample:
+  every: 500
+  at_start: true
+  prompts:
+    - "a photo of [person_to_train] smiling, close-up with face visible, soft light from the front"
+    - "a photo of a person smiling, close-up with face visible, soft light from the front"
+  negative: ""
+  steps: 30
+  cfg: 3.0
+  width: 1024
+  height: 1024
+  seed: 42
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/moss_image/[person_to_train]"
+  name: "moss_image_[person_to_train]_prodigy"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

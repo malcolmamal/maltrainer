@@ -26,17 +26,37 @@ ROOT = Path(__file__).resolve().parents[1]
 MODELS = {
     "krea2": (
         "train_krea2_lora.py",
-        "config/krea2_template.yaml",
-        {"prodigy": "config/krea2_prodigy_template.yaml"},
+        "templates/krea2_template.yaml",
+        {"prodigy": "templates/krea2_prodigy_template.yaml", "adamw8bit": "templates/krea2_adamw_template.yaml"},
         {
             "transformer_path": ("diffusion_models", "krea2_raw_fp8_scaled.safetensors"),
             "vae_path": ("vae", "qwen_image_vae.safetensors"),
             "text_encoder_path": ("text_encoders", "qwen3vl_4b_fp8_scaled.safetensors"),
         },
     ),
+    "flux3_klein": (
+        "train_flux3_klein_lora.py",
+        "templates/flux3_klein_template.yaml",
+        {},
+        {
+            "transformer_path": ("diffusion_models", "flux3_image_klein_int8_convrot.safetensors"),
+            "vae_path": ("vae", "flux2_vae.safetensors"),
+            "text_encoder_path": ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
+        },
+    ),
+    "moss_image": (
+        "train_moss_image_lora.py",
+        "templates/moss_image_automagic_template.yaml",
+        {"prodigy": "templates/moss_image_prodigy_template.yaml", "adamw8bit": "templates/moss_image_adamw_template.yaml"},
+        {
+            "transformer_path": ("diffusion_models", "moss_image_base_bf16.safetensors"),
+            "vae_path": ("vae", "flux2_vae.safetensors"),
+            "text_encoder_path": ("text_encoders", "qwen3.5_9b_int8_convrot.safetensors"),
+        },
+    ),
     "qwen_image_2_1": (
         "train_qwen_image_2_1_lora.py",
-        "config/qwen_image_2_1_template.yaml",
+        "templates/qwen_image_2_1_template.yaml",
         {},
         {
             "transformer_path": ("diffusion_models", "qwen_image_2.1_int8_convrot.safetensors"),

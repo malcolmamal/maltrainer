@@ -27,7 +27,7 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -51,6 +51,8 @@ MIN_CLIP_FRAMES = 5
 MIN_AUDIO_FRAMES = 22
 
 MUTE_SUFFIX = "_mute"
+# A caption prefix for every image below it, e.g. "photo of [folder]" (docs/datasets.md).
+PREFIX_FILE = "prefix.txt"
 
 
 def align_to_32(val: int) -> int:
@@ -121,15 +123,52 @@ def _media_kind(path: Path) -> Optional[str]:
     return None
 
 
-def _caption_for(path: Path, trigger_token: str, default_caption: str) -> str:
-    txt_path = path.with_suffix(".txt")
-    if txt_path.exists():
-        try:
-            caption = txt_path.read_text(encoding="utf-8").strip()
-            if caption:
-                return caption
-        except Exception as e:
-            logger.warning("Error reading caption for %s: %s", path, e)
+def _read_text(path: Path, one_line: bool = False) -> str:
+    if not path.exists():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8")
+        return " ".join(text.split()) if one_line else text.strip()
+    except Exception as e:
+        logger.warning("Error reading %s: %s", path, e)
+        return ""
+
+
+def _prefix_for(folder: Path, data_root: Path, templates: Dict[Path, Optional[str]]) -> str:
+    """The nearest ``prefix.txt`` from ``folder`` up to one level above the dataset folder,
+    with ``[folder]`` replaced by ``folder``'s name; "" if there is none. An empty prefix.txt
+    counts: it switches off any prefix from further up.
+
+    ``templates`` memoizes each directory's prefix.txt text (None = no file) across a scan.
+    """
+    stop = data_root.parent
+    current = folder
+    while True:
+        if current not in templates:
+            path = current / PREFIX_FILE
+            templates[current] = _read_text(path, one_line=True) if path.exists() else None
+        if templates[current] is not None:
+            return templates[current].replace("[folder]", folder.name)
+        if current == stop or current.parent == current:
+            return ""
+        current = current.parent
+
+
+def _join_caption(prefix: str, caption: str) -> str:
+    prefix = prefix.strip().rstrip(",").strip()
+    if not prefix:
+        return caption
+    if not caption:
+        return prefix
+    return caption if caption.startswith(prefix) else f"{prefix}, {caption}"
+
+
+def _caption_for(path: Path, trigger_token: str, default_caption: str, prefix: str = "") -> str:
+    """The sidecar ``<stem>.txt`` behind ``prefix``; without one, the prefix alone (it names the
+    subject); without either, the trigger / default caption."""
+    caption = _read_text(path.with_suffix(".txt"))
+    if caption or prefix:
+        return _join_caption(prefix, caption)
 
     if trigger_token and default_caption:
         # "a photo of sks" already names the subject; otherwise prepend the trigger to it
@@ -158,12 +197,14 @@ def scan_media_sources(
     trigger_token = (trigger_token or "").strip()
     default_caption = (default_caption or "").strip()
     sources: List[MediaSource] = []
+    templates: Dict[Path, Optional[str]] = {}
     for root, _, files in os.walk(data_root):
         for name in files:
             path = Path(root) / name
             kind = _media_kind(path)
             if kind in kinds:
-                sources.append(MediaSource(path, kind, _caption_for(path, trigger_token, default_caption)))
+                prefix = _prefix_for(path.parent, data_root, templates)
+                sources.append(MediaSource(path, kind, _caption_for(path, trigger_token, default_caption, prefix)))
     sources.sort(key=lambda source: str(source.path))
     return sources
 

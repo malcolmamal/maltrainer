@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 CONFIG_KEY = "maltrainer_config"
 SCHEMA_VERSION = "1"
 
+# model_type -> (trainer script, ss_base_model_version, ss_network_module)
+ARCHITECTURES = {
+    "minimax_h3": ("train_minimax_h3_lora.py", "minimax_h3_fl2va", "maltrainer.models.minimax_h3.lora"),
+    "qwen_image_2_1": ("train_qwen_image_2_1_lora.py", "qwen_image_2_1", "maltrainer.models.qwen_image_2_1.lora"),
+    "krea2": ("train_krea2_lora.py", "krea2_raw", "maltrainer.models.krea2.lora"),
+    "flux3_klein": ("train_flux3_klein_lora.py", "flux3_image_klein_base", "maltrainer.models.flux3.lora"),
+    "moss_image": ("train_moss_image_lora.py", "moss_image_base", "maltrainer.models.moss_image.lora"),
+    "moss_image_finetune": ("train_moss_image_finetune.py", "moss_image_base", "maltrainer.models.moss_image.finetune"),
+}
+
 
 def git_commit(repo_root: Optional[Path] = None) -> Optional[str]:
     """Short commit of the trainer that produced a checkpoint, if it is a git checkout.
@@ -96,13 +106,7 @@ def build_metadata(
     model = config.get("model", {}) or {}
 
     arch = runtime.get("model_type") or config.get("model_type") or "minimax_h3"
-    trainer_script = "train_qwen_image_2_1_lora.py" if "qwen" in arch else "train_minimax_h3_lora.py"
-    base_model_version = "qwen_image_2_1" if "qwen" in arch else "minimax_h3_fl2va"
-    network_module = (
-        "maltrainer.models.qwen_image_2_1.lora"
-        if "qwen" in arch
-        else "maltrainer.models.minimax_h3.lora"
-    )
+    trainer_script, base_model_version, network_module = ARCHITECTURES.get(arch, ARCHITECTURES["minimax_h3"])
 
     metadata: Dict[str, Any] = {
         "maltrainer_metadata_version": SCHEMA_VERSION,

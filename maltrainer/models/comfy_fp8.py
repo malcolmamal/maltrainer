@@ -87,14 +87,35 @@ def read_comfy_checkpoint(path: str | Path) -> Tuple[Dict[str, torch.Tensor], Di
     return tensors, layers
 
 
-def strip_prefix(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], candidates=("model.diffusion_model.", "diffusion_model.")):
-    """Drop a ComfyUI container prefix if every key carries it."""
+CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
+
+
+def container_prefix(keys, candidates=CONTAINER_PREFIXES) -> str:
+    """The ComfyUI container prefix every key carries ("" if none), so a save can write it back."""
+    keys = list(keys)
     for prefix in candidates:
-        if tensors and all(key.startswith(prefix) for key in tensors):
-            tensors = {key[len(prefix):]: value for key, value in tensors.items()}
-            layers = {key[len(prefix):] if key.startswith(prefix) else key: value for key, value in layers.items()}
-            break
+        if keys and all(key.startswith(prefix) for key in keys):
+            return prefix
+    return ""
+
+
+def strip_prefix(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], candidates=CONTAINER_PREFIXES):
+    """Drop a ComfyUI container prefix if every key carries it."""
+    prefix = container_prefix(tensors, candidates)
+    if prefix:
+        tensors = {key[len(prefix):]: value for key, value in tensors.items()}
+        layers = {key[len(prefix):] if key.startswith(prefix) else key: value for key, value in layers.items()}
     return tensors, layers
+
+
+FP8_MAX = float(torch.finfo(torch.float8_e4m3fn).max)  # 448
+
+
+def quantize_rows(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """bf16/fp32 weight -> (fp8 e4m3, per-output-row fp32 scale [out, 1])."""
+    w = weight.float()
+    scale = (w.abs().amax(dim=1, keepdim=True) / FP8_MAX).clamp(min=1e-12)
+    return (w / scale).to(torch.float8_e4m3fn), scale
 
 
 def dequantize(weight: torch.Tensor, scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:

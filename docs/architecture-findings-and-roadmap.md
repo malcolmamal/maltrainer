@@ -8,8 +8,8 @@ This is a working document to capture findings and recommended next steps so we 
   - De-distilled transformer path via `model.name_or_path` with `model.extras_name_or_path` for TE/VAE.
   - Training adapter merge via `model.assistant_lora_path`.
 - Added Z-Image Turbo templates:
-  - `config/zimage_turbo_template-onetrainer.yaml` (de-distilled)
-  - `config/zimage_turbo_template-adapter.yaml` (training adapter)
+  - `templates/zimage_turbo_template-onetrainer.yaml` (de-distilled)
+  - `templates/zimage_turbo_template-adapter.yaml` (training adapter)
 - Added Prodigy optimizer support for LoRA + embedding.
 - Added logit-normal timestep sampling and LR warmup.
 - Added constant loss weighting support.

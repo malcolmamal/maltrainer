@@ -5,14 +5,14 @@ ComfyUI's single-file checkpoints. You don't need diffusers folders. One dataset
 stills, video clips with sound, and audio-only recordings.
 
 ```bash
-python train_minimax_h3_lora.py --config config/train_minimax_h3_lora_fizgig_recipe.yaml
+python train_minimax_h3_lora.py --config templates/examples/train_minimax_h3_lora_fizgig_recipe.yaml
 ```
 
 | Config | Use it for |
 |---|---|
-| [`train_minimax_h3_lora_fizgig_recipe.yaml`](../config/train_minimax_h3_lora_fizgig_recipe.yaml) | Character/style LoRAs from photos, with Fizgig's default recipe (see below) |
-| [`train_minimax_h3_lora_audio_video.yaml`](../config/train_minimax_h3_lora_audio_video.yaml) | Photos, clips with sound and voice recordings in one run |
-| [`train_minimax_h3_lora_tuned.yaml`](../config/train_minimax_h3_lora_tuned.yaml) | The earlier Prodigy + contrastive-guidance recipe |
+| [`train_minimax_h3_lora_fizgig_recipe.yaml`](../templates/examples/train_minimax_h3_lora_fizgig_recipe.yaml) | Character/style LoRAs from photos, with Fizgig's default recipe (see below) |
+| [`train_minimax_h3_lora_audio_video.yaml`](../templates/examples/train_minimax_h3_lora_audio_video.yaml) | Photos, clips with sound and voice recordings in one run |
+| [`train_minimax_h3_lora_tuned.yaml`](../templates/examples/train_minimax_h3_lora_tuned.yaml) | The earlier Prodigy + contrastive-guidance recipe |
 
 ## Model files
 

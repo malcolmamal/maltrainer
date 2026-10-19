@@ -1,0 +1,75 @@
+# Krea 2 full finetune template -- rotating windows, fused Automagic3 (train_krea2_finetune.py).
+#
+# For the CLI: copy this file and replace the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    your ComfyUI models folder
+#
+# Trains the DiT's own weights, not a LoRA, a window at a time (docs/krea2-finetuning.md): the
+# frozen model stays on the GPU in fp8, one window of every block's Linears trains in bf16 from
+# a CPU master copy, and the text-fusion stack trains all run. Data, timesteps and loss match
+# krea2_template.yaml. Each checkpoint is a full bf16 model (~26 GB); the resume state adds the
+# optimizer (~12.5 GB) and hard-links the checkpoint.
+
+model:
+  # The bf16 RAW model. Turbo is distilled; an fp8 file works (the trainer warns) but every block
+  # then starts from fp8's rounding. To continue from an earlier finetune with a fresh optimizer,
+  # point this at that output file.
+  transformer_path: "[comfyui_models]/diffusion_models/krea2_raw_bf16.safetensors"
+  vae_path: "[comfyui_models]/vae/qwen_image_vae.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3vl_4b_fp8_scaled.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512            # area target; buckets keep each image's aspect on a 16 px grid
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+finetune:
+  # One window trains at a time, every rotate_every steps the next (a full cycle = 4 windows).
+  # Each spans all 28 blocks: attention 3.7B, each MLP matrix 2.8B (Fizgig's component windows).
+  rotate_every: 100
+  windows:
+    - {name: attention, prefixes: ["attn."]}
+    - {name: mlp.gate, prefixes: ["mlp.gate"]}
+    - {name: mlp.up, prefixes: ["mlp.up"]}
+    - {name: mlp.down, prefixes: ["mlp.down"]}
+  # Trained all run, in bf16: where prompt-to-concept binding happens (Fizgig). [] = none.
+  always_on: ["txtfusion"]
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1  # must stay 1: the optimizer steps inside backward
+  max_steps: 2000            # > 0 wins over num_epochs; a multiple of 4 x rotate_every trains each window equally
+  num_epochs: 20
+  save_every: 0              # 0 = only at the end or on [s] / [q]; each save is a 26 GB model
+  save_state: true           # also write <name>_state/ for resume_from (latest save only)
+  resume_from: ""
+  timestep_distribution: "krea2_shift"
+  optimizer: "automagic3"         # the only one supported here
+  # Pinned (min = max = learning_rate), as for the MOSS-Image finetune. 1e-5 is Fizgig's Krea 2
+  # finetune rate: "1e-4 trains, but treat it as the top of the experiment range". When a run
+  # looks almost right but overcooked, lower the rate rather than the step count.
+  learning_rate: 1.0e-5
+  automagic_min_lr: 1.0e-5
+  automagic_max_lr: 1.0e-5
+  weight_decay: 0.0
+  automagic_polarity_history: 8   # 1 byte per trained weight on the GPU (3.7 GB for attention)
+  automagic_clip_threshold: 1.0   # per-tensor update clip; there is no global gradient clip
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+  caption_dropout: 0.05
+  monitor_every: 100
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/krea2_finetune/[person_to_train]"
+  name: "krea2_ft_[person_to_train]"
+  embed_config: true
+
+logging:
+  level: "INFO"

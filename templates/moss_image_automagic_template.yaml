@@ -1,0 +1,107 @@
+# MOSS-Image LoRA template -- Automagic3 (train_moss_image_lora.py).
+#
+# Used by the web UI, which fills in the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    COMFYUI_MODELS_PATH; the UI finds each file anywhere under the matching subfolder
+# For the CLI, copy this file and replace the placeholders yourself.
+#
+# Recipe sources (docs/moss-image-lora-training.md):
+#   OpenMOSS technical report, appendix A.2 -- velocity target, plain per-token MSE, the final
+#     pretraining interval's timesteps (logit-normal, cut at 0.95, 1 % uniform, no shift)
+#   maltrainer's FLUX.3 Automagic3 runs -- one adaptive rate per module family, an 8-step sign
+#     window (16 left FLUX.3 under-trained), no weight decay, EMA 0.98, 1e-6 launch point
+
+model:
+  # The BASE model, bf16 (10 GB). moss_image_base_int8_convrot also works, at ~5.5 GB but slower
+  # steps; the _sft_ files are OpenMOSS's fine-tune of the base and only get a warning.
+  transformer_path: "[comfyui_models]/diffusion_models/moss_image_base_bf16.safetensors"
+  vae_path: "[comfyui_models]/vae/flux2_vae.safetensors"
+  # Qwen3.5-9B. Only used while caching prompt embeddings, then unloaded.
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3.5_9b_int8_convrot.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512            # area target; buckets keep each image's aspect on a 16 px grid
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 16
+  alpha: 16
+  prefix: "diffusion_model."
+  # blocks (attention + feed-forward of the 42 joint blocks = 252) | attn (attention only = 168)
+  # | all (blocks + input/timestep/modulation/output = 258; the text adapter is never trained)
+  targets: "blocks"
+  dtype: "float32"
+  # Blocks without an adapter. [] = adapt all 42 blocks. The reference sampler skips block 22 in
+  # CFG's negative branch, and AI Toolkit leaves it out for that; Fizgig's A/B runs found that
+  # costs likeness, so it trains block 22 now, and so do we. [22] = the old behaviour.
+  skip_blocks: []
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  # Duration: max_steps (> 0) wins; otherwise num_epochs full epochs.
+  max_steps: 0               # 0 = train num_epochs full epochs
+  num_epochs: 20
+  save_every: 0              # 0 = only the final file
+  # The report's last pretraining interval: logit(sigma) ~ N(1.09, 0.95), truncated at sigma 0.95
+  # and rescaled onto the 1000-step grid, 1 % uniform, no shift. Mean sigma ~0.74; only ~2 % of
+  # steps land below sigma 0.3. For more fine detail, try timestep_logit_mean 0.
+  timestep_distribution: "logit_normal"
+  timestep_logit_mean: 1.09
+  timestep_logit_std: 0.95
+  timestep_cutoff: 0.95
+  timestep_uniform_mix: 0.01
+  timestep_shift: 1.0
+  timestep_grid: 1000
+  max_grad_norm: 1.0
+  gradient_checkpointing: true
+  # torch.compile each block. Measured on a 5090 (2026-10-18): 3% faster at 512 px, 7% at
+  # 1024 px, for a 25-50 s compile at the start. Worth it only for long or large runs. Needs
+  # triton-windows on Windows; without it the run stays eager and says so.
+  compile: false
+  int8_grad_precision: "bf16"     # only for an int8 DiT: backward through its Linears, bf16 | fp32 | int8
+  optimizer: "automagic3"
+  learning_rate: 1.0e-6           # Automagic3 launch point; it adapts from here
+  weight_decay: 0.0
+  automagic_param_groups: true    # attention / MLP / other each adapt their own rate
+  automagic_polarity_history: 8
+  automagic_clip_threshold: 1.0
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+  ema_decay: 0.98                 # checkpoints save the average
+  # The reference sampler uses real CFG (scale 3) against the empty prompt; dropping a caption
+  # now and then keeps the LoRA's unconditional branch in step.
+  caption_dropout: 0.05
+
+# Previews rendered with the weights in training (no checkpoint saved): every N steps and before
+# the first, the same seed per prompt each time. The trigger-free prompt shows whether the LoRA
+# leaks into the class. ~24 s per 1024 px image (30 steps, CFG 3). every: 0 = off.
+sample:
+  every: 500
+  at_start: true
+  prompts:
+    - "a photo of [person_to_train] smiling, close-up with face visible, soft light from the front"
+    - "a photo of a person smiling, close-up with face visible, soft light from the front"
+  negative: ""
+  steps: 30
+  cfg: 3.0
+  width: 1024
+  height: 1024
+  seed: 42
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/moss_image/[person_to_train]"
+  name: "moss_image_[person_to_train]"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"
