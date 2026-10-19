@@ -18,6 +18,8 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from maltrainer.data.walk import count_files, walk_visible
+
 DATASETS_ENV = "DATASETS_PATH"
 COMFYUI_MODELS_ENV = "COMFYUI_MODELS_PATH"
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -530,12 +532,7 @@ def load_template(spec: ModelSpec, dataset_name: str, optimizer: Optional[str] =
 def count_images(path: Path) -> int:
     if not path.exists():
         return 0
-    count = 0
-    for root, _, files in os.walk(path):
-        for fname in files:
-            if Path(fname).suffix.lower() in SUPPORTED_EXTS:
-                count += 1
-    return count
+    return count_files(path, SUPPORTED_EXTS)
 
 
 NON_SQUARE_TOLERANCE = 0.03  # |w - h| / max(w, h) above this counts as non-square
@@ -556,7 +553,7 @@ def scan_images(path: Path) -> tuple[int, int, Optional[tuple[int, int]]]:
     from PIL import Image
 
     count, non_square, example = 0, 0, None
-    for root, _, files in os.walk(path):
+    for root, _, files in walk_visible(path):
         for fname in files:
             if Path(fname).suffix.lower() not in SUPPORTED_EXTS:
                 continue

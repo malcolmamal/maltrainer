@@ -137,3 +137,12 @@ def test_summaries_count_every_kind_with_plurals() -> None:
 
     assert summarize_kinds(sources) == "1 image, 2 clips, 0 audios"
     assert summarize_kinds([]) == "0 images, 0 clips, 0 audios"
+
+
+def test_images_in_hidden_folders_are_neither_scanned_nor_counted(write_file: Write) -> None:
+    for rel in ["a.png", "clips/b.mp4", ".ipynb_checkpoints/a-checkpoint.png", "clips/.trash/c.mp4"]:
+        write_file(rel, "")
+    root = write_file("a.png", "").parent
+
+    assert [source.path.name for source in scan_media_sources(root)] == ["a.png", "b.mp4"]
+    assert count_media_files(root) == 2

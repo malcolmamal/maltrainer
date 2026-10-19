@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from maltrainer.data.minimax_dataset import _media_kind
+from maltrainer.data.walk import walk_visible
 from maltrainer.finetune.repeats import folder_repeats, samples_per_epoch
 
 DEFAULT_EPOCHS = 22  # the MOSS-Image people LoRAs had likeness by ~20 epochs
@@ -49,8 +50,7 @@ def folder_counts(root: Union[str, Path], kinds: Sequence[str] = ("image",)) -> 
         return []
     kinds = set(kinds)
     out = []
-    for folder, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+    for folder, _, files in walk_visible(root):
         n = sum(1 for name in files if _media_kind(Path(folder) / name) in kinds)
         if n:
             out.append((Path(os.path.relpath(folder, root)).as_posix(), n))

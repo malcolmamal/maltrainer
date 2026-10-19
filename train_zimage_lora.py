@@ -26,6 +26,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from maltrainer.data.dataset import ZImageDataset
+from maltrainer.data.walk import count_files
 from maltrainer.models.lora import LoRANetwork
 from maltrainer.models.scheduler import get_flow_match_scheduler
 from maltrainer.utils.config import load_config, save_config_to_output
@@ -260,11 +261,7 @@ class ZImageLoRATrainer:
             logger.warning("Dataset path does not exist: %s", data_root)
             return 1
         supported_exts = {".jpg", ".jpeg", ".png", ".webp"}
-        sample_count = 0
-        for root, _, files in os.walk(data_root):
-            for fname in files:
-                if Path(fname).suffix.lower() in supported_exts:
-                    sample_count += 1
+        sample_count = count_files(data_root, supported_exts)
         repeats = int(dataset_config.get("repeats", 1) or 1)
         sample_count = max(sample_count, 1) * max(repeats, 1)
         return sample_count

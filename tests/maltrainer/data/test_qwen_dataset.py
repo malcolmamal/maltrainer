@@ -141,3 +141,12 @@ def test_an_undecodable_image_becomes_a_black_sample(
 
     assert torch.equal(sample["pixel_values"], torch.zeros(3, 16, 32))
     assert "Failed to load image" in caplog.text
+
+
+def test_images_in_hidden_folders_are_not_trained_on(data_root: Path, make_image: Callable[..., Path]) -> None:
+    for rel in ["a.png", "people/b.png", ".ipynb_checkpoints/a-checkpoint.png", "people/.trash/c.png"]:
+        make_image(rel)
+
+    dataset = QwenImage21Dataset(data_root)
+
+    assert [path.name for path in dataset.image_paths] == ["a.png", "b.png"]

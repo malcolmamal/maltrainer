@@ -5,7 +5,6 @@ Dataset loader for Qwen-Image-2.1 image datasets.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -13,6 +12,8 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+
+from maltrainer.data.walk import walk_visible
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class QwenImage21Dataset(Dataset):
             return
 
         base_images: List[Path] = []
-        for root, _, files in os.walk(self.data_root):
+        for root, _, files in walk_visible(self.data_root):
             for file in files:
                 ext = Path(file).suffix.lower()
                 if ext in SUPPORTED_IMAGE_EXTENSIONS:

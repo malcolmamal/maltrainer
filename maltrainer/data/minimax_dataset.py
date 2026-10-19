@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
@@ -32,6 +31,8 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 from PIL import Image
+
+from maltrainer.data.walk import walk_visible
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +119,7 @@ def _media_kind(path: Path) -> Optional[str]:
         return "image"
     if ext in SUPPORTED_VIDEO_EXTENSIONS:
         return "clip"
-    if ext in SUPPORTED_AUDIO_EXTENSIONS:
-        return "audio"
-    return None
+    return "audio" if ext in SUPPORTED_AUDIO_EXTENSIONS else None
 
 
 def _read_text(path: Path, one_line: bool = False) -> str:
@@ -198,7 +197,7 @@ def scan_media_sources(
     default_caption = (default_caption or "").strip()
     sources: List[MediaSource] = []
     templates: Dict[Path, Optional[str]] = {}
-    for root, _, files in os.walk(data_root):
+    for root, _, files in walk_visible(data_root):
         for name in files:
             path = Path(root) / name
             kind = _media_kind(path)
@@ -215,7 +214,8 @@ def count_media_files(data_root: Union[str, Path], kinds: Iterable[str] = MEDIA_
     if not data_root.exists():
         return 0
     kinds = set(kinds)
-    return sum(1 for root, _, files in os.walk(data_root) for name in files if _media_kind(Path(root) / name) in kinds)
+    found = (_media_kind(Path(root) / name) for root, _, files in walk_visible(data_root) for name in files)
+    return sum(1 for kind in found if kind in kinds)
 
 
 # --- decoding -----------------------------------------------------------------------

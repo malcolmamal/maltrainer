@@ -9,6 +9,8 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from maltrainer.data.walk import walk_visible
+
 
 class ZImageDataset(Dataset):
     """Dataset for Z-Image training with VAE encoding and text encoding."""
@@ -46,7 +48,8 @@ class ZImageDataset(Dataset):
         self.image_paths = []
         self.captions = []
 
-        for img_path in self.data_root.rglob("*"):
+        files = (Path(folder) / name for folder, _, names in walk_visible(self.data_root) for name in names)
+        for img_path in files:
             if img_path.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
                 self.image_paths.append(img_path)
 

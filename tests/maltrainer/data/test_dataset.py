@@ -111,3 +111,10 @@ def test_without_random_flip_the_image_keeps_its_orientation(data_root: Path, ma
     pixels = [dataset[0]["pixel_values"] for _ in range(5)]
 
     assert all(sample[0, 0, 0] == 1.0 and sample[2, 0, -1] == 1.0 for sample in pixels)
+
+
+def test_images_in_hidden_folders_are_not_trained_on(data_root: Path, make_image: Callable[..., Path]) -> None:
+    for rel in ["a.png", "people/b.png", ".ipynb_checkpoints/a-checkpoint.png", "people/.trash/c.png"]:
+        make_image(rel)
+
+    assert sorted(_names(ZImageDataset(str(data_root)))) == ["a.png", "b.png"]
