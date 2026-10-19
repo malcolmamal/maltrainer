@@ -6,7 +6,8 @@ from typing import Callable
 import numpy as np
 import pytest
 
-from maltrainer.data.minimax_dataset import AUDIO_SAMPLE_RATE, read_audio, read_video_frames
+from maltrainer.data.media import read_audio, read_video_frames
+from maltrainer.data.minimax_dataset import AUDIO_SAMPLE_RATE
 
 
 def _greys(frames: np.ndarray) -> list[int]:

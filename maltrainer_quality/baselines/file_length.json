@@ -1,6 +1,6 @@
 {
   "backend/app.py": 1005,
-  "maltrainer/data/minimax_dataset.py": 386,
+  "maltrainer/data/minimax_dataset.py": 288,
   "maltrainer/finetune/rotation.py": 206,
   "maltrainer/models/comfy_fp8.py": 213,
   "maltrainer/models/flux3/model.py": 307,
@@ -31,7 +31,7 @@
   "train_flux3_klein_lora.py": 511,
   "train_krea2_finetune.py": 456,
   "train_krea2_lora.py": 586,
-  "train_minimax_h3_lora.py": 1221,
+  "train_minimax_h3_lora.py": 1220,
   "train_moss_image_finetune.py": 859,
   "train_moss_image_lora.py": 831,
   "train_qwen_image_2_1_lora.py": 641,

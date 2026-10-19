@@ -26,6 +26,7 @@ from safetensors.torch import save_file
 from torch.optim import AdamW
 from tqdm import tqdm
 
+from maltrainer.data.media import read_audio, read_video_frames
 from maltrainer.data.minimax_dataset import (
     AUDIO_SAMPLE_RATE,
     FPS,
@@ -38,8 +39,6 @@ from maltrainer.data.minimax_dataset import (
     frames_tensor,
     load_image,
     plan_segments,
-    read_audio,
-    read_video_frames,
     scan_media_sources,
     slice_audio,
     summarize_kinds,
