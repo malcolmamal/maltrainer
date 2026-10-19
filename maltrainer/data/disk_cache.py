@@ -59,7 +59,7 @@ def model_identity(path: str | Path | None) -> str:
 
 
 def cache_key(*parts: object) -> str:
-    return hashlib.sha1("\x1f".join(str(p) for p in parts).encode("utf-8")).hexdigest()
+    return hashlib.sha1("\x1f".join(str(p) for p in parts).encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 class FolderCache:

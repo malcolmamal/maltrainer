@@ -611,7 +611,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         """The samples (paths relative to the dataset folder, captions) and repeats, so a moved
         dataset still matches and any added, removed or recaptioned image does not."""
         root = self.config["dataset"]["path"]
-        digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"))
+        digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"), usedforsecurity=False)
         if self.config["dataset"].get("folder_repeats"):  # only then, so earlier states keep their fingerprint
             digest.update(repr(sorted(self.config["dataset"]["folder_repeats"].items())).encode("utf-8"))
         for key, caption in self.samples:

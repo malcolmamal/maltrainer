@@ -14,7 +14,7 @@ include = ["*.py", "*.pyi", "**/pyproject.toml"]
 [tool.ruff.lint]
 # ruff's defaults plus import order. More families are added one at a time, each with its
 # fixes, so the gate passes on every commit.
-select = ["E4", "E501", "PTH", "BLE", "B", "RUF", "N", "UP", "PL", "T20", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
+select = ["E4", "E501", "PTH", "BLE", "B", "RUF", "N", "UP", "PL", "T20", "S", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
 ignore = [
     # A named result before `return` documents what a model step produces.
     "RET504",
@@ -36,11 +36,24 @@ ignore = [
     "PLR0911",
     "PLR0912",
     "PLR0915",
+    # ruff reads "token" / "pad_token" / "trigger_token" in a name as a secret; here they are tokenizer tokens.
+    "S105",
+    "S106",
+    "S107",
+    # random is used for sampling noise, timesteps and picks, never for security.
+    "S311",
+    # The subprocesses run fixed argument lists (git, the trainers), without a shell or user-supplied strings.
+    "S603",
+    "S607",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 # A package's __init__ imports what it re-exports.
 "__init__.py" = ["F401"]
+# Tests assert, and compare against sha1 digests they compute themselves.
+"tests/**" = ["S101", "S324"]
+# os.system("") only switches on ANSI escape handling in the Windows console.
+"maltrainer/utils/preview_menu.py" = ["S605"]
 # Command-line programs report to the console with print. The library (maltrainer/) logs.
 "scripts/**" = ["T201"]
 "maltrainer_quality/**" = ["T201"]

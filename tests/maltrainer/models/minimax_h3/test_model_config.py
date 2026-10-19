@@ -87,7 +87,7 @@ def test_scale_and_max_period_change_the_frequencies() -> None:
 
 
 def test_a_timestep_embedding_needs_a_one_dimensional_tensor() -> None:
-    with pytest.raises(AssertionError, match="1d-tensor"):
+    with pytest.raises(ValueError, match="1d-tensor"):
         get_timestep_embedding(torch.zeros(2, 1), 4)
 
 

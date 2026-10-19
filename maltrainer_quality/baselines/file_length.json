@@ -11,7 +11,7 @@
   "maltrainer/models/minimax_h3/comfy_quant.py": 277,
   "maltrainer/models/minimax_h3/int8_convrot.py": 283,
   "maltrainer/models/minimax_h3/lora.py": 358,
-  "maltrainer/models/minimax_h3/model.py": 429,
+  "maltrainer/models/minimax_h3/model.py": 428,
   "maltrainer/models/minimax_h3/text_encoder.py": 215,
   "maltrainer/models/minimax_h3/video_vae.py": 430,
   "maltrainer/models/moss_image/model.py": 265,

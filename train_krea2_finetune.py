@@ -176,7 +176,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
 
     def _dataset_fingerprint(self) -> str:
         root = self.config["dataset"]["path"]
-        digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"))
+        digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"), usedforsecurity=False)
         for key, caption in self.samples:
             digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode())
         return digest.hexdigest()
