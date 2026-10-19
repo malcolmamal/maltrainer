@@ -8,10 +8,12 @@ Every setting is explained in full in the reference,
 [moss-image-finetuning.md](moss-image-finetuning.md). This page links to it instead of repeating
 it.
 
-**Which models?** MOSS-Image is the only model with a full finetune trainer so far
-(`train_moss_image_finetune.py`). The other models (FLUX.3 [klein], Krea 2, Qwen-Image 2.1,
-Z-Image, MiniMax H3) train LoRAs only. [Other models](#other-models) at the end covers what is
-shared and what a new finetune trainer would need.
+**Which models?** This walkthrough is for MOSS-Image (`train_moss_image_finetune.py`). Krea 2
+has a finetune too (`train_krea2_finetune.py`), which trains in rotating windows to fit 12.9B
+parameters on 32 GB: see [krea2-finetuning.md](krea2-finetuning.md). The other models
+(FLUX.3 [klein], Qwen-Image 2.1, Z-Image, MiniMax H3) train LoRAs only. [Other
+models](#other-models) at the end covers what is shared and what a new finetune trainer would
+need.
 
 ---
 
@@ -406,12 +408,16 @@ Keys while training: `s` save · `q` save and stop · `p` pause · `e` preview m
 
 ## Other models
 
-Only MOSS-Image has a finetune trainer. What it is built from:
+Two models have a finetune trainer: MOSS-Image (every trained weight on the GPU at once) and
+Krea 2 ([krea2-finetuning.md](krea2-finetuning.md): rotating windows over an fp8 frozen model,
+`maltrainer/finetune/rotation.py`). What they are built from:
 
 - **Shared, model-agnostic** (`maltrainer/finetune/`): parameter selection by name prefix
   (`selection.py`), prior preservation (`prior.py`), regularisation images at a reduced step
   (`regularisation.py`), per-folder repeats (`repeats.py`) and LoRA extraction (`extract.py`).
   `--suggest-steps` uses `maltrainer/utils/step_planner.py`.
+- **Rotating windows** (`rotation.py`): for a model whose bf16 weights don't fit beside their
+  training state. Any model whose block Linears load as `Fp8ScaledLinear` can use it.
 - **MOSS-Image's own** (`maltrainer/models/moss_image/finetune.py`): the default trainable set
   (`layers.`), the Automagic3 parameter groups, and how to save a full checkpoint in the source
   file's exact key layout (including its fused q/k/v).
