@@ -39,6 +39,7 @@ ARCHITECTURES = {
     "flux3_klein": ("train_flux3_klein_lora.py", "flux3_image_klein_base", "maltrainer.models.flux3.lora"),
     "moss_image": ("train_moss_image_lora.py", "moss_image_base", "maltrainer.models.moss_image.lora"),
     "moss_image_finetune": ("train_moss_image_finetune.py", "moss_image_base", "maltrainer.models.moss_image.finetune"),
+    "krea2_finetune": ("train_krea2_finetune.py", "krea2_raw", "maltrainer.models.krea2.finetune"),
 }
 
 
@@ -106,7 +107,9 @@ def build_metadata(
     model = config.get("model", {}) or {}
 
     arch = runtime.get("model_type") or config.get("model_type") or "minimax_h3"
-    trainer_script, base_model_version, network_module = ARCHITECTURES.get(arch, ARCHITECTURES["minimax_h3"])
+    if arch not in ARCHITECTURES:
+        logger.warning("Metadata: no labels for model type %r; trainer, base model and network module stay empty", arch)
+    trainer_script, base_model_version, network_module = ARCHITECTURES.get(arch, ("", "", ""))
 
     metadata: Dict[str, Any] = {
         "maltrainer_metadata_version": SCHEMA_VERSION,
@@ -137,9 +140,9 @@ def build_metadata(
         "ss_sigmoid_scale": train.get("sigmoid_scale"),
         "ss_discrete_flow_shift": train.get("timestep_shift"),
         # base model identities by filename only -- the full paths live in the config blob
-        "ss_transformer": Path(str(model.get("transformer_path", ""))).name,
-        "ss_vae": Path(str(model.get("vae_path", ""))).name,
-        "ss_text_encoder": Path(str(model.get("text_encoder_path", ""))).name,
+        "ss_transformer": Path(str(model.get("transformer_path") or "")).name,
+        "ss_vae": Path(str(model.get("vae_path") or "")).name,
+        "ss_text_encoder": Path(str(model.get("text_encoder_path") or "")).name,
     }
 
     metadata["step"] = step

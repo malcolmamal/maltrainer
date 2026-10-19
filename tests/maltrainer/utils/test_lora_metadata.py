@@ -95,11 +95,31 @@ def test_runtime_values_are_prefixed_and_win_the_architecture() -> None:
     assert metadata["maltrainer_skipped"] == ""
 
 
-def test_an_unknown_architecture_keeps_its_name_with_the_default_trainer() -> None:
-    metadata = build_metadata({"model_type": "future_model"}, step=1)
+def test_an_unknown_architecture_keeps_its_name_and_borrows_no_labels(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING", logger="maltrainer.utils.lora_metadata"):
+        metadata = build_metadata({"model_type": "future_model"}, step=1)
 
     assert metadata["architecture"] == "future_model"
-    assert metadata["maltrainer_trainer"] == "train_minimax_h3_lora.py"
+    assert (metadata["maltrainer_trainer"], metadata["ss_base_model_version"], metadata["ss_network_module"]) == (
+        "",
+    ) * 3
+    assert "no labels for model type 'future_model'" in caplog.text
+
+
+def test_a_krea2_finetune_is_labelled_as_one() -> None:
+    metadata = build_metadata({}, step=1, runtime={"model_type": "krea2_finetune"})
+
+    assert (metadata["maltrainer_trainer"], metadata["ss_base_model_version"], metadata["ss_network_module"]) == (
+        "train_krea2_finetune.py",
+        "krea2_raw",
+        "maltrainer.models.krea2.finetune",
+    )
+
+
+def test_a_null_model_path_is_recorded_as_empty() -> None:
+    metadata = build_metadata({"model": {"transformer_path": None, "vae_path": None}}, step=1)
+
+    assert (metadata["ss_transformer"], metadata["ss_vae"], metadata["ss_text_encoder"]) == ("", "", "")
 
 
 def test_the_embedded_config_keeps_key_order_and_stringifies_paths() -> None:
