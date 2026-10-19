@@ -2,11 +2,9 @@
 Dataset for Z-Image training.
 """
 
-import os
 from pathlib import Path
 from typing import Optional
 
-import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms

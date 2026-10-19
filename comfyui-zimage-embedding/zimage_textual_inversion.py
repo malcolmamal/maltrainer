@@ -4,11 +4,12 @@ ComfyUI custom node for Z-Image Textual Inversion support.
 This node provides text encoding with textual inversion embeddings for Z-Image models.
 """
 
-import torch
-import folder_paths
-from transformers import Qwen2Tokenizer, Qwen3ForCausalLM
-import safetensors.torch as safetensors
 import os
+
+import safetensors.torch as safetensors
+import torch
+from transformers import Qwen2Tokenizer, Qwen3ForCausalLM
+
 
 class ZImageTextEncodeWithEmbeddings:
     """

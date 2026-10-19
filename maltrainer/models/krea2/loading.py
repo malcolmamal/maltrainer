@@ -11,8 +11,14 @@ from typing import Dict, Optional, Tuple, Union
 import torch
 from accelerate import init_empty_weights
 
-from maltrainer.models.comfy_fp8 import (container_prefix, dequantize, quantize_rows, read_comfy_checkpoint,
-                                         strip_prefix, swap_in_fp8_linears)
+from maltrainer.models.comfy_fp8 import (
+    container_prefix,
+    dequantize,
+    quantize_rows,
+    read_comfy_checkpoint,
+    strip_prefix,
+    swap_in_fp8_linears,
+)
 from maltrainer.models.krea2.model import Krea2Config, Krea2Transformer
 
 logger = logging.getLogger(__name__)

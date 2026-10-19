@@ -169,8 +169,13 @@ class YesNoJudge:
 
     def __init__(self, device: str):
         from huggingface_hub import snapshot_download
-        from transformers import AutoImageProcessor, AutoTokenizer, AutoVideoProcessor, Qwen3VLProcessor
-        from transformers import Qwen3VLForConditionalGeneration
+        from transformers import (
+            AutoImageProcessor,
+            AutoTokenizer,
+            AutoVideoProcessor,
+            Qwen3VLForConditionalGeneration,
+            Qwen3VLProcessor,
+        )
 
         path = snapshot_download(JUDGE_REPO, local_files_only=True)
         self.model = Qwen3VLForConditionalGeneration.from_pretrained(path, dtype=torch.bfloat16).to(device).eval()
@@ -308,7 +313,9 @@ def main() -> None:
     (bench / "scores.json").write_text(json.dumps(records, indent=1))
     (bench / "summary.json").write_text(json.dumps(summary, indent=2))
 
-    fmt = lambda v, f: (f.format(v) if v is not None else "   -  ")
+    def fmt(v, f):
+        return f.format(v) if v is not None else "   -  "
+
     print(f"\nlikeness floor (base) {floor:.4f}  ceiling (real photos) {ceiling:.4f}  "
           f"training pairwise CLIP {train_pairwise:.4f}\n")
     print(f"{'run':>11} {'step':>5} {'face%':>6} {'likeness':>9} {'norm':>6} {'judge':>6} {'adhere':>7} {'divers':>7} {'memo':>6}")

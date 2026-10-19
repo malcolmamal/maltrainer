@@ -1,8 +1,9 @@
 
-import safetensors.torch as safetensors
-import torch
-import sys
 import os
+import sys
+
+import safetensors.torch as safetensors
+
 
 def analyze_lora(path):
     if not os.path.exists(path):
@@ -19,8 +20,6 @@ def analyze_lora(path):
     modules = set()
     ranks = set()
     
-    structure_info = {} # key_prefix -> rank
-
     for k, v in tensors.items():
         total_params += v.numel()
         
@@ -44,12 +43,10 @@ def analyze_lora(path):
             try:
                 # find index of 'layers'
                 idx = parts.index('layers')
-                # get layer num
-                layer_num = parts[idx+1]
                 # get submodule (rest)
                 submodule = ".".join(parts[idx+2:]).replace('.lora_A.weight', '').replace('.lora_B.weight', '').replace('.alpha', '')
                 modules.add(submodule)
-            except:
+            except ValueError:
                 modules.add(clean_k)
         else:
             modules.add(clean_k)

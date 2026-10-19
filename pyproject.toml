@@ -1,0 +1,45 @@
+# Tool configuration only. Dependencies are still in requirements.txt; the quality gate
+# (python -m maltrainer_quality) reads the settings below.
+
+[tool.ruff]
+target-version = "py310"
+# What the code is written at today; phase 2 of the quality plan settles the final width.
+line-length = 120
+# The scripts import their sibling modules (merge_loras, qwen_2_1_sweep_checkpoints) as
+# first-party, the same as maltrainer.
+src = [".", "scripts"]
+# Python only: ruff also formats Markdown, and the docs are written by hand.
+include = ["*.py", "*.pyi", "**/pyproject.toml"]
+
+[tool.ruff.lint]
+# ruff's defaults plus import order. More families are added one at a time, each with its
+# fixes, so the gate passes on every commit.
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# A package's __init__ imports what it re-exports.
+"__init__.py" = ["F401"]
+
+# The complexity gate (maltrainer_quality.complexity) runs C901 at this limit against its
+# baseline. C90 is not in `select`, so `ruff check` alone does not fail on the
+# functions the baseline allows.
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers --strict-config"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+xfail_strict = true
+
+[tool.coverage.run]
+source = ["maltrainer", "maltrainer_quality"]
+branch = true
+
+[tool.coverage.report]
+# A floor, not a target: raise it whenever tests land, never lower it.
+fail_under = 3.18
+precision = 2
+show_missing = true
+skip_covered = true
+exclude_also = ['if __name__ == "__main__":']

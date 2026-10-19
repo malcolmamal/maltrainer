@@ -1,0 +1,6 @@
+# Quality gate tools, pinned so every checkout runs the same gate.
+#   pip install -r requirements-dev.txt
+coverage==7.14.1
+pytest==9.1.0
+pytest-cov==7.1.0
+ruff==0.15.18

@@ -48,14 +48,19 @@ from maltrainer.finetune.regularisation import set_step_scale
 from maltrainer.finetune.repeats import folder_repeats, repeat_order, samples_per_epoch, unknown_keys
 from maltrainer.finetune.selection import select_trainable
 from maltrainer.models.flux3.loading import is_int8_convrot
-from maltrainer.models.moss_image.finetune import DEFAULT_TRAINABLE_PREFIXES, drift_targets, param_groups, save_full_model
+from maltrainer.models.moss_image.finetune import (
+    DEFAULT_TRAINABLE_PREFIXES,
+    drift_targets,
+    param_groups,
+    save_full_model,
+)
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.optimizers import Automagic3
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import OffloadedParameterEMA
 from maltrainer.utils.keyboard import KeyCommands
-from maltrainer.utils.lora_metadata import build_metadata
 from maltrainer.utils.logging_utils import setup_logging
+from maltrainer.utils.lora_metadata import build_metadata
 from maltrainer.utils.step_planner import DEFAULT_EPOCHS, Group, folder_counts
 from maltrainer.utils.train_monitor import TrainMonitor, WeightDrift
 from train_moss_image_lora import MOSSImageLoRATrainer, plan_training_steps

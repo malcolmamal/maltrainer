@@ -35,8 +35,7 @@ import torch
 from tqdm import tqdm
 
 from maltrainer.finetune.rotation import WindowRotator
-from maltrainer.models.krea2.finetune import (DEFAULT_ALWAYS_ON, always_on_linears, parse_windows,
-                                              save_krea2_model)
+from maltrainer.models.krea2.finetune import DEFAULT_ALWAYS_ON, always_on_linears, parse_windows, save_krea2_model
 from maltrainer.models.krea2.loading import load_krea2_transformer
 from maltrainer.optimizers import Automagic3
 from maltrainer.utils.config import load_config, save_config_to_output

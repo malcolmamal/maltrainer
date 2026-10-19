@@ -1,7 +1,9 @@
 
+import sys
+
 import safetensors.torch as safetensors
 import torch
-import sys
+
 
 def check_weights(path):
     try:

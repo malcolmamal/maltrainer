@@ -12,9 +12,9 @@ from types import MethodType
 from typing import Dict, Tuple
 
 import torch
+from safetensors import safe_open
 from torch import nn
 from torch.nn import functional as F
-from safetensors import safe_open
 
 logger = logging.getLogger(__name__)
 

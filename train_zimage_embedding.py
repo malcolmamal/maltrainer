@@ -12,10 +12,8 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 import torch
-import yaml
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from diffusers import AutoencoderKL
@@ -26,9 +24,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer, Qwen3ForCausalLM
 
+from maltrainer.data.dataset import ZImageDataset
 from maltrainer.models.embedding import TextualInversionEmbedding
 from maltrainer.models.scheduler import get_flow_match_scheduler
-from maltrainer.data.dataset import ZImageDataset
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.logging_utils import setup_logging
 
@@ -391,12 +389,12 @@ class ZImageEmbeddingTrainer:
         # Log device and model info
         if self.is_main_process:
             device_name = torch.cuda.get_device_name(self.device) if self.device.type == "cuda" else "CPU"
-            print(f"--- Training Configuration ---")
+            print("--- Training Configuration ---")
             print(f"Device: {device_name}")
             print(f"Dtype: {self.dtype}")
             print(f"Transformer: {sum(p.numel() for p in self.transformer.parameters())/1e9:.2f}B params")
             print(f"Text Encoder: {sum(p.numel() for p in self.text_encoder.parameters())/1e9:.2f}B params")
-            print(f"-------------------------------")
+            print("-------------------------------")
 
         # Prepare for training
         self.embedding, self.optimizer, self.train_dataloader = self.accelerator.prepare(

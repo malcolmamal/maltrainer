@@ -6,9 +6,8 @@ Supports INT8 ConvRot quantized Qwen3-VL 8B checkpoint.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -16,9 +15,9 @@ from accelerate import init_empty_weights
 from transformers import AutoTokenizer, Qwen3VLConfig, Qwen3VLModel
 
 from maltrainer.models.minimax_h3.int8_convrot import (
+    enable_int8_convrot,
     load_comfy_int8_convrot_state_dict,
     prepare_int8_convrot_modules,
-    enable_int8_convrot,
     rotate_activation,
 )
 

@@ -119,10 +119,10 @@ class Attention(nn.Module):
         self.wo = nn.Linear(dim, dim, bias=bias)
 
     def forward(self, x: torch.Tensor, freqs: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        b, l, _ = x.shape
-        q = self.wq(x).view(b, l, self.heads, self.headdim).transpose(1, 2)
-        k = self.wk(x).view(b, l, self.kvheads, self.headdim).transpose(1, 2)
-        v = self.wv(x).view(b, l, self.kvheads, self.headdim).transpose(1, 2)
+        b, seq, _ = x.shape
+        q = self.wq(x).view(b, seq, self.heads, self.headdim).transpose(1, 2)
+        k = self.wk(x).view(b, seq, self.kvheads, self.headdim).transpose(1, 2)
+        v = self.wv(x).view(b, seq, self.kvheads, self.headdim).transpose(1, 2)
         gate = self.gate(x)
         q, k = self.qknorm.qnorm(q), self.qknorm.knorm(k)
         if freqs is not None:
@@ -132,7 +132,7 @@ class Attention(nn.Module):
             k = k.repeat_interleave(rep, dim=1)
             v = v.repeat_interleave(rep, dim=1)
         out = F.scaled_dot_product_attention(q, k.to(q.dtype), v.to(q.dtype), attn_mask=mask)
-        out = out.transpose(1, 2).reshape(b, l, -1)
+        out = out.transpose(1, 2).reshape(b, seq, -1)
         return self.wo(out * torch.sigmoid(gate.to(out.dtype)))
 
 
@@ -178,11 +178,11 @@ class TextFusionTransformer(nn.Module):
         self.refiner_blocks = nn.ModuleList([TextFusionBlock(txt_dim, heads, multiplier, bias, kvheads) for _ in range(2)])
 
     def forward(self, x, mask=None):
-        b, l, n, d = x.shape
-        x = x.reshape(b * l, n, d)
+        b, seq, n, d = x.shape
+        x = x.reshape(b * seq, n, d)
         for block in self.layerwise_blocks:
             x = block(x.contiguous())
-        x = x.reshape(b, l, n, d).permute(0, 1, 3, 2)  # (b l) n d -> b l d n
+        x = x.reshape(b, seq, n, d).permute(0, 1, 3, 2)  # (b seq) n d -> b seq d n
         x = self.projector(x).squeeze(-1)
         for block in self.refiner_blocks:
             x = block(x, mask=mask)

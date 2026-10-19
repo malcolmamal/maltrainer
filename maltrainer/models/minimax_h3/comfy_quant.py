@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Callable, Optional
 from pathlib import Path
+from typing import Callable
 
 import torch
 import torch.nn.functional as F
@@ -60,7 +60,7 @@ def unswizzle_nvfp4_scales(scales: torch.Tensor, rows: int, columns: int) -> tor
     return values[:rows, :columns].contiguous()
 
 
-_NVFP4_LUT_CACHE: dict[Tuple[torch.device, torch.dtype], torch.Tensor] = {}
+_NVFP4_LUT_CACHE: dict[tuple[torch.device, torch.dtype], torch.Tensor] = {}
 
 def get_nvfp4_lut(device: torch.device, dtype: torch.dtype) -> torch.Tensor:
     key = (device, dtype)

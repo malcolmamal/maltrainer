@@ -173,7 +173,8 @@ def main() -> None:
         rows.append((label_of(path), [sample(s) for s in args.seeds]))
         print(f"  {label_of(path)} done")
 
-    del transformer, network
+    # Not `del`: load_checkpoint and sample close over both names.
+    transformer = network = None
     gc.collect()
     torch.cuda.empty_cache()
 

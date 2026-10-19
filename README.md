@@ -322,6 +322,33 @@ output/
 - ≈ 11 GB VRAM for Qwen-Image 2.1 at 512px (INT8 base model)
 - `transformers` 4.57+ for the Qwen3-VL text encoder (Qwen-Image 2.1, MiniMax H3)
 
+## Quality gate
+
+One command runs every check, and CI will run the same one:
+
+```bash
+pip install -r requirements-dev.txt
+python -m maltrainer_quality      # or quality.bat / ./quality.sh, which prefer venv/
+```
+
+It runs lint (ruff), the complexity and file-length limits, the tests (pytest), and the
+coverage floor. Every gate runs even after one fails; the failed ones are listed at the end. A tool
+that isn't installed in the interpreter you launched it with fails its gate.
+
+**Limits:** at most 200 lines per Python or shell file, and complexity 10 per function. Code
+written before the gate existed is listed in `maltrainer_quality/baselines/` at its size then. A
+listed file or function may shrink but never grow. When one shrinks, the gate asks you to lower its
+entry:
+
+```bash
+python -m maltrainer_quality.file_length --tighten
+python -m maltrainer_quality.complexity --tighten
+```
+
+`--tighten` only lowers entries or removes them. Never add an entry or raise one to make a change
+pass: split the file or the function instead. The coverage floor (`fail_under` in `pyproject.toml`)
+works the same way: raise it when tests land, and never lower it.
+
 ## Documentation
 
 See `docs/` directory for detailed documentation:

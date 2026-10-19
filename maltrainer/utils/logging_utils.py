@@ -4,7 +4,7 @@ Logging utilities.
 
 import logging
 import sys
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 def setup_logging(logging_config: Dict[str, Any]):

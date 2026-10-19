@@ -30,8 +30,8 @@ from safetensors.torch import save_file
 from torch.optim import AdamW
 from tqdm import tqdm
 
-from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
 from maltrainer.data.krea2_dataset import load_krea2_image
+from maltrainer.data.minimax_dataset import count_media_files, scan_media_sources
 from maltrainer.models.krea2.loading import load_krea2_transformer
 from maltrainer.models.krea2.lora import Krea2LoRANetwork
 from maltrainer.models.krea2.text_encoder import load_krea2_text_encoder
@@ -39,8 +39,8 @@ from maltrainer.models.krea2.vae import load_krea2_vae
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
 from maltrainer.utils.keyboard import KeyCommands
-from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
+from maltrainer.utils.lora_metadata import build_metadata, git_commit
 
 logger = logging.getLogger(__name__)
 

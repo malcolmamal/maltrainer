@@ -21,10 +21,10 @@ from __future__ import annotations
 import argparse
 import contextlib
 import gc
-import threading
 import logging
 import math
 import random
+import threading
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -49,9 +49,9 @@ from maltrainer.utils.compile import compile_blocks
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
 from maltrainer.utils.keyboard import KeyCommands, read_key
-from maltrainer.utils.preview_menu import run_menu
-from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
+from maltrainer.utils.lora_metadata import build_metadata, git_commit
+from maltrainer.utils.preview_menu import run_menu
 from maltrainer.utils.previews import Previews
 from maltrainer.utils.step_planner import DEFAULT_EPOCHS, Group, folder_counts
 from maltrainer.utils.step_planner import report as step_report

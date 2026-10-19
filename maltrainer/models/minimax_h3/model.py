@@ -4,6 +4,7 @@ Native MiniMax H3 Transformer implementation.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional, Tuple
@@ -89,8 +90,6 @@ def get_timestep_embedding(
 
     return emb
 
-
-import math
 
 
 def _apply_rotary_emb(hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:

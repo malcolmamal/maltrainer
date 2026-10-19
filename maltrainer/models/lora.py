@@ -2,9 +2,10 @@
 LoRA (Low-Rank Adaptation) implementation for Z-Image transformers.
 """
 
+from typing import List, Optional
+
 import torch
 import torch.nn as nn
-from typing import List, Optional
 
 
 class LoRALayer(nn.Module):

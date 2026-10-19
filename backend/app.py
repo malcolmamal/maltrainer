@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import math
 import os
@@ -18,7 +17,6 @@ import yaml
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
 
 DATASETS_ENV = "DATASETS_PATH"
 COMFYUI_MODELS_ENV = "COMFYUI_MODELS_PATH"

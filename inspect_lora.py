@@ -1,6 +1,8 @@
 
-import safetensors.torch as safetensors
 import sys
+
+import safetensors.torch as safetensors
+
 
 def inspect_lora(path):
     try:

@@ -3,6 +3,7 @@ Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / F
 """
 
 from typing import List
+
 import torch
 
 

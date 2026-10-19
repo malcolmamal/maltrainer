@@ -41,8 +41,8 @@ from maltrainer.models.flux3.text_encoder import load_flux3_text_encoder
 from maltrainer.models.flux3.vae import load_flux2_vae_encoder
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
-from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
+from maltrainer.utils.lora_metadata import build_metadata, git_commit
 
 logger = logging.getLogger(__name__)
 

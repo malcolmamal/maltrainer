@@ -9,45 +9,40 @@ from __future__ import annotations
 
 import argparse
 import gc
-import json
 import logging
 import math
-import os
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Tuple
 
 import torch
-from accelerate import Accelerator, init_empty_weights
+from accelerate import Accelerator
 from accelerate.utils import set_seed
 from safetensors.torch import save_file
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from maltrainer.models.qwen_image_2_1.model import (
-    QwenImage21Transformer,
-    calculate_shift,
-    apply_flow_shift,
-    load_qwen_image_2_1_transformer,
-)
-from maltrainer.models.qwen_image_2_1.vae import (
-    QwenImage21VAE,
-    load_qwen_image_2_1_vae,
-)
-from maltrainer.models.qwen_image_2_1.text_encoder import (
-    Qwen3VLTextEncoder,
-    load_qwen_image_2_1_text_encoder,
+from maltrainer.data.qwen_dataset import (
+    QwenImage21Dataset,
 )
 from maltrainer.models.qwen_image_2_1.lora import (
     QwenImage21LoRANetwork,
 )
-from maltrainer.data.qwen_dataset import (
-    QwenImage21Dataset,
+from maltrainer.models.qwen_image_2_1.model import (
+    apply_flow_shift,
+    calculate_shift,
+    load_qwen_image_2_1_transformer,
+)
+from maltrainer.models.qwen_image_2_1.text_encoder import (
+    load_qwen_image_2_1_text_encoder,
+)
+from maltrainer.models.qwen_image_2_1.vae import (
+    load_qwen_image_2_1_vae,
 )
 from maltrainer.utils.config import load_config, save_config_to_output
-from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
+from maltrainer.utils.lora_metadata import build_metadata, git_commit
 
 logger = logging.getLogger(__name__)
 
@@ -294,6 +289,7 @@ class QwenImage21LoRATrainer:
         elif optimizer_name.startswith("prodigy"):
             try:
                 import inspect
+
                 from prodigyopt import Prodigy
 
                 configured_lr = float(train_config.get("learning_rate", 1.0))

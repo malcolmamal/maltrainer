@@ -1,7 +1,8 @@
-from PIL import Image
-import numpy as np
-import comfy.utils
 import time
+
+import comfy.utils
+import numpy as np
+from PIL import Image
 
 #You can use this node to save full size images through the websocket, the
 #images will be sent in exactly the same format as the image previews: as

@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import List, Union
 
 import torch
+from accelerate import init_empty_weights
 from torch import nn
 from transformers import AutoTokenizer, Qwen3VLConfig, Qwen3VLModel
-from accelerate import init_empty_weights
 
 from maltrainer.models.minimax_h3.comfy_quant import has_comfy_quantized_layers, load_comfy_quantized_state_dict
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -16,9 +16,9 @@ import torch.nn.functional as F
 from accelerate import init_empty_weights
 
 from maltrainer.models.minimax_h3.int8_convrot import (
+    enable_int8_convrot,
     load_comfy_int8_convrot_state_dict,
     prepare_int8_convrot_modules,
-    enable_int8_convrot,
 )
 
 logger = logging.getLogger(__name__)

@@ -26,21 +26,9 @@ from safetensors.torch import save_file
 from torch.optim import AdamW
 from tqdm import tqdm
 
-from maltrainer.models.minimax_h3.int8_convrot import (
-    load_comfy_int8_convrot_state_dict,
-    prepare_int8_convrot_modules,
-    enable_int8_convrot,
-)
-from maltrainer.models.minimax_h3.model import (
-    MiniMaxH3Transformer,
-    MiniMaxH3TransformerConfig,
-    MiniMaxH3TokenTag,
-)
-from maltrainer.models.minimax_h3.video_vae import load_minimax_h3_video_vae, video_latent_frames
-from maltrainer.models.minimax_h3.audio_vae import load_minimax_h3_audio_encoder
-from maltrainer.models.minimax_h3.text_encoder import load_minimax_h3_text_encoder
-from maltrainer.models.minimax_h3.lora import MiniMaxH3LoRANetwork
 from maltrainer.data.minimax_dataset import (
+    AUDIO_SAMPLE_RATE,
+    FPS,
     MEDIA_KINDS,
     MIN_AUDIO_FRAMES,
     MIN_CLIP_FRAMES,
@@ -55,13 +43,25 @@ from maltrainer.data.minimax_dataset import (
     scan_media_sources,
     slice_audio,
     summarize_kinds,
-    FPS,
-    AUDIO_SAMPLE_RATE,
 )
+from maltrainer.models.minimax_h3.audio_vae import load_minimax_h3_audio_encoder
+from maltrainer.models.minimax_h3.int8_convrot import (
+    enable_int8_convrot,
+    load_comfy_int8_convrot_state_dict,
+    prepare_int8_convrot_modules,
+)
+from maltrainer.models.minimax_h3.lora import MiniMaxH3LoRANetwork
+from maltrainer.models.minimax_h3.model import (
+    MiniMaxH3TokenTag,
+    MiniMaxH3Transformer,
+    MiniMaxH3TransformerConfig,
+)
+from maltrainer.models.minimax_h3.text_encoder import load_minimax_h3_text_encoder
+from maltrainer.models.minimax_h3.video_vae import load_minimax_h3_video_vae, video_latent_frames
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
-from maltrainer.utils.lora_metadata import build_metadata, git_commit
 from maltrainer.utils.logging_utils import setup_logging
+from maltrainer.utils.lora_metadata import build_metadata, git_commit
 
 logger = logging.getLogger(__name__)
 
@@ -1134,7 +1134,6 @@ class MiniMaxH3LoRATrainer:
         """Run training pipeline."""
         try:
             set_seed(self.config.get("seed", 42))
-            start_time = time.time()
 
             if self.dry_run:
                 self.dry_run_training()

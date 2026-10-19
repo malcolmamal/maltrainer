@@ -4,14 +4,13 @@ MiniMax H3 Video VAE wrapper and encoding logic.
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Tuple
 
 import torch
+from safetensors.torch import load_file
 from torch import nn
 from torch.nn import functional as F
-from safetensors.torch import load_file
 
 # Per-channel latent statistics of the MiniMax H3 video VAE, from Hugging Face
 # Diffusers PR #14355 (commit abc5e9bf71fd38f53cd471bc3acaa84bc5ecbfdc). These are the
