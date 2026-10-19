@@ -45,7 +45,7 @@ def _one_module(name: str, diff: torch.Tensor) -> List[Tuple[str, torch.Tensor]]
     return [(name, diff)]
 
 
-def _is_linear_weight(name: str, shape: Sequence[int]) -> bool:
+def _is_linear_weight(name: str, shape: Sequence[int]) -> bool:  # noqa: ARG001 - a profile's predicate signature
     return len(shape) == 2
 
 
@@ -56,7 +56,7 @@ class ExtractProfile:
     include: Callable[[str, Sequence[int]], bool] = _is_linear_weight
     split: SplitFn = _one_module
     # whether a checkpoint (its module names, container prefix stripped) is this model's
-    detect: Callable[[Iterable[str]], bool] = field(default=lambda keys: False)
+    detect: Callable[[Iterable[str]], bool] = field(default=lambda _keys: False)
 
 
 GENERIC = ExtractProfile()

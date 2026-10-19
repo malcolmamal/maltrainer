@@ -6,7 +6,7 @@
   "maltrainer/finetune/extract.py::extract": 11,
   "maltrainer/models/flux3/text_encoder.py::load_flux3_text_encoder": 13,
   "maltrainer/models/minimax_h3/comfy_quant.py::load_comfy_quantized_state_dict": 17,
-  "maltrainer/models/minimax_h3/lora.py::_inject_lora": 12,
+  "maltrainer/models/minimax_h3/lora.py::_inject_lora": 11,
   "maltrainer/models/minimax_h3/lora.py::load_assistant_adapter": 18,
   "maltrainer/models/moss_image/text_encoder.py::load_moss_image_text_encoder": 13,
   "maltrainer/models/qwen_image_2_1/lora.py::load_assistant_adapter": 11,
@@ -32,5 +32,5 @@
   "train_zimage_embedding.py::setup_optimizer": 16,
   "train_zimage_embedding.py::train": 14,
   "train_zimage_lora.py::setup_optimizer": 20,
-  "train_zimage_lora.py::train": 35
+  "train_zimage_lora.py::train": 34
 }

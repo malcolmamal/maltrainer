@@ -749,7 +749,7 @@ class MOSSImageLoRATrainer:
         return [Group("Subjects", root, float(dataset_config.get("repeats", 1) or 1), folder_counts(root))]
 
     @classmethod
-    def step_notes(cls, config: dict) -> List[str]:
+    def step_notes(cls, config: dict) -> List[str]:  # noqa: ARG003 - overridden with the config in use
         return []
 
     @classmethod

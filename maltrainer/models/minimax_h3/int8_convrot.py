@@ -155,7 +155,7 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
     """Eager fallback for CPU or builds without torch._int_mm. Always computes in float."""
 
     @staticmethod
-    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision=None):
+    def forward(ctx, inputs, weight, scale, bias, group_size, grad_precision=None):  # noqa: ARG004 - same as the int_mm path
         group_size = int(group_size)
         rotated = rotate_activation(inputs, group_size)
         dense_weight = (weight.float() * scale.float()).to(inputs.dtype)

@@ -139,10 +139,9 @@ class MiniMaxH3LoRANetwork(nn.Module):
                     injected += 1
                 continue
 
-            if name.rsplit(".", 1)[-1] in self.target_modules:
-                if isinstance(module, nn.Linear):
-                    self._add_lora_layer(name, module)
-                    injected += 1
+            if name.rsplit(".", 1)[-1] in self.target_modules and isinstance(module, nn.Linear):
+                self._add_lora_layer(name, module)
+                injected += 1
 
         if injected == 0:
             raise ValueError("No MiniMax H3 modules matched the LoRA targets / block_range")

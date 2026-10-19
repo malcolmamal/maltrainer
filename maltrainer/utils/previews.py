@@ -173,7 +173,7 @@ class Previews:
         step: int,
         render_one: Callable[[str, int], Image.Image],
         variants: Sequence[Tuple[str, Callable[[], ContextManager]]] = (("", contextlib.nullcontext),),
-        ready: Callable[[str], bool] = lambda prompt: True,
+        ready: Callable[[str], bool] = lambda _prompt: True,
     ) -> float:
         """Render every enabled, ready prompt for ``step``, once per variant (label, context that
         puts those weights in place; labelled variants only when their row is on); returns the

@@ -909,12 +909,9 @@ class MiniMaxH3LoRATrainer:
             dot = (flat_cond * flat_uncond).sum(dim=1, keepdim=True)
             squared_norm = (flat_uncond**2).sum(dim=1, keepdim=True) + 1e-8
             uncond = uncond * (dot / squared_norm).view(bsz, 1, 1)
-        if schedule == "sigma":
-            # (target - uncond) carries sigma * fresh_noise, which nothing can predict at low
-            # sigma, so decay toward a plain flow target there.
-            scale_eff = 1.0 + (scale - 1.0) * sigma.detach().float().view(bsz, 1, 1)
-        else:
-            scale_eff = scale
+        # (target - uncond) carries sigma * fresh_noise, which nothing can predict at low
+        # sigma, so the "sigma" schedule decays toward a plain flow target there.
+        scale_eff = 1.0 + (scale - 1.0) * sigma.detach().float().view(bsz, 1, 1) if schedule == "sigma" else scale
         return (uncond + scale_eff * (guided - uncond)).detach().to(target.dtype)
 
     def _training_step(self, sample: H3Sample, flow_shift: float) -> Tuple[torch.Tensor, Dict[str, float]]:

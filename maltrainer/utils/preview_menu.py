@@ -36,7 +36,7 @@ def run_menu(
     previews: Previews,
     row_labels: Sequence[str],
     read_key: Callable[[], str],
-    ready: Callable[[str], bool] = lambda prompt: True,
+    ready: Callable[[str], bool] = lambda _prompt: True,
     out: TextIO = sys.stdout,
 ) -> List[str]:
     """Show the menu until Enter (apply) or Esc (cancel); returns the applied changes."""

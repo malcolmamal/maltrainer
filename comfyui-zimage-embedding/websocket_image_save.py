@@ -30,17 +30,15 @@ class SaveImageWebsocket:
 
     def save_images(self, images):
         pbar = comfy.utils.ProgressBar(images.shape[0])
-        step = 0
-        for image in images:
+        for step, image in enumerate(images):
             i = 255.0 * image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
             pbar.update_absolute(step, images.shape[0], ("PNG", img, None))
-            step += 1
 
         return {}
 
     @classmethod
-    def IS_CHANGED(s, images):
+    def IS_CHANGED(s, images):  # noqa: ARG003 - ComfyUI passes the node's inputs
         return time.time()
 
 

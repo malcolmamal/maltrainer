@@ -269,7 +269,6 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
         last_array: Optional[np.ndarray] = None
         last_time = 0.0
         target = 0
-        decoded = 0
 
         def convert(frame) -> np.ndarray:
             nonlocal size
@@ -278,9 +277,8 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
                 size = bucket_size(image.width, image.height, resolution)
             return np.asarray(resize_and_crop(image, size), dtype=np.uint8)
 
-        for frame in container.decode(stream):
+        for decoded, frame in enumerate(container.decode(stream)):
             time = frame.time if frame.time is not None else decoded * frame_duration
-            decoded += 1
             if origin is None:
                 origin = time
             time -= origin

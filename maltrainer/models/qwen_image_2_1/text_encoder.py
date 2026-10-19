@@ -137,7 +137,7 @@ def load_qwen_image_2_1_text_encoder(
     text_encoder_path: Union[str, Path],
     asset_dir: Optional[Union[str, Path]] = None,
     device: torch.device = torch.device("cuda"),
-    dtype: torch.dtype = torch.bfloat16,
+    dtype: torch.dtype = torch.bfloat16,  # noqa: ARG001 - unused: the INT8 weights keep the checkpoint's dtype
     grad_precision: str = "bf16",
 ) -> Qwen3VLTextEncoder:
     """Load Qwen3-VL 8B text encoder from INT8 ConvRot safetensors."""

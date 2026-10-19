@@ -981,10 +981,7 @@ class ZImageLoRATrainer:
                     else:
                         weights = None
 
-                    if weights is not None:
-                        loss = (per_sample_loss * weights).mean()
-                    else:
-                        loss = per_sample_loss.mean()
+                    loss = (per_sample_loss * weights).mean() if weights is not None else per_sample_loss.mean()
 
                     loss_weight_fn = str(train_config.get("loss_weight_fn", "none")).lower()
                     if loss_weight_fn == "constant":

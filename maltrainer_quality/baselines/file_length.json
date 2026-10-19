@@ -1,6 +1,6 @@
 {
   "backend/app.py": 1005,
-  "maltrainer/data/minimax_dataset.py": 388,
+  "maltrainer/data/minimax_dataset.py": 386,
   "maltrainer/finetune/prior.py": 217,
   "maltrainer/finetune/rotation.py": 206,
   "maltrainer/models/comfy_fp8.py": 213,
@@ -11,10 +11,10 @@
   "maltrainer/models/minimax_h3/audio_vae.py": 301,
   "maltrainer/models/minimax_h3/comfy_quant.py": 277,
   "maltrainer/models/minimax_h3/int8_convrot.py": 284,
-  "maltrainer/models/minimax_h3/lora.py": 360,
+  "maltrainer/models/minimax_h3/lora.py": 359,
   "maltrainer/models/minimax_h3/model.py": 430,
   "maltrainer/models/minimax_h3/text_encoder.py": 216,
-  "maltrainer/models/minimax_h3/video_vae.py": 434,
+  "maltrainer/models/minimax_h3/video_vae.py": 431,
   "maltrainer/models/moss_image/model.py": 266,
   "maltrainer/models/moss_image/text_encoder.py": 458,
   "maltrainer/models/qwen_image_2_1/lora.py": 229,
@@ -32,10 +32,10 @@
   "train_flux3_klein_lora.py": 511,
   "train_krea2_finetune.py": 456,
   "train_krea2_lora.py": 586,
-  "train_minimax_h3_lora.py": 1224,
+  "train_minimax_h3_lora.py": 1221,
   "train_moss_image_finetune.py": 859,
   "train_moss_image_lora.py": 831,
   "train_qwen_image_2_1_lora.py": 641,
   "train_zimage_embedding.py": 652,
-  "train_zimage_lora.py": 1117
+  "train_zimage_lora.py": 1114
 }

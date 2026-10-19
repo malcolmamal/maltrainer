@@ -339,10 +339,7 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
         """Encode RGB image tensor [B, 3, H, W] in [0, 1] to normalized latents [B, 24, 1, H//16, W//16]."""
-        if images.ndim == 4:
-            pixels = images.unsqueeze(2)  # [B, 3, 1, H, W]
-        else:
-            pixels = images
+        pixels = images.unsqueeze(2) if images.ndim == 4 else images  # [B, 3, 1, H, W]
 
         return self._normalize(self.encode_moments(pixels))
 

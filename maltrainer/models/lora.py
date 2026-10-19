@@ -68,26 +68,25 @@ class LoRANetwork(nn.Module):
         """Inject LoRA layers into the transformer."""
         for name, module in self.transformer.named_modules():
             # Check if this module should have LoRA
-            if any(target in name for target in self.target_modules):
-                if isinstance(module, nn.Linear):
-                    # Create LoRA layer
-                    lora_layer = LoRALayer(module, self.rank, self.alpha)
+            if any(target in name for target in self.target_modules) and isinstance(module, nn.Linear):
+                # Create LoRA layer
+                lora_layer = LoRALayer(module, self.rank, self.alpha)
 
-                    # Store it
-                    safe_name = name.replace(".", "_")
-                    self.lora_layers[safe_name] = lora_layer
-                    self.name_map[safe_name] = name
+                # Store it
+                safe_name = name.replace(".", "_")
+                self.lora_layers[safe_name] = lora_layer
+                self.name_map[safe_name] = name
 
-                    # Monkey-patch the forward method
-                    original_forward = module.forward
+                # Monkey-patch the forward method
+                original_forward = module.forward
 
-                    def make_forward(orig_fwd, lora):
-                        def forward(x):
-                            return orig_fwd(x) + lora(x)
+                def make_forward(orig_fwd, lora):
+                    def forward(x):
+                        return orig_fwd(x) + lora(x)
 
-                        return forward
+                    return forward
 
-                    module.forward = make_forward(original_forward, lora_layer)
+                module.forward = make_forward(original_forward, lora_layer)
 
     def get_state_dict(self) -> dict:
         """Get LoRA state dict for saving in Kohya/AI-Toolkit format."""
@@ -120,7 +119,7 @@ class LoRANetwork(nn.Module):
 
             if not loaded:
                 # Handle potential prefixes like diffusion_model.
-                for k in state_dict.keys():
+                for k in state_dict:
                     if k.endswith((f"{name}.lora_down.weight", f"{safe_name}.lora_down.weight")):
                         prefix = k.replace(f"{name}.lora_down.weight", "").replace(f"{safe_name}.lora_down.weight", "")
                         lora_layer.lora_down.weight.data = state_dict[
