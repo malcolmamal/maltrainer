@@ -107,7 +107,7 @@ DEFAULT_LATENTS_STD = (
 
 
 def _snake(x: torch.Tensor, alpha: torch.Tensor, beta: torch.Tensor) -> torch.Tensor:
-    # x + 1/beta * sin^2(alpha * x)
+    # the snake activation: x plus sin squared of (alpha * x), scaled by 1 / beta
     return x + (beta + 1e-9).reciprocal() * torch.sin(alpha * x).pow(2)
 
 
