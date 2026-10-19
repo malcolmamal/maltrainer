@@ -3,7 +3,7 @@
 
 [tool.ruff]
 target-version = "py310"
-# What the code is written at today; phase 2 of the quality plan settles the final width.
+# The width the code was written at. 88 would add a quarter more lines, against the 200-line limit.
 line-length = 120
 # The scripts import their sibling modules (merge_loras, qwen_2_1_sweep_checkpoints) as
 # first-party, the same as maltrainer.

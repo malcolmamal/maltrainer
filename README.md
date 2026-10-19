@@ -331,8 +331,8 @@ pip install -r requirements-dev.txt
 python -m maltrainer_quality      # or quality.bat / ./quality.sh, which prefer venv/
 ```
 
-It runs lint (ruff), the complexity and file-length limits, the tests (pytest), and the
-coverage floor. Every gate runs even after one fails; the failed ones are listed at the end. A tool
+It runs lint and formatting (ruff), the complexity and file-length limits, the tests (pytest),
+and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can. Every gate runs even after one fails; the failed ones are listed at the end. A tool
 that isn't installed in the interpreter you launched it with fails its gate.
 
 **Limits:** at most 200 lines per Python or shell file, and complexity 10 per function. Code

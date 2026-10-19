@@ -36,6 +36,7 @@ def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
         pytest += (f"--junitxml={junit_dir / 'pytest.xml'}", f"--cov-report=xml:{junit_dir / 'coverage.xml'}")
     return (
         Gate("lint", "ruff, with the rule families in pyproject.toml", "ruff", ("check", ".")),
+        Gate("format", "formatting is decided by the tool, not by review", "ruff", ("format", "--check", ".")),
         Gate("complexity", "complexity 10 per function, beyond the baseline", "maltrainer_quality.complexity"),
         Gate(
             "file length", "200 lines per Python or shell file, beyond the baseline", "maltrainer_quality.file_length"
