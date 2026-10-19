@@ -36,12 +36,24 @@ def content_hash(path: Union[str, Path]) -> str:
     return digest.hexdigest()
 
 
+IDENTITY_SAMPLE = 1 << 20
+
+
 def model_identity(path: Union[str, Path, None]) -> str:
-    """File name and size, so the same model file matches from any folder or machine."""
+    """File name, size, and a hash of the first and last MiB: the same model file matches from
+    any folder or machine, and two files of one size (two finetunes of a model) do not."""
     if not path:
         return "none"
     path = Path(path)
-    return f"{path.name}|{path.stat().st_size}" if path.exists() else path.name
+    if not path.exists():
+        return path.name
+    size = path.stat().st_size
+    digest = hashlib.blake2b(digest_size=8)
+    with open(path, "rb") as handle:
+        head = handle.read(IDENTITY_SAMPLE)
+        handle.seek(max(size - IDENTITY_SAMPLE, len(head)))
+        digest.update(head + handle.read())
+    return f"{path.name}|{size}|{digest.hexdigest()}"
 
 
 def cache_key(*parts: object) -> str:

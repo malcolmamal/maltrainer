@@ -8,7 +8,7 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from maltrainer.data.disk_cache import CACHE_DIR_NAME, FolderCache, cache_key, content_hash, model_identity
+from maltrainer.data.disk_cache import CACHE_DIR_NAME, FolderCache, cache_key, content_hash
 
 
 def test_the_same_bytes_hash_the_same_wherever_the_file_is(tmp_path: Path) -> None:
@@ -39,36 +39,6 @@ def test_a_file_larger_than_one_read_block_hashes_all_its_bytes(tmp_path: Path) 
 
     assert content_hash(path) == hashlib.blake2b(data, digest_size=20).hexdigest()
     assert len(content_hash(path)) == 40
-
-
-@pytest.mark.parametrize("path", [None, ""])
-def test_no_model_path_has_the_identity_none(path: str | None) -> None:
-    assert model_identity(path) == "none"
-
-
-def test_an_existing_model_is_identified_by_name_and_size_not_folder(tmp_path: Path) -> None:
-    here = tmp_path / "here" / "vae.safetensors"
-    there = tmp_path / "there" / "vae.safetensors"
-    for path in (here, there):
-        path.parent.mkdir()
-        path.write_bytes(b"12345")
-
-    assert model_identity(here) == "vae.safetensors|5"
-    assert model_identity(str(there)) == model_identity(here)
-
-
-def test_a_model_of_another_size_has_another_identity(tmp_path: Path) -> None:
-    path = tmp_path / "vae.safetensors"
-    path.write_bytes(b"12345")
-    before = model_identity(path)
-
-    path.write_bytes(b"123456")
-
-    assert model_identity(path) != before
-
-
-def test_a_missing_model_is_identified_by_its_name_alone(tmp_path: Path) -> None:
-    assert model_identity(tmp_path / "missing.safetensors") == "missing.safetensors"
 
 
 def test_a_cache_key_is_a_stable_sha1_of_its_parts() -> None:
