@@ -85,19 +85,14 @@ class QwenImage21Dataset(Dataset):
             if caption:
                 if self.trigger_token and self.trigger_token.lower() not in caption.lower():
                     caption = f"{self.trigger_token} {caption}"
-            else:
-                if (
-                    self.trigger_token
-                    and self.default_caption
-                    and self.trigger_token.lower() not in self.default_caption.lower()
-                ):
-                    caption = f"{self.trigger_token} {self.default_caption}"
-                elif self.trigger_token:
-                    caption = self.trigger_token
-                elif self.default_caption:
+            elif self.trigger_token and self.default_caption:
+                # "a photo of sks" already names the subject; otherwise prepend the trigger to it
+                if self.trigger_token.lower() in self.default_caption.lower():
                     caption = self.default_caption
                 else:
-                    caption = ""
+                    caption = f"{self.trigger_token} {self.default_caption}"
+            else:
+                caption = self.trigger_token or self.default_caption
 
             for _ in range(self.repeats):
                 self.image_paths.append(img_path)
