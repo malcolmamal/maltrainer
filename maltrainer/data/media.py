@@ -94,14 +94,17 @@ def read_audio(path: Path) -> Optional[np.ndarray]:
     """The first audio stream as float32 stereo [2, L] at 32 kHz in [-1, 1], or None.
 
     None means "no sound to train": no audio stream, or a track that decodes to digital
-    silence. Mono is duplicated and surround is downmixed by FFmpeg's resampler.
+    silence. Mono is duplicated into both channels at its own level, and surround is
+    downmixed by FFmpeg's resampler.
     """
     av = _require_av()
     with av.open(str(path)) as container:
         if not container.streams.audio:
             return None
         stream = container.streams.audio[0]
-        resampler = av.AudioResampler(format="fltp", layout="stereo", rate=AUDIO_SAMPLE_RATE)
+        # Mono stays mono here and is duplicated below: FFmpeg's mono -> stereo upmix is -3 dB.
+        layout = "mono" if stream.channels == 1 else "stereo"
+        resampler = av.AudioResampler(format="fltp", layout=layout, rate=AUDIO_SAMPLE_RATE)
         chunks: List[np.ndarray] = []
         for frame in container.decode(stream):
             frame.pts = None  # let the resampler run on sample count, not container timestamps

@@ -86,7 +86,16 @@ def test_mono_audio_becomes_stereo_float_at_32_khz(make_wav: Callable[..., Path]
     assert wav.dtype == np.float32
     assert wav.shape == (2, AUDIO_SAMPLE_RATE // 4)
     assert np.array_equal(wav[0], wav[1])
-    assert np.abs(wav).max() > 0.3
+
+
+def test_mono_audio_keeps_the_level_the_same_tone_has_in_stereo(make_wav: Callable[..., Path]) -> None:
+    mono = read_audio(make_wav("mono.wav", _tone(0.25, channels=1)))
+    stereo = read_audio(make_wav("stereo.wav", _tone(0.25, channels=2)))
+
+    assert mono is not None
+    assert stereo is not None
+    np.testing.assert_allclose(mono, stereo, atol=1e-6)
+    assert np.abs(mono).max() == pytest.approx(0.5, abs=0.01)
 
 
 def test_stereo_audio_keeps_its_channels_apart(make_wav: Callable[..., Path]) -> None:
