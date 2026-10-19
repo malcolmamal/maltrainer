@@ -1254,6 +1254,7 @@ cu130 = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
+    { name = "httpx" },
     { name = "mypy" },
     { name = "pip-audit" },
     { name = "pytest" },
@@ -1288,6 +1289,7 @@ provides-extras = ["cpu", "cu130"]
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = "==7.14.1" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "mypy", specifier = "==2.4.0" },
     { name = "pip-audit", specifier = "==2.10.1" },
     { name = "pytest", specifier = "==9.1.0" },
