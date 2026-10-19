@@ -157,6 +157,15 @@ def test_checkpoints_with_different_tensors_are_an_error(tmp_path: Path) -> None
         extract(base, tuned_path, [1])
 
 
+def test_checkpoints_with_differently_shaped_tensors_are_an_error(tmp_path: Path) -> None:
+    tuned = _tuned()
+    tuned["b.weight"] = torch.zeros(2, 3)
+    base, tuned_path = _files(tmp_path, _base(), tuned)
+
+    with pytest.raises(ValueError, match=r"differ in shape, e\.g\. \['b\.weight'\] \(1 differ\)"):
+        extract(base, tuned_path, caps=[2])
+
+
 @pytest.mark.parametrize(
     ("dtype", "stored"),
     [(torch.int8, "I8"), (torch.uint8, "U8"), (torch.float8_e4m3fn, "F8_E4M3"), (torch.float8_e5m2, "F8_E5M2")],

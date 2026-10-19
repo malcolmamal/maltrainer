@@ -3,7 +3,6 @@
   "backend/app.py::start_readers": 14,
   "maltrainer/data/minimax_dataset.py::read_video_frames": 13,
   "maltrainer/data/qwen_dataset.py::_load_dataset": 14,
-  "maltrainer/finetune/extract.py::extract": 11,
   "maltrainer/models/flux3/text_encoder.py::load_flux3_text_encoder": 13,
   "maltrainer/models/minimax_h3/comfy_quant.py::load_comfy_quantized_state_dict": 17,
   "maltrainer/models/minimax_h3/lora.py::_inject_lora": 11,

@@ -106,6 +106,20 @@ def factor(diff: torch.Tensor, caps: Sequence[int], mode: str, value: float, dev
     return out
 
 
+def _check_same_tensors(base, tuned, base_names: Dict[str, str], tuned_names: Dict[str, str]) -> None:
+    """Both checkpoints hold the same tensors (names without their container prefix) in the same shapes."""
+    if set(base_names) != set(tuned_names):
+        only = sorted(set(base_names) ^ set(tuned_names))
+        raise ValueError(f"the checkpoints have different tensors, e.g. {only[:3]} ({len(only)} differ)")
+    reshaped = sorted(
+        name
+        for name in base_names
+        if base.get_slice(base_names[name]).get_shape() != tuned.get_slice(tuned_names[name]).get_shape()
+    )
+    if reshaped:
+        raise ValueError(f"the checkpoints' tensors differ in shape, e.g. {reshaped[:3]} ({len(reshaped)} differ)")
+
+
 def extract(
     base_path: Union[str, Path],
     tuned_path: Union[str, Path],
@@ -134,9 +148,7 @@ def extract(
         base_prefix, tuned_prefix = strip_prefix(base_keys), strip_prefix(tuned_keys)
         base_names = {k[len(base_prefix) :]: k for k in base_keys}
         tuned_names = {k[len(tuned_prefix) :]: k for k in tuned_keys}
-        if set(base_names) != set(tuned_names):
-            only = sorted(set(base_names) ^ set(tuned_names))
-            raise ValueError(f"the checkpoints have different tensors, e.g. {only[:3]} ({len(only)} differ)")
+        _check_same_tensors(base, tuned, base_names, tuned_names)
         profile = profile or GENERIC
         names = [n for n in base_names if n.endswith(".weight")]
         iterator = progress(names) if progress else names
