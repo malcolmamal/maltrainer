@@ -14,7 +14,7 @@ NEG = torch.ones(3, 4)
 class Recorder:
     """A stand-in DiT: ``velocity(x, context)`` is what it predicts; every call is logged."""
 
-    def __init__(self, velocity=lambda x, context: torch.full_like(x, 0.5)) -> None:
+    def __init__(self, velocity=lambda x, _context: torch.full_like(x, 0.5)) -> None:
         self.velocity = velocity
         self.calls: List[dict] = []
 

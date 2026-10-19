@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from maltrainer.models.minimax_h3 import model as h3_model
-from maltrainer.models.minimax_h3.model import MiniMaxH3Transformer, MiniMaxH3TransformerConfig, MiniMaxH3TokenTag
+from maltrainer.models.minimax_h3.model import MiniMaxH3TokenTag, MiniMaxH3Transformer, MiniMaxH3TransformerConfig
 from tests.maltrainer.models.minimax_h3.h3_tiny import HIDDEN, Packed, tiny_config, tiny_transformer
 
 
@@ -111,7 +111,7 @@ def test_gradient_checkpointing_wraps_every_block_and_refiner_block_while_grads_
 ) -> None:
     calls: list[int] = []
 
-    def spy(function, *args, **kwargs):
+    def spy(function, *args, **_kwargs):
         calls.append(1)
         return function(*args)
 
@@ -147,7 +147,9 @@ def test_checkpointing_gives_the_same_outputs_and_gradients() -> None:
 
     torch.testing.assert_close(checkpointed_out.video, plain_out.video)
     name = "blocks.0.attn.qkv_proj.weight"
-    torch.testing.assert_close(dict(checkpointed.named_parameters())[name].grad, dict(plain.named_parameters())[name].grad)
+    torch.testing.assert_close(
+        dict(checkpointed.named_parameters())[name].grad, dict(plain.named_parameters())[name].grad
+    )
 
 
 def test_a_rotary_width_wider_than_the_attention_head_is_rejected() -> None:

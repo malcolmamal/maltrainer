@@ -49,5 +49,5 @@ def int8_tensors(model: MOSSImageTransformer) -> Dict[str, torch.Tensor]:
         scale = (rotated.abs().amax(dim=-1, keepdim=True) / 127.0).clamp(min=1e-30)
         out[key] = (rotated / scale).round().clamp(-127, 127).to(torch.int8)
         out[f"{base}.weight_scale"] = scale.reshape(-1)
-        out[f"{base}.comfy_quant"] = marker
+        out[f"{base}.comfy_quant"] = marker.clone()
     return out

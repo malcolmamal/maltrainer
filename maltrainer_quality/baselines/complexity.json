@@ -22,7 +22,6 @@
   "train_minimax_h3_lora.py::precache_dataset": 29,
   "train_minimax_h3_lora.py::setup_optimizer": 12,
   "train_minimax_h3_lora.py::train": 12,
-  "train_moss_image_finetune.py::step_notes": 11,
   "train_moss_image_finetune.py::train": 32,
   "train_moss_image_lora.py::precache_dataset": 24,
   "train_moss_image_lora.py::train": 14,

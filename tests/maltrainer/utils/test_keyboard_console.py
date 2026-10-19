@@ -9,13 +9,15 @@ from typing import Any, List
 
 import pytest
 
-from maltrainer.utils import keyboard
-from maltrainer.utils.keyboard import KeyCommands, read_key
+from maltrainer.utils import console_keys, keyboard
+from maltrainer.utils.console_keys import read_key
+from maltrainer.utils.keyboard import KeyCommands
 from tests.maltrainer.utils.keyboard_fakes import FakeMsvcrt, FakeTty
 
 
 def _on(monkeypatch: pytest.MonkeyPatch, os_name: str, stdin: Any) -> None:
     monkeypatch.setattr(keyboard, "os", SimpleNamespace(name=os_name))
+    monkeypatch.setattr(console_keys, "os", SimpleNamespace(name=os_name))
     monkeypatch.setattr(sys, "stdin", stdin)
 
 

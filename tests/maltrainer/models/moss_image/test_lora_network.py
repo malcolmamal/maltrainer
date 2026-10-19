@@ -92,7 +92,7 @@ def test_a_fused_qkv_adapter_is_split_into_three_thirds_of_the_output(make_model
 
     shapes = {n: network.lora_layers[f"layers_1_proj_{n}"].lora_up.weight.shape for n in "qkvo"}
 
-    assert shapes == {n: (128, 2) for n in "qkvo"}
+    assert shapes == dict.fromkeys("qkvo", (128, 2))
     assert network.lora_layers["layers_1_proj_q"].lora_down.weight.shape == (2, 128)
 
 

@@ -45,6 +45,7 @@ class StubDecoder(nn.Module):
 
     def __init__(self, z_dim: int = 64) -> None:
         super().__init__()
+        self.z_dim = z_dim
         self.seen: list[torch.Tensor] = []
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:

@@ -39,8 +39,8 @@ def test_from_state_dict_rejects_a_checkpoint_that_is_not_a_moss_image_dit() -> 
 
 
 def test_block_parameters_are_named_as_comfyuis_unfused_and_fused_files_name_them() -> None:
-    unfused = {k for k in Block(8, 4, 1, fused_qkv=False).state_dict()}
-    fused = {k for k in Block(8, 4, 1, fused_qkv=True).state_dict()}
+    unfused = set(Block(8, 4, 1, fused_qkv=False).state_dict())
+    fused = set(Block(8, 4, 1, fused_qkv=True).state_dict())
 
     common = {"norm1.weight", "norm2.weight", "q_norm.weight", "k_norm.weight"}
     ffn = {"proj.ffn_up_gate.weight", "proj.ffn_down.weight", "proj.o.weight"}

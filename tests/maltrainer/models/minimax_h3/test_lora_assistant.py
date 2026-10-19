@@ -138,7 +138,10 @@ def test_the_attachment_is_logged(tmp_path: Path, caplog: pytest.LogCaptureFixtu
     with caplog.at_level("INFO", logger=LOGGER):
         network.load_assistant_adapter(str(path), multiplier=0.25)
 
-    assert "Attached frozen training adapter: 1 modules (0 AdaLN via the t_emb grid), rank 2, multiplier 0.25" in caplog.text
+    assert (
+        "Attached frozen training adapter: 1 modules (0 AdaLN via the t_emb grid), rank 2, multiplier 0.25"
+        in caplog.text
+    )
     assert "assist.safetensors" in caplog.text
 
 

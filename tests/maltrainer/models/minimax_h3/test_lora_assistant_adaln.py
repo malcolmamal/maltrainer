@@ -29,7 +29,7 @@ def _grid(path: Path, rows: int = 3) -> Path:
 
 def _adapter(tmp_path: Path, modules: tuple[str, ...] = (ADALN,)) -> Path:
     pair = hand_pair(FULL_WIDTH, 6 * 16 * 3)
-    return write_adapter(tmp_path / "assist.safetensors", {name: (*pair, 2.0) for name in modules})
+    return write_adapter(tmp_path / "assist.safetensors", dict.fromkeys(modules, (*pair, 2.0)))
 
 
 def test_a_full_model_adaln_row_is_run_on_the_grid_row_nearest_to_the_table_input(tmp_path: Path) -> None:
@@ -77,7 +77,9 @@ def test_the_grid_is_read_once_for_all_the_adaln_rows(tmp_path: Path, caplog: py
     assert "2 modules (2 AdaLN via the t_emb grid)" in caplog.text
 
 
-def test_adaln_rows_are_skipped_with_a_warning_when_no_grid_is_given(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_adaln_rows_are_skipped_with_a_warning_when_no_grid_is_given(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     network = _pruned_network()
     x = network.transformer.adaln_t_table[:2].clone()
     before = network.transformer.blocks[0].adaln_proj.linear(x)

@@ -32,7 +32,7 @@
   "train_krea2_finetune.py": 456,
   "train_krea2_lora.py": 586,
   "train_minimax_h3_lora.py": 1220,
-  "train_moss_image_finetune.py": 859,
+  "train_moss_image_finetune.py": 828,
   "train_moss_image_lora.py": 831,
   "train_qwen_image_2_1_lora.py": 640,
   "train_zimage_embedding.py": 648,
