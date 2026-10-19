@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 BANDS = (("low", 0.0, 0.5), ("mid", 0.5, 0.85), ("high", 0.85, 1.01))
 
 
-class NonFiniteLoss(RuntimeError):
+class NonFiniteLossError(RuntimeError):
     """The loss stayed NaN / inf; training stops without saving over the last good files."""
 
 
@@ -107,7 +107,7 @@ class TrainMonitor:
             self.bad_in_a_row += 1
             logger.error("[monitor] the loss is %s (%d in a row)", loss, self.bad_in_a_row)
             if self.bad_in_a_row >= self.stop_after:
-                raise NonFiniteLoss(
+                raise NonFiniteLossError(
                     f"the loss was NaN / inf {self.bad_in_a_row} steps in a row; stopping without saving, so the "
                     "last checkpoint and resume state stay as they were. Resume from the state with a lower rate."
                 )

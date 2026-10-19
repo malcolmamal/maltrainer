@@ -9,7 +9,7 @@ import pytest
 import torch
 
 from maltrainer.utils import train_monitor
-from maltrainer.utils.train_monitor import NonFiniteLoss, TrainMonitor, WeightDrift
+from maltrainer.utils.train_monitor import NonFiniteLossError, TrainMonitor, WeightDrift
 
 
 class _Clock:
@@ -142,7 +142,7 @@ def test_a_loss_that_stays_non_finite_stops_the_run(caplog: pytest.LogCaptureFix
 
     with caplog.at_level(logging.ERROR, logger="maltrainer.utils.train_monitor"):
         monitor.record(math.inf, 0.5)
-        with pytest.raises(NonFiniteLoss, match="NaN / inf 2 steps in a row"):
+        with pytest.raises(NonFiniteLossError, match="NaN / inf 2 steps in a row"):
             monitor.record(math.nan, 0.5)
 
     assert caplog.messages == ["[monitor] the loss is inf (1 in a row)", "[monitor] the loss is nan (2 in a row)"]
