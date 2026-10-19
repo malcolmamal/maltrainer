@@ -37,7 +37,9 @@ def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
     return (
         Gate("lint", "ruff, with the rule families in pyproject.toml", "ruff", ("check", ".")),
         Gate("complexity", "complexity 10 per function, beyond the baseline", "maltrainer_quality.complexity"),
-        Gate("file length", "200 lines per Python or shell file, beyond the baseline", "maltrainer_quality.file_length"),
+        Gate(
+            "file length", "200 lines per Python or shell file, beyond the baseline", "maltrainer_quality.file_length"
+        ),
         Gate("tests", "behaviour", "pytest", pytest),
         # pytest-cov can print the shortfall without failing the session; `coverage report`
         # exits non-zero on its own.

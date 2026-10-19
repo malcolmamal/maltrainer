@@ -62,8 +62,13 @@ class OffloadedParameterEMA:
     the decay raised to that power, which keeps the same time constant in optimizer steps.
     """
 
-    def __init__(self, named_parameters: Iterable[Tuple[str, torch.nn.Parameter]], decay: float = 0.999,
-                 warmup: bool = True, every: int = 1):
+    def __init__(
+        self,
+        named_parameters: Iterable[Tuple[str, torch.nn.Parameter]],
+        decay: float = 0.999,
+        warmup: bool = True,
+        every: int = 1,
+    ):
         named = [(name, p) for name, p in named_parameters if p.requires_grad]
         self.names: List[str] = [name for name, _ in named]
         self.parameters: List[torch.nn.Parameter] = [p for _, p in named]
@@ -79,7 +84,7 @@ class OffloadedParameterEMA:
 
     def current_decay(self) -> float:
         decay = self.decay if not self.warmup else min(self.decay, (1.0 + self.updates) / (10.0 + self.updates))
-        return decay ** self.every
+        return decay**self.every
 
     def wait(self) -> None:
         if self._thread is not None:
@@ -108,7 +113,7 @@ class OffloadedParameterEMA:
             for shadow, staged in zip(self.shadow, self.staging):
                 flat_shadow, flat_staged = shadow.view(-1), staged.view(-1)
                 for i in range(0, flat_shadow.numel(), chunk):
-                    flat_shadow[i:i + chunk].lerp_(flat_staged[i:i + chunk].float(), weight)
+                    flat_shadow[i : i + chunk].lerp_(flat_staged[i : i + chunk].float(), weight)
 
     def averaged(self) -> Dict[str, torch.Tensor]:
         """name -> fp32 CPU average (the live shadow tensors; do not modify)."""

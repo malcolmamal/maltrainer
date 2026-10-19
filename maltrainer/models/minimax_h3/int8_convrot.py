@@ -104,9 +104,7 @@ def _resolve_grad_precision(value: str | None) -> str:
     precision = str(value or DEFAULT_GRAD_PRECISION).lower()
     aliases = {"float32": "fp32", "fp32": "fp32", "bfloat16": "bf16", "bf16": "bf16", "int8": "int8"}
     if precision not in aliases:
-        raise ValueError(
-            f"Unknown INT8 ConvRot gradient precision {value!r}; expected one of {GRAD_PRECISIONS}"
-        )
+        raise ValueError(f"Unknown INT8 ConvRot gradient precision {value!r}; expected one of {GRAD_PRECISIONS}")
     return aliases[precision]
 
 
@@ -139,12 +137,12 @@ class _Int8ConvRotFunction(torch.autograd.Function):
             grad_input = _int_mm(quantized, weight).float() * grad_scale
         else:
             compute_dtype = _GRAD_COMPUTE_DTYPE[precision]
-            folded = grad_output.reshape(-1, grad_output.shape[-1]).to(compute_dtype) * scale.reshape(1, -1).to(compute_dtype)
-            grad_input = torch.zeros(
-                (folded.shape[0], weight.shape[1]), dtype=compute_dtype, device=folded.device
+            folded = grad_output.reshape(-1, grad_output.shape[-1]).to(compute_dtype) * scale.reshape(1, -1).to(
+                compute_dtype
             )
+            grad_input = torch.zeros((folded.shape[0], weight.shape[1]), dtype=compute_dtype, device=folded.device)
             # Dequantize bounded row chunks so the frozen weight never expands to float in full.
-            chunk = max(1, 2 ** 22 // max(weight.shape[1], 1))
+            chunk = max(1, 2**22 // max(weight.shape[1], 1))
             for start in range(0, weight.shape[0], chunk):
                 stop = min(start + chunk, weight.shape[0])
                 grad_input.addmm_(folded[:, start:stop], weight[start:stop].to(compute_dtype))
@@ -184,7 +182,9 @@ def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tenso
     return operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size, grad_precision)
 
 
-def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.device) -> Tuple[Dict[str, torch.Tensor], int]:
+def load_comfy_int8_convrot_state_dict(
+    checkpoint_path: str, *, device: torch.device
+) -> Tuple[Dict[str, torch.Tensor], int]:
     state_dict: Dict[str, torch.Tensor] = {}
     marker_config: Dict[str, dict] = {}
     with safe_open(str(checkpoint_path), framework="pt", device="cpu") as handle:
@@ -248,7 +248,9 @@ def prepare_int8_convrot_modules(model: nn.Module, state_dict: Dict[str, torch.T
         module.register_buffer("int8_convrot_groupsize", torch.zeros((), dtype=torch.int32))
         registered += 1
     if registered != len(scale_shapes):
-        raise ValueError(f"INT8 ConvRot checkpoint targets {len(scale_shapes)} linears, but the model exposes {registered}")
+        raise ValueError(
+            f"INT8 ConvRot checkpoint targets {len(scale_shapes)} linears, but the model exposes {registered}"
+        )
     return registered
 
 
@@ -262,7 +264,9 @@ def enable_int8_convrot(model: nn.Module, grad_precision: str | None = None) -> 
             raise TypeError("INT8 ConvRot scale is attached to a non-INT8 Linear weight")
         group_size = int(module.int8_convrot_groupsize.item())
         if module.weight.shape[1] % group_size:
-            raise ValueError(f"INT8 ConvRot group size {group_size} does not divide {module.weight.shape[1]} input features")
+            raise ValueError(
+                f"INT8 ConvRot group size {group_size} does not divide {module.weight.shape[1]} input features"
+            )
         module.int8_convrot_grad_precision = precision
         module.forward = MethodType(_int8_linear_forward, module)
         patched += 1

@@ -18,21 +18,57 @@ from torch.nn import functional as F
 # them verbatim -- guessing them per-channel mis-scales x0 by up to 3.6x and the LoRA
 # then bakes in a bogus per-channel correction that shows up as burn/artifacts.
 DEFAULT_LATENTS_MEAN = (
-    0.858090341091156, -0.9606591463088989, 1.0661640167236328, -0.5090325474739075,
-    -0.2727581858634949, -1.3675414323806763, -0.2553254961967468, -0.26907554268836975,
-    -0.5376840829849243, -0.0464097298681736, 0.6657370328903198, 0.19690127670764923,
-    -0.5460608005523682, -0.4035342037677765, -0.23683024942874908, 0.25928452610969543,
-    -0.30133944749832153, 0.211341992020607, -1.1206848621368408, 0.3581933379173279,
-    -0.04225143790245056, 0.2604829967021942, 0.22864092886447906, 0.7056031823158264,
+    0.858090341091156,
+    -0.9606591463088989,
+    1.0661640167236328,
+    -0.5090325474739075,
+    -0.2727581858634949,
+    -1.3675414323806763,
+    -0.2553254961967468,
+    -0.26907554268836975,
+    -0.5376840829849243,
+    -0.0464097298681736,
+    0.6657370328903198,
+    0.19690127670764923,
+    -0.5460608005523682,
+    -0.4035342037677765,
+    -0.23683024942874908,
+    0.25928452610969543,
+    -0.30133944749832153,
+    0.211341992020607,
+    -1.1206848621368408,
+    0.3581933379173279,
+    -0.04225143790245056,
+    0.2604829967021942,
+    0.22864092886447906,
+    0.7056031823158264,
 )
 
 DEFAULT_LATENTS_STD = (
-    1.2223774194717407, 1.2767263650894165, 1.6831774711608886, 1.7549455165863037,
-    1.5636216402053833, 2.194143533706665, 0.9653137922286987, 1.0569885969161987,
-    0.841948926448822, 0.7729952931404114, 1.8955937623977661, 0.946841835975647,
-    0.7996809482574463, 0.4498890042304992, 0.7197399735450745, 0.6936293244361877,
-    2.961095094680786, 2.7694199085235595, 3.0496184825897215, 2.1088054180145265,
-    3.276226282119751, 3.1627357006073, 2.2816812992095947, 2.6127843856811523,
+    1.2223774194717407,
+    1.2767263650894165,
+    1.6831774711608886,
+    1.7549455165863037,
+    1.5636216402053833,
+    2.194143533706665,
+    0.9653137922286987,
+    1.0569885969161987,
+    0.841948926448822,
+    0.7729952931404114,
+    1.8955937623977661,
+    0.946841835975647,
+    0.7996809482574463,
+    0.4498890042304992,
+    0.7197399735450745,
+    0.6936293244361877,
+    2.961095094680786,
+    2.7694199085235595,
+    3.0496184825897215,
+    2.1088054180145265,
+    3.276226282119751,
+    3.1627357006073,
+    2.2816812992095947,
+    2.6127843856811523,
 )
 
 
@@ -55,7 +91,9 @@ class MiniMaxH3VideoCausalConv3d(nn.Conv3d):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.spatial_padding > 0:
             padding = self.spatial_padding
-            hidden_states = F.pad(hidden_states, (padding, padding, padding, padding, 0, 0), mode=self.spatial_padding_mode)
+            hidden_states = F.pad(
+                hidden_states, (padding, padding, padding, padding, 0, 0), mode=self.spatial_padding_mode
+            )
         if self.temporal_padding > 0:
             hidden_states = F.pad(hidden_states, (0, 0, 0, 0, self.temporal_padding, 0), mode="constant")
         return F.conv3d(hidden_states, self.weight, self.bias, stride=self.stride, padding=0, dilation=self.dilation)
@@ -324,7 +362,7 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
             pad = VIDEO_CLIP_LENGTH - frames.shape[2] % VIDEO_CLIP_LENGTH
             frames = torch.cat([frames, frames[:, :, -1:].expand(-1, -1, pad, -1, -1)], dim=2)
         chunks = [
-            self.encode_moments(frames[:, :, start:start + VIDEO_CLIP_LENGTH])
+            self.encode_moments(frames[:, :, start : start + VIDEO_CLIP_LENGTH])
             for start in range(0, frames.shape[2], VIDEO_CLIP_LENGTH)
         ]
         moments = torch.cat(chunks, dim=2)[:, :, :-VIDEO_TOKEN_DROP]
@@ -353,14 +391,14 @@ def _map_encoder_key(key: str) -> str | None:
         return None
     if key.startswith("quant_conv."):
         return key
-    rest = key[len("encoder."):]
+    rest = key[len("encoder.") :]
     if rest.startswith("down."):
-        level, sub = rest[len("down."):].split(".", 1)
+        level, sub = rest[len("down.") :].split(".", 1)
         sub = sub.replace("block.", "resnets.", 1).replace("nin_shortcut.", "conv_shortcut.", 1)
         sub = sub.replace("downsample.", "downsamplers.0.", 1)
         return f"down_blocks.{level}.{sub}"
     if rest.startswith("mid."):
-        sub = rest[len("mid."):].replace("block.", "resnets.", 1).replace("nin_shortcut.", "conv_shortcut.", 1)
+        sub = rest[len("mid.") :].replace("block.", "resnets.", 1).replace("nin_shortcut.", "conv_shortcut.", 1)
         return f"mid_block.{sub}"
     return rest
 
@@ -369,7 +407,7 @@ def load_minimax_h3_video_vae(vae_path: str | Path, device: torch.device) -> Min
     """Load MiniMax H3 Video VAE encoder from safetensors checkpoint."""
     model = MiniMaxH3VideoEncoderModel()
     state_dict = load_file(str(vae_path))
-    
+
     encoder_state_dict = {}
     for k, v in state_dict.items():
         mapped_key = _map_encoder_key(k)

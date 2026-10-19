@@ -121,8 +121,10 @@ def run_menu(
             previews.set_enabled(prompt, on)
     if changes:
         previews._write_listing()
-        logger.info("[sample] preview settings changed (for this run; the config file is unchanged):\n  %s",
-                    "\n  ".join(changes))
+        logger.info(
+            "[sample] preview settings changed (for this run; the config file is unchanged):\n  %s",
+            "\n  ".join(changes),
+        )
     else:
         out.write("Preview settings: no changes\n")
         out.flush()

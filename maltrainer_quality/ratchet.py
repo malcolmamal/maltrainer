@@ -74,9 +74,7 @@ def report(verdict: Verdict, *, unit: str, limit: int, command: str) -> None:
         print(f"Lower the baseline with `{command} --tighten`.")
 
 
-def enforce(
-    over: Mapping[str, int], baseline_path: Path, *, tighten: bool, unit: str, limit: int, command: str
-) -> int:
+def enforce(over: Mapping[str, int], baseline_path: Path, *, tighten: bool, unit: str, limit: int, command: str) -> int:
     baseline = load(baseline_path)
     if tighten:
         baseline = tightened(over, baseline)

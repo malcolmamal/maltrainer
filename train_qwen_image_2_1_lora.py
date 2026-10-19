@@ -96,7 +96,9 @@ class QwenImage21LoRATrainer:
             device_name = torch.cuda.get_device_name(self.device) if self.device.type == "cuda" else "CPU"
             logger.info("Training on device: %s (%s)", self.device, device_name)
             if self.device.type == "cuda":
-                logger.info("Total VRAM: %.2f GB", torch.cuda.get_device_properties(self.device).total_memory / (1024**3))
+                logger.info(
+                    "Total VRAM: %.2f GB", torch.cuda.get_device_properties(self.device).total_memory / (1024**3)
+                )
 
         log_dir = Path(config.get("output", {}).get("path", "./output"))
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -338,9 +340,13 @@ class QwenImage21LoRATrainer:
                 "max_lr": float(train_config.get("automagic_max_lr", train_config.get("max_lr", 1e3))),
                 "beta2": float(train_config.get("automagic_beta2", train_config.get("beta2", 0.999))),
                 "eps": float(train_config.get("automagic_eps", train_config.get("eps", 1e-30))),
-                "clip_threshold": float(train_config.get("automagic_clip_threshold", train_config.get("clip_threshold", 1.0))),
+                "clip_threshold": float(
+                    train_config.get("automagic_clip_threshold", train_config.get("clip_threshold", 1.0))
+                ),
                 "weight_decay": weight_decay,
-                "polarity_history": int(train_config.get("automagic_polarity_history", train_config.get("polarity_history", 8))),
+                "polarity_history": int(
+                    train_config.get("automagic_polarity_history", train_config.get("polarity_history", 8))
+                ),
                 "fused": bool(train_config.get("automagic_fused", False)),
             }
             self.optimizer = Automagic3(params, **automagic_params)
@@ -531,7 +537,7 @@ class QwenImage21LoRATrainer:
             or "qwen_image_2_1_lora"
         )
         if lora_name.endswith(".safetensors"):
-            lora_name = lora_name[:-len(".safetensors")]
+            lora_name = lora_name[: -len(".safetensors")]
 
         if step == "final":
             save_path = output_dir / f"{lora_name}.safetensors"
@@ -568,7 +574,11 @@ class QwenImage21LoRATrainer:
         save_every = int(train_config.get("save_every", 500))
         logger.info(
             "Dry run: %d samples, %d steps/epoch -> %d epochs, %d total steps (%.3fs per simulated step)",
-            len(self.train_dataset), steps_per_epoch, num_epochs, total_steps, self.dry_run_step_time,
+            len(self.train_dataset),
+            steps_per_epoch,
+            num_epochs,
+            total_steps,
+            self.dry_run_step_time,
         )
         with tqdm(total=total_steps, desc="Training Steps (dry run)", disable=not self.is_main_process) as bar:
             for step in range(1, total_steps + 1):
@@ -577,7 +587,11 @@ class QwenImage21LoRATrainer:
                 epoch = math.ceil(step / steps_per_epoch)
                 self.progress_logger.info(
                     "Step: %d/%d [%d%%], Loss: 0.000000, Epoch: %d/%d, LR: 0.00e+00 (dry run)",
-                    step, total_steps, int(step / total_steps * 100), epoch, num_epochs,
+                    step,
+                    total_steps,
+                    int(step / total_steps * 100),
+                    epoch,
+                    num_epochs,
                 )
                 if step % save_every == 0 and step < total_steps:
                     logger.info("Dry run: would save checkpoint at step %d", step)
@@ -608,7 +622,9 @@ def main():
     parser = argparse.ArgumentParser(description="Train Qwen-Image-2.1 LoRA in Maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML/JSON config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")
-    parser.add_argument("--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step in a dry run")
+    parser.add_argument(
+        "--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step in a dry run"
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)

@@ -60,12 +60,15 @@ class Flux3Config:
     def from_state_dict(cls, state_dict: Dict[str, torch.Tensor]) -> "Flux3Config":
         """comfy/model_detection.py's FLUX.3 branch."""
         keys = state_dict.keys()
-        if "content_mode_blocks.image.0.attn_out.weight" not in keys or "single_stream_modulations.txt.lin.weight" not in keys:
+        if (
+            "content_mode_blocks.image.0.attn_out.weight" not in keys
+            or "single_stream_modulations.txt.lin.weight" not in keys
+        ):
             raise ValueError("Not a FLUX.3 DiT checkpoint (no content_mode_blocks / single_stream_modulations)")
         hidden = state_dict["content_mode_blocks.image.0.attn_out.weight"].shape[0]
 
         def count(prefix: str) -> int:
-            return len({k[len(prefix):].split(".", 1)[0] for k in keys if k.startswith(prefix)})
+            return len({k[len(prefix) :].split(".", 1)[0] for k in keys if k.startswith(prefix)})
 
         return cls(
             hidden_size=hidden,
@@ -80,7 +83,9 @@ class Flux3Config:
 # ---------------------------------------------------------------- embeddings and RoPE
 
 
-def timestep_embedding(t: torch.Tensor, dim: int = 256, max_period: int = 10000, time_factor: float = 1000.0) -> torch.Tensor:
+def timestep_embedding(
+    t: torch.Tensor, dim: int = 256, max_period: int = 10000, time_factor: float = 1000.0
+) -> torch.Tensor:
     """comfy/ldm/flux/layers.py: the x1000 happens in ``t``'s own dtype."""
     t = time_factor * t
     half = dim // 2
@@ -93,7 +98,7 @@ def timestep_embedding(t: torch.Tensor, dim: int = 256, max_period: int = 10000,
 def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     """[..., n] positions -> [..., n, dim/2, 2, 2] rotation matrices (comfy/ldm/flux/math.py)."""
     scale = torch.linspace(0, (dim - 2) / dim, steps=dim // 2, dtype=torch.float64, device=pos.device)
-    omega = 1.0 / (theta ** scale)
+    omega = 1.0 / (theta**scale)
     out = torch.einsum("...n,d->...nd", pos.to(torch.float32).to(torch.float64), omega)
     out = torch.stack([torch.cos(out), -torch.sin(out), torch.sin(out), torch.cos(out)], dim=-1)
     return out.reshape(*out.shape[:-1], 2, 2).float()
@@ -188,7 +193,9 @@ class Block(nn.Module):
         self.norm = QKNorm(hidden_size // num_heads)
         self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
-    def forward(self, x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor, gate: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor, gate: torch.Tensor, pe: torch.Tensor
+    ) -> torch.Tensor:
         """``shift``/``scale``/``gate`` broadcast over x: [B, 1, D] for one mode, [B, N, D] per row."""
         B, N, _ = x.shape
         x_mod = self.pre_norm(x) * (1 + scale) + shift
@@ -237,7 +244,9 @@ class Flux3Transformer(nn.Module):
         def block() -> Block:
             return Block(h, config.num_heads, config.mlp_ratio, config.fused_qkv)
 
-        self.content_mode_blocks = nn.ModuleDict({m: nn.ModuleList([block() for _ in range(config.depth)]) for m in CONTENT_MODES})
+        self.content_mode_blocks = nn.ModuleDict(
+            {m: nn.ModuleList([block() for _ in range(config.depth)]) for m in CONTENT_MODES}
+        )
         self.txt_mode_blocks = nn.ModuleList([block() for _ in range(config.depth)])
         self.single_blocks = nn.ModuleList([block() for _ in range(config.depth_single_blocks)])
         self.final_layer = nn.ModuleDict({"image": LastLayer(h, LATENT_CHANNELS)})

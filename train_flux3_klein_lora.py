@@ -148,7 +148,9 @@ class Flux3KleinLoRATrainer:
         del vae
         gc.collect()
         torch.cuda.empty_cache()
-        logger.info("Training sizes (w x h: images): %s", ", ".join(f"{w}x{h}: {n}" for (w, h), n in sorted(sizes.items())))
+        logger.info(
+            "Training sizes (w x h: images): %s", ", ".join(f"{w}x{h}: {n}" for (w, h), n in sorted(sizes.items()))
+        )
         print("VAE latents pre-cached and VAE unloaded from VRAM.", flush=True)
 
         prompts = {caption for _, caption in self.samples}
@@ -166,7 +168,9 @@ class Flux3KleinLoRATrainer:
         print("Text embeddings pre-cached and Text Encoder unloaded from VRAM.", flush=True)
         logger.info(
             "Pre-cached %d images and %d prompt embeddings (text windows: %s tokens).",
-            len(self.samples), len(self.text_cache), windows,
+            len(self.samples),
+            len(self.text_cache),
+            windows,
         )
 
     # ------------------------------------------------------------------ model
@@ -195,11 +199,13 @@ class Flux3KleinLoRATrainer:
         self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
         trainable = sum(p.numel() for p in self.lora_network.trainable_parameters())
-        self.run_metadata.update({
-            "lora_layers": len(self.lora_network.lora_layers),
-            "trainable_parameters": trainable,
-            "lora_dtype": str(self.lora_dtype).replace("torch.", ""),
-        })
+        self.run_metadata.update(
+            {
+                "lora_layers": len(self.lora_network.lora_layers),
+                "trainable_parameters": trainable,
+                "lora_dtype": str(self.lora_dtype).replace("torch.", ""),
+            }
+        )
         logger.info("LoRA: %.1fM trainable parameters in %s", trainable / 1e6, self.lora_dtype)
 
     def setup_optimizer(self):
@@ -226,7 +232,11 @@ class Flux3KleinLoRATrainer:
                 "fused": bool(train_config.get("automagic_fused", False)),
             }
             self.optimizer = Automagic3(groups, **kwargs)
-            self.run_metadata["optimizer_resolved"] = {"name": "automagic3", "groups": [g["name"] for g in groups], **kwargs}
+            self.run_metadata["optimizer_resolved"] = {
+                "name": "automagic3",
+                "groups": [g["name"] for g in groups],
+                **kwargs,
+            }
         elif name.startswith("prodigy"):
             import inspect
 
@@ -253,7 +263,9 @@ class Flux3KleinLoRATrainer:
         elif name in {"adamw8bit", "adam8bit"}:
             import bitsandbytes as bnb
 
-            self.optimizer = bnb.optim.AdamW8bit(self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay)
+            self.optimizer = bnb.optim.AdamW8bit(
+                self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay
+            )
             self.run_metadata["optimizer_resolved"] = {"name": name, "lr": lr}
         else:
             self.optimizer = AdamW(self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay)
@@ -262,7 +274,9 @@ class Flux3KleinLoRATrainer:
 
         warmup = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
         if warmup > 0:
-            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda step: min((step + 1) / warmup, 1.0))
+            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+                self.optimizer, lambda step: min((step + 1) / warmup, 1.0)
+            )
             logger.info("Learning-rate warmup over %d steps.", warmup)
 
     # ------------------------------------------------------------------ training
@@ -290,7 +304,7 @@ class Flux3KleinLoRATrainer:
         order = [i for i in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
         world = self.accelerator.num_processes
-        return order[self.accelerator.process_index::world] if world > 1 else order
+        return order[self.accelerator.process_index :: world] if world > 1 else order
 
     def _training_step(self, index: int) -> torch.Tensor:
         train_config = self.config["train"]
@@ -319,16 +333,27 @@ class Flux3KleinLoRATrainer:
 
         ema_decay = float(train_config.get("ema_decay", 0.0) or 0.0)
         if ema_decay > 0:
-            self.ema = ParameterEMA(network.trainable_parameters(), decay=ema_decay, warmup=bool(train_config.get("ema_warmup", True)))
+            self.ema = ParameterEMA(
+                network.trainable_parameters(), decay=ema_decay, warmup=bool(train_config.get("ema_warmup", True))
+            )
             self.run_metadata["ema_decay"] = ema_decay
             logger.info("EMA of the LoRA weights: decay %.4f (checkpoints save the average)", ema_decay)
 
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(len(self._epoch_order()), train_config)
-        self.run_metadata.update({"steps_per_epoch": steps_per_epoch, "planned_total_steps": total_steps, "dataset_samples": len(self.samples)})
+        self.run_metadata.update(
+            {
+                "steps_per_epoch": steps_per_epoch,
+                "planned_total_steps": total_steps,
+                "dataset_samples": len(self.samples),
+            }
+        )
         self.run_metadata["resolved_sigma_shift"] = float(train_config.get("timestep_shift", FLUX3_SHIFT))
         logger.info(
             "Starting FLUX.3 [klein] LoRA training: %d epochs, %d total steps; timesteps %s, shift %.2f",
-            num_epochs, total_steps, train_config.get("timestep_distribution", "uniform"), self.run_metadata["resolved_sigma_shift"],
+            num_epochs,
+            total_steps,
+            train_config.get("timestep_distribution", "uniform"),
+            self.run_metadata["resolved_sigma_shift"],
         )
 
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
@@ -341,7 +366,9 @@ class Flux3KleinLoRATrainer:
                     loss = self._training_step(index)
                     self.accelerator.backward(loss)
                     if self.accelerator.sync_gradients:
-                        self.accelerator.clip_grad_norm_(network.trainable_parameters(), float(train_config.get("max_grad_norm", 1.0)))
+                        self.accelerator.clip_grad_norm_(
+                            network.trainable_parameters(), float(train_config.get("max_grad_norm", 1.0))
+                        )
                         self.optimizer.step()
                         if self.lr_scheduler is not None:
                             self.lr_scheduler.step()
@@ -355,7 +382,9 @@ class Flux3KleinLoRATrainer:
                     self._log_step(global_step, total_steps, loss, epoch, num_epochs)
                     if save_every > 0 and global_step % save_every == 0 and global_step < total_steps:
                         self.save_checkpoint(global_step)
-                progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"})
+                progress_bar.set_postfix(
+                    {"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"}
+                )
                 if global_step >= total_steps:
                     break
             if global_step >= total_steps:
@@ -368,12 +397,24 @@ class Flux3KleinLoRATrainer:
     def _log_step(self, step, total, loss, epoch, num_epochs):
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
-        prefix = ("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (step, total, int(step / total * 100), loss.item(), epoch + 1, num_epochs))
+        prefix = "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (
+            step,
+            total,
+            int(step / total * 100),
+            loss.item(),
+            epoch + 1,
+            num_epochs,
+        )
         if hasattr(inner, "get_avg_learning_rate"):
-            rates = ", ".join(f"{g.get('name', i)} {lr:.2e}" for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates())))
+            rates = ", ".join(
+                f"{g.get('name', i)} {lr:.2e}"
+                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates()))
+            )
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
         elif group.get("d") is not None:
-            self.progress_logger.info("%sLR: %.2e (mult %.3f x d %.2e)", prefix, group["lr"] * group["d"], group["lr"], group["d"])
+            self.progress_logger.info(
+                "%sLR: %.2e (mult %.3f x d %.2e)", prefix, group["lr"] * group["d"], group["lr"], group["d"]
+            )
         else:
             self.progress_logger.info("%sLR: %.2e", prefix, group["lr"])
 
@@ -393,8 +434,14 @@ class Flux3KleinLoRATrainer:
                 state_dict = network.get_state_dict(save_dtype)
         else:
             state_dict = network.get_state_dict(save_dtype)
-        runtime = dict(self.run_metadata, saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"), save_dtype=str(save_dtype).replace("torch.", ""))
-        metadata = build_metadata(self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True)))
+        runtime = dict(
+            self.run_metadata,
+            saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+            save_dtype=str(save_dtype).replace("torch.", ""),
+        )
+        metadata = build_metadata(
+            self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True))
+        )
         save_file(state_dict, str(save_path), metadata=metadata)
         self.last_saved_path = str(save_path)
         logger.info("Saved LoRA checkpoint to %s", save_path)
@@ -407,14 +454,24 @@ class Flux3KleinLoRATrainer:
         repeats = max(int(dataset_config.get("repeats", 1) or 1), 1)
         samples = max(count_media_files(dataset_config.get("path", ""), ["image"]), 1) * repeats
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(samples, self.config["train"])
-        logger.info("Dry run: %d samples, %d steps/epoch -> %d epochs, %d total steps", samples, steps_per_epoch, num_epochs, total_steps)
+        logger.info(
+            "Dry run: %d samples, %d steps/epoch -> %d epochs, %d total steps",
+            samples,
+            steps_per_epoch,
+            num_epochs,
+            total_steps,
+        )
         with tqdm(total=total_steps, desc="Training Steps (dry run)", disable=not self.is_main_process) as bar:
             for step in range(1, total_steps + 1):
                 time.sleep(self.dry_run_step_time)
                 bar.update(1)
                 self.progress_logger.info(
                     "Step: %d/%d [%d%%], Loss: 0.000000, Epoch: %d/%d, LR: 0.00e+00 (dry run)",
-                    step, total_steps, int(step / total_steps * 100), math.ceil(step / steps_per_epoch), num_epochs,
+                    step,
+                    total_steps,
+                    int(step / total_steps * 100),
+                    math.ceil(step / steps_per_epoch),
+                    num_epochs,
                 )
         logger.info("Dry run complete: would save final checkpoint at step %d", total_steps)
 

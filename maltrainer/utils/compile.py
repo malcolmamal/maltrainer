@@ -43,5 +43,7 @@ def compile_blocks(blocks: Iterable[nn.Module], device: torch.device, mode: Opti
     torch._dynamo.config.cache_size_limit = max(torch._dynamo.config.cache_size_limit, 64)
     for block in blocks:
         block.compile(mode=mode)
-    logger.info("torch.compile: %d blocks (mode %s); the first steps of each new shape compile", len(blocks), mode or "default")
+    logger.info(
+        "torch.compile: %d blocks (mode %s); the first steps of each new shape compile", len(blocks), mode or "default"
+    )
     return True

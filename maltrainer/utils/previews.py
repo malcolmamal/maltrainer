@@ -115,7 +115,9 @@ class Previews:
         before = {key: getattr(self, key) for key in SETTINGS}
         old_prompts, old_enabled, old_rows = list(self.prompts), set(self.enabled_prompts), dict(self.rows)
         self._apply(config or {})
-        changes = [f"{key}: {before[key]!r} -> {getattr(self, key)!r}" for key in SETTINGS if getattr(self, key) != before[key]]
+        changes = [
+            f"{key}: {before[key]!r} -> {getattr(self, key)!r}" for key in SETTINGS if getattr(self, key) != before[key]
+        ]
         changes += [f"rows: {row} {'on' if on else 'off'}" for row, on in self.rows.items() if old_rows.get(row) != on]
         for p in self.prompts:
             if p not in old_prompts:
@@ -160,8 +162,10 @@ class Previews:
         for prompt, slot in sorted(self.slots.items(), key=lambda item: item[1]):
             state = "on " if prompt in self.enabled_prompts else ("off" if prompt in self.prompts else "removed")
             lines.append(f"{slot:02d}  seed {self.seed + slot}  [{state}]  {prompt}\n")
-        lines.append(f"every {self.every} steps, rows {', '.join(r for r, on in self.rows.items() if on) or 'none'}; "
-                     f"negative: {self.negative!r}, {self.steps} steps, CFG {self.cfg:g}, {self.width}x{self.height}\n")
+        lines.append(
+            f"every {self.every} steps, rows {', '.join(r for r, on in self.rows.items() if on) or 'none'}; "
+            f"negative: {self.negative!r}, {self.steps} steps, CFG {self.cfg:g}, {self.width}x{self.height}\n"
+        )
         (self.dir / "prompts.txt").write_text("".join(lines), encoding="utf-8")
 
     def render(
@@ -182,8 +186,12 @@ class Previews:
         prompts = [p for p in self.active if ready(p)]
         waiting = [p for p in self.active if p not in prompts]
         if waiting:
-            logger.info("[sample] step %d: %d new prompt(s) still being encoded, skipped this round: %s",
-                        step, len(waiting), ", ".join(f"[{self.slots[p]:02d}]" for p in waiting))
+            logger.info(
+                "[sample] step %d: %d new prompt(s) still being encoded, skipped this round: %s",
+                step,
+                len(waiting),
+                ", ".join(f"[{self.slots[p]:02d}]" for p in waiting),
+            )
         if not prompts or not variants:
             return 0.0
         started = time.time()
@@ -208,7 +216,10 @@ class Previews:
                             "[sample] %s took %.0fs (over %.0fs): the GPU is probably out of VRAM and spilling into "
                             "system RAM. Close other GPU programs; NVIDIA Control Panel's 'CUDA - Sysmem Fallback "
                             "Policy: Prefer No Sysmem Fallback' turns this into an out-of-memory error instead",
-                            self.current, took, self.slow_after)
+                            self.current,
+                            took,
+                            self.slow_after,
+                        )
             rows.append(images)
         width = max(sum(im.width for im in row) for row in rows)
         height = sum(max(im.height for im in row) for row in rows)
@@ -223,6 +234,12 @@ class Previews:
         strip.save(self.dir / f"step{step:06d}.png")
         elapsed = time.time() - started
         labels = ", ".join(label for label, _ in variants if label)
-        logger.info("[sample] step %d: %d preview(s)%s in %.0fs -> %s", step, sum(len(r) for r in rows),
-                    f" ({labels}, one row each)" if labels else "", elapsed, self.dir / f"step{step:06d}.png")
+        logger.info(
+            "[sample] step %d: %d preview(s)%s in %.0fs -> %s",
+            step,
+            sum(len(r) for r in rows),
+            f" ({labels}, one row each)" if labels else "",
+            elapsed,
+            self.dir / f"step{step:06d}.png",
+        )
         return elapsed

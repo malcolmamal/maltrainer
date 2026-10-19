@@ -74,15 +74,19 @@ def report(
         width = max((len(name) for name, _ in g.folders), default=0)
         for name, n in g.folders:
             r = g.repeats_for(name)
-            lines.append(f"  {name:<{width}}  {n:>5}" + (f"  x {r:<4g} = {samples_per_epoch(n, r):>4}" if varied else ""))
+            lines.append(
+                f"  {name:<{width}}  {n:>5}" + (f"  x {r:<4g} = {samples_per_epoch(n, r):>4}" if varied else "")
+            )
         if not g.folders:
             lines.append("  (no images found)")
     samples = sum(g.samples for g in groups)
     steps_per_epoch = max(math.ceil(samples / accum), 1)
     suggested = math.ceil(epochs * steps_per_epoch)
     lines.append("")
-    lines.append(f"One epoch: {samples} samples = {steps_per_epoch} steps"
-                 + (f" (gradient_accumulation_steps {accum})" if accum > 1 else ""))
+    lines.append(
+        f"One epoch: {samples} samples = {steps_per_epoch} steps"
+        + (f" (gradient_accumulation_steps {accum})" if accum > 1 else "")
+    )
     lines.append(f"Suggested for {epochs:g} epochs:  train.max_steps: {suggested}")
     current = int(train_config.get("max_steps", 0) or 0)
     if current > 0:

@@ -52,10 +52,12 @@ class QwenImage21Dataset(Dataset):
         self.captions: List[str] = []
         self._load_dataset()
 
-        self.transform = transforms.Compose([
-            transforms.Resize((self.height, self.width), interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.ToTensor(),  # Convert PIL Image [0, 255] to [3, H, W] in [0.0, 1.0]
-        ])
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((self.height, self.width), interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor(),  # Convert PIL Image [0, 255] to [3, H, W] in [0.0, 1.0]
+            ]
+        )
 
     def _load_dataset(self):
         if not self.data_root.exists():
@@ -84,7 +86,11 @@ class QwenImage21Dataset(Dataset):
                 if self.trigger_token and self.trigger_token.lower() not in caption.lower():
                     caption = f"{self.trigger_token} {caption}"
             else:
-                if self.trigger_token and self.default_caption and self.trigger_token.lower() not in self.default_caption.lower():
+                if (
+                    self.trigger_token
+                    and self.default_caption
+                    and self.trigger_token.lower() not in self.default_caption.lower()
+                ):
                     caption = f"{self.trigger_token} {self.default_caption}"
                 elif self.trigger_token:
                     caption = self.trigger_token

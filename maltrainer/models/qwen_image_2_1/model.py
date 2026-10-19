@@ -289,8 +289,12 @@ def build_rope_frequencies(
     freqs = [torch.cat([rope_p(pos_index, dim), rope_p(neg_index, dim)], dim=0) for dim in axes_dim]
 
     frame_idx = list(range(text_len)) + [text_len] * img_tokens
-    h_idx = list(range(text_len)) + [h for h in range(-(latent_h - latent_h // 2), latent_h // 2) for _ in range(latent_w)]
-    w_idx = list(range(text_len)) + [w for _ in range(latent_h) for w in range(-(latent_w - latent_w // 2), latent_w // 2)]
+    h_idx = list(range(text_len)) + [
+        h for h in range(-(latent_h - latent_h // 2), latent_h // 2) for _ in range(latent_w)
+    ]
+    w_idx = list(range(text_len)) + [
+        w for _ in range(latent_h) for w in range(-(latent_w - latent_w // 2), latent_w // 2)
+    ]
 
     rotary_emb = torch.cat(
         [
@@ -328,10 +332,12 @@ class QwenImage21Transformer(nn.Module):
         self.txt_in = TextProjection(context_in_dim, dim, eps=eps)
         self.img_in = nn.Linear(in_channels, dim, bias=False)
         self.modulation = nn.Sequential(nn.SiLU(), nn.Linear(dim, 4 * dim, bias=False))
-        self.transformer_blocks = nn.ModuleList([
-            TransformerBlock(dim=dim, heads=heads, dim_head=dim_head, mlp_ratio=mlp_ratio, eps=eps)
-            for _ in range(num_layers)
-        ])
+        self.transformer_blocks = nn.ModuleList(
+            [
+                TransformerBlock(dim=dim, heads=heads, dim_head=dim_head, mlp_ratio=mlp_ratio, eps=eps)
+                for _ in range(num_layers)
+            ]
+        )
         self.norm_out = AdaLayerNormContinuous(dim, dim, eps=eps)
         self.proj_out = nn.Linear(dim, out_channels, bias=False)
 

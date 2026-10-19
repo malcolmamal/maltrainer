@@ -51,13 +51,21 @@ TOKENIZER_ASSETS = Path(__file__).resolve().parents[1] / "minimax_h3" / "assets"
 
 # comfy/text_encoders/llama.py Qwen3VL_4BConfig. Heads, rope and eps are shared with the
 # vendored Qwen3-VL config and inherited from it.
-QWEN3VL_4B_TEXT = dict(hidden_size=2560, intermediate_size=9728, num_attention_heads=32, num_key_value_heads=8, head_dim=128)
+QWEN3VL_4B_TEXT = dict(
+    hidden_size=2560, intermediate_size=9728, num_attention_heads=32, num_key_value_heads=8, head_dim=128
+)
 
 
 def _text_key(key: str) -> Optional[str]:
-    for prefix in ("text_encoders.qwen3vl_4b.transformer.", "model.language_model.", "language_model.model.", "language_model.", "model."):
+    for prefix in (
+        "text_encoders.qwen3vl_4b.transformer.",
+        "model.language_model.",
+        "language_model.model.",
+        "language_model.",
+        "model.",
+    ):
         if key.startswith(prefix):
-            key = key[len(prefix):]
+            key = key[len(prefix) :]
             break
     if key.startswith(("visual.", "lm_head.")):
         return None
@@ -77,6 +85,7 @@ class Flux3TextEncoder(nn.Module):
         def hook(_module, args, kwargs):
             hidden = args[0] if args else kwargs["hidden_states"]
             self._captured[index] = hidden.detach()
+
         return hook
 
     @torch.no_grad()
@@ -102,14 +111,21 @@ class Flux3TextEncoder(nn.Module):
         return torch.cat([t[0] for t in taps], dim=-1).to(dtype)
 
 
-def load_flux3_text_encoder(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.bfloat16,
-                            tokenizer_path: Union[str, Path, None] = None, grad_precision: str = "bf16") -> Flux3TextEncoder:
+def load_flux3_text_encoder(
+    path: Union[str, Path],
+    device: torch.device,
+    dtype: torch.dtype = torch.bfloat16,
+    tokenizer_path: Union[str, Path, None] = None,
+    grad_precision: str = "bf16",
+) -> Flux3TextEncoder:
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
 
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Qwen3-VL-4B text encoder not found at {path}")
-    tokenizer = AutoTokenizer.from_pretrained(str(Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS), trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        str(Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS), trust_remote_code=True
+    )
 
     config = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
     for name, value in QWEN3VL_4B_TEXT.items():
@@ -137,7 +153,9 @@ def load_flux3_text_encoder(path: Union[str, Path], device: torch.device, dtype:
 
     if quantized and "embed_tokens.int8_convrot_groupsize" in state:
         # The table is stored Hadamard-rotated; Int8Embedding un-rotates it on lookup.
-        embed = Int8Embedding(config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item()))
+        embed = Int8Embedding(
+            config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item())
+        )
         embed.weight.data.copy_(state.pop("embed_tokens.weight"))
         embed.scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
         state.pop("embed_tokens.int8_convrot_groupsize")
@@ -147,7 +165,11 @@ def load_flux3_text_encoder(path: Union[str, Path], device: torch.device, dtype:
 
     info = model.load_state_dict(state, strict=False, assign=True)
     replaced_embed = isinstance(model.embed_tokens, Int8Embedding)
-    missing = [key for key in info.missing_keys if "rotary_emb" not in key and not (replaced_embed and key.startswith("embed_tokens."))]
+    missing = [
+        key
+        for key in info.missing_keys
+        if "rotary_emb" not in key and not (replaced_embed and key.startswith("embed_tokens."))
+    ]
     if missing or info.unexpected_keys:
         raise ValueError(
             f"{path.name} does not look like a Qwen3-VL-4B text encoder "
@@ -162,5 +184,9 @@ def load_flux3_text_encoder(path: Union[str, Path], device: torch.device, dtype:
         if parameter.is_floating_point():
             parameter.data = parameter.data.to(dtype)
     model.to(device=device).eval().requires_grad_(False)
-    logger.info("FLUX.3 text encoder: Qwen3-VL-4B, %d layers, %s", config.num_hidden_layers, "INT8 ConvRot" if quantized else "plain")
+    logger.info(
+        "FLUX.3 text encoder: Qwen3-VL-4B, %d layers, %s",
+        config.num_hidden_layers,
+        "INT8 ConvRot" if quantized else "plain",
+    )
     return Flux3TextEncoder(model, tokenizer)

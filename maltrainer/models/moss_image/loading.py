@@ -38,7 +38,7 @@ CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
 def _strip_container_prefix(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     for prefix in CONTAINER_PREFIXES:
         if state_dict and all(key.startswith(prefix) for key in state_dict):
-            return {key[len(prefix):]: value for key, value in state_dict.items()}
+            return {key[len(prefix) :]: value for key, value in state_dict.items()}
     return state_dict
 
 
@@ -78,7 +78,9 @@ def load_moss_image_transformer(
     if not path.exists():
         raise FileNotFoundError(f"MOSS-Image transformer not found at {path}")
     if "_sft" in path.name:
-        logger.warning("%s is the SFT (supervised fine-tune) checkpoint; LoRAs are normally trained on the base model.", path.name)
+        logger.warning(
+            "%s is the SFT (supervised fine-tune) checkpoint; LoRAs are normally trained on the base model.", path.name
+        )
 
     quantized = is_int8_convrot(path)
     logger.info("Loading MOSS-Image DiT from %s (%s)...", path, "INT8 ConvRot" if quantized else "plain")

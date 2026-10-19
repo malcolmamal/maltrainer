@@ -23,12 +23,21 @@ from maltrainer.models.krea2.model import Krea2Config, Krea2Transformer
 
 logger = logging.getLogger(__name__)
 
+
 def is_block_linear(key: str) -> bool:
-    return key.startswith("blocks.") and key.endswith(".weight") and (".attn.w" in key or ".attn.gate" in key or ".mlp." in key)
+    return (
+        key.startswith("blocks.")
+        and key.endswith(".weight")
+        and (".attn.w" in key or ".attn.gate" in key or ".mlp." in key)
+    )
 
 
-def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute_dtype: torch.dtype = torch.bfloat16,
-                           master: Optional[Dict[str, torch.Tensor]] = None) -> Tuple[Krea2Transformer, Dict[str, object]]:
+def load_krea2_transformer(
+    path: Union[str, Path],
+    device: torch.device,
+    compute_dtype: torch.dtype = torch.bfloat16,
+    master: Optional[Dict[str, torch.Tensor]] = None,
+) -> Tuple[Krea2Transformer, Dict[str, object]]:
     """Build the DiT with fp8 block Linears.
 
     An fp8_scaled file keeps the exact fp8 weights ComfyUI runs. A bf16 file (e.g. Comfy-Org's
@@ -62,7 +71,11 @@ def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute
         info["quantized_on_load"] = len(layers)
 
     for key, value in list(tensors.items()):
-        if value.is_floating_point() and value.dtype not in (torch.float8_e4m3fn, torch.float8_e5m2) and not key.endswith("weight_scale"):
+        if (
+            value.is_floating_point()
+            and value.dtype not in (torch.float8_e4m3fn, torch.float8_e5m2)
+            and not key.endswith("weight_scale")
+        ):
             tensors[key] = value.to(compute_dtype)
 
     with init_empty_weights(include_buffers=True):
@@ -80,7 +93,9 @@ def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute
     info["fp8_linears"] = len(layers)
     logger.info(
         "Krea 2 DiT from %s: %d fp8 Linears (%s), rest %s",
-        Path(path).name, len(layers), "quantized on load" if info.get("quantized_on_load") else "as stored",
+        Path(path).name,
+        len(layers),
+        "quantized on load" if info.get("quantized_on_load") else "as stored",
         compute_dtype,
     )
     return model, info

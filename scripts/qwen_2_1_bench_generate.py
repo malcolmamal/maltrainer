@@ -133,17 +133,12 @@ def main() -> None:
         dtype=dtype,
     )
     with torch.no_grad():
-        embeds = {
-            p["id"]: text_encoder.encode_prompts([p["prompt"]], device=device).to(device, dtype)
-            for p in prompts
-        }
+        embeds = {p["id"]: text_encoder.encode_prompts([p["prompt"]], device=device).to(device, dtype) for p in prompts}
     del text_encoder
     gc.collect()
     torch.cuda.empty_cache()
 
-    transformer = load_qwen_image_2_1_transformer(
-        model_config["transformer_path"], device=device, dtype=dtype
-    )
+    transformer = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
     network = QwenImage21LoRANetwork(transformer, target_modules=["__none__"])
     network.load_assistant_adapter(runs[0][1][0], multiplier=1.0, device=device, dtype=dtype)
     sigmas = build_sigmas(args.steps, latent_h * latent_w, device)
@@ -162,15 +157,15 @@ def main() -> None:
                 ).cpu()
                 done += 1
         rate = (time.time() - started) / done
-        print(f"  {name:>11s} {step:>5s}  {done}/{total}  ({rate:.1f}s/sample, ~{rate * (total - done) / 60:.0f} min left)")
+        print(
+            f"  {name:>11s} {step:>5s}  {done}/{total}  ({rate:.1f}s/sample, ~{rate * (total - done) / 60:.0f} min left)"
+        )
 
     del transformer, network
     gc.collect()
     torch.cuda.empty_cache()
 
-    vae = load_qwen_image_2_1_vae(
-        model_config["vae_path"], device=device, dtype=dtype, include_decoder=True
-    )
+    vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype, include_decoder=True)
     records = []
     for (name, step, prompt_id, seed), latent in latents.items():
         folder = outdir / "base" if name == "base" else outdir / name / step
@@ -180,8 +175,9 @@ def main() -> None:
             image = vae.decode(latent.to(device, dtype))
         array = (image[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8")
         Image.fromarray(array).save(path)
-        records.append({"run": name, "step": step, "prompt": prompt_id, "seed": seed,
-                        "path": str(path.relative_to(outdir))})
+        records.append(
+            {"run": name, "step": step, "prompt": prompt_id, "seed": seed, "path": str(path.relative_to(outdir))}
+        )
 
     manifest = {
         "prompts": prompts,

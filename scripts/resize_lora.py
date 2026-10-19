@@ -82,29 +82,37 @@ def resize_file(source: Path, target: Path, max_rank: int, frac: float, dtype: t
     meta = dict(metadata)
     meta["ss_network_dim"] = str(max(ranks))
     meta["ss_network_alpha"] = str(max(ranks))
-    meta["maltrainer_resize"] = json.dumps({
-        "method": "SVD per module, sv_fro rule",
-        "max_rank": max_rank,
-        "frac": frac,
-        "original_ranks": original,
-        "save_dtype": str(dtype).replace("torch.", ""),
-        "source": {"file": source.name, "sha256": sha256_prefix(source)},
-    })
+    meta["maltrainer_resize"] = json.dumps(
+        {
+            "method": "SVD per module, sv_fro rule",
+            "max_rank": max_rank,
+            "frac": frac,
+            "original_ranks": original,
+            "save_dtype": str(dtype).replace("torch.", ""),
+            "source": {"file": source.name, "sha256": sha256_prefix(source)},
+        }
+    )
 
     target.parent.mkdir(parents=True, exist_ok=True)
     save_file(state, str(target), metadata=meta)
     print(f"  {len(ranks)} modules, rank {original} -> {min(ranks)}..{max(ranks)} (mean {sum(ranks) / len(ranks):.1f})")
-    print(f"  {capped}/{len(ranks)} modules hit the rank cap" + (" (a higher --rank would keep more)" if capped else ""))
+    print(
+        f"  {capped}/{len(ranks)} modules hit the rank cap" + (" (a higher --rank would keep more)" if capped else "")
+    )
     print(f"  dropped norm per module: mean {sum(errors) / len(errors):.1%}, worst {max(errors):.1%}")
-    print(f"  wrote {target} ({target.stat().st_size / 1024 ** 2:.0f} MB, {str(dtype).replace('torch.', '')})")
+    print(f"  wrote {target} ({target.stat().st_size / 1024**2:.0f} MB, {str(dtype).replace('torch.', '')})")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("inputs", nargs="+", type=Path, help="LoRA .safetensors file(s) to shrink")
     parser.add_argument("--rank", type=int, default=8, help="rank cap per module (default 8)")
-    parser.add_argument("--frac", type=float, default=0.999,
-                        help="share of each module's Frobenius norm to keep before the cap applies (default 0.999)")
+    parser.add_argument(
+        "--frac",
+        type=float,
+        default=0.999,
+        help="share of each module's Frobenius norm to keep before the cap applies (default 0.999)",
+    )
     parser.add_argument("--dtype", choices=sorted(DTYPES), default="bfloat16", help="saved dtype (default bfloat16)")
     parser.add_argument("--device", default=None, help="cuda or cpu (default: cuda if available)")
     parser.add_argument("--output", type=Path, help="output file (only with a single input)")

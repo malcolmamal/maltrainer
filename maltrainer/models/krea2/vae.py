@@ -27,12 +27,40 @@ logger = logging.getLogger(__name__)
 
 # comfy/latent_formats.py Wan21
 LATENTS_MEAN = (
-    -0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508,
-    0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503, -0.2921,
+    -0.7571,
+    -0.7089,
+    -0.9113,
+    0.1075,
+    -0.1745,
+    0.9653,
+    -0.1517,
+    1.5508,
+    0.4134,
+    -0.0715,
+    0.5517,
+    -0.3632,
+    -0.1922,
+    -0.9497,
+    0.2503,
+    -0.2921,
 )
 LATENTS_STD = (
-    2.8184, 1.4541, 2.3275, 2.6558, 1.2196, 1.7708, 2.6052, 2.0743,
-    3.2687, 2.1526, 2.8652, 1.5579, 1.6382, 1.1253, 2.8251, 1.9160,
+    2.8184,
+    1.4541,
+    2.3275,
+    2.6558,
+    1.2196,
+    1.7708,
+    2.6052,
+    2.0743,
+    3.2687,
+    2.1526,
+    2.8652,
+    1.5579,
+    1.6382,
+    1.1253,
+    2.8251,
+    1.9160,
 )
 
 
@@ -54,7 +82,7 @@ class RMSNorm(nn.Module):
 
     def __init__(self, dim: int, images: bool):
         super().__init__()
-        self.scale = dim ** 0.5
+        self.scale = dim**0.5
         self.gamma = nn.Parameter(torch.ones((dim, 1, 1) if images else (dim, 1, 1, 1)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -66,8 +94,13 @@ class ResidualBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int):
         super().__init__()
         self.residual = nn.Sequential(
-            RMSNorm(in_dim, images=False), nn.SiLU(), CausalConv2d(in_dim, out_dim, 3, padding=1),
-            RMSNorm(out_dim, images=False), nn.SiLU(), nn.Dropout(0.0), CausalConv2d(out_dim, out_dim, 3, padding=1),
+            RMSNorm(in_dim, images=False),
+            nn.SiLU(),
+            CausalConv2d(in_dim, out_dim, 3, padding=1),
+            RMSNorm(out_dim, images=False),
+            nn.SiLU(),
+            nn.Dropout(0.0),
+            CausalConv2d(out_dim, out_dim, 3, padding=1),
         )
         self.shortcut = CausalConv2d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
@@ -104,8 +137,15 @@ class Resample(nn.Module):
 
 
 class WanImageEncoder(nn.Module):
-    def __init__(self, dim: int = 96, z_dim: int = 16, dim_mult=(1, 2, 4, 4), num_res_blocks: int = 2,
-                 temporal_downsample=(False, True, True), image_channels: int = 3):
+    def __init__(
+        self,
+        dim: int = 96,
+        z_dim: int = 16,
+        dim_mult=(1, 2, 4, 4),
+        num_res_blocks: int = 2,
+        temporal_downsample=(False, True, True),
+        image_channels: int = 3,
+    ):
         super().__init__()
         dims = [dim * u for u in (1,) + tuple(dim_mult)]
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
@@ -117,8 +157,12 @@ class WanImageEncoder(nn.Module):
             if i != len(dim_mult) - 1:
                 layers.append(Resample(out_dim, temporal_downsample[i]))
         self.downsamples = nn.Sequential(*layers)
-        self.middle = nn.Sequential(ResidualBlock(out_dim, out_dim), AttentionBlock(out_dim), ResidualBlock(out_dim, out_dim))
-        self.head = nn.Sequential(RMSNorm(out_dim, images=False), nn.SiLU(), CausalConv2d(out_dim, z_dim * 2, 3, padding=1))
+        self.middle = nn.Sequential(
+            ResidualBlock(out_dim, out_dim), AttentionBlock(out_dim), ResidualBlock(out_dim, out_dim)
+        )
+        self.head = nn.Sequential(
+            RMSNorm(out_dim, images=False), nn.SiLU(), CausalConv2d(out_dim, z_dim * 2, 3, padding=1)
+        )
 
     def forward(self, x):
         return self.head(self.middle(self.downsamples(self.conv1(x))))
@@ -149,7 +193,8 @@ def load_krea2_vae(path: Union[str, Path], device: torch.device, dtype: torch.dt
     dim = int(state["encoder.conv1.weight"].shape[0]) if "encoder.conv1.weight" in state else 96
     model = Krea2VAE(dim=dim)
     wanted = {
-        key: value for key, value in state.items()
+        key: value
+        for key, value in state.items()
         if (key.startswith("encoder.") or key.startswith("conv1.")) and ".time_conv." not in key
     }
     info = model.load_state_dict(wanted, strict=False)

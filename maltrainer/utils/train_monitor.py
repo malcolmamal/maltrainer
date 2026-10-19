@@ -150,7 +150,9 @@ class TrainMonitor:
                 parts.append("signal " + " ".join(f"{k} {v:+.2f}" for k, v in stats["signal"].items()))
             parts.append(f"nonfinite {stats['nonfinite']}")
             if stats["nonfinite"]:
-                logger.warning("[monitor] %d NaN / inf gradient values since the last summary (zeroed)", stats["nonfinite"])
+                logger.warning(
+                    "[monitor] %d NaN / inf gradient values since the last summary (zeroed)", stats["nonfinite"]
+                )
         if self.drift is not None:
             parts.append("drift " + self.drift.summary(self.steps_total))
         elapsed = time.time() - self.started - self.excluded

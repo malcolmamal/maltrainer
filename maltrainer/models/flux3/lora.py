@@ -23,10 +23,16 @@ MLP = ("mlp_in", "mlp_out")
 # The text-to-image path. content_mode_blocks.image_cond (reference images) never runs here.
 BLOCK_SECTIONS = ("txt_mode_blocks.", "content_mode_blocks.image.", "single_blocks.")
 IO_LAYERS = (
-    "emb_in.image", "txt_in", "time_in.in_layer", "time_in.out_layer",
-    "early_stream_modulations.image.lin", "early_stream_modulations.txt.lin",
-    "single_stream_modulations.image.lin", "single_stream_modulations.txt.lin",
-    "final_layer.image.linear", "final_layer.image.adaLN_modulation.1",
+    "emb_in.image",
+    "txt_in",
+    "time_in.in_layer",
+    "time_in.out_layer",
+    "early_stream_modulations.image.lin",
+    "early_stream_modulations.txt.lin",
+    "single_stream_modulations.image.lin",
+    "single_stream_modulations.txt.lin",
+    "final_layer.image.linear",
+    "final_layer.image.adaLN_modulation.1",
 )
 
 # Named target sets.
@@ -64,7 +70,7 @@ class LoRALayer(nn.Module):
         self.scale = alpha / rank
         self.lora_down = nn.Linear(in_features, rank, bias=False)
         self.lora_up = nn.Linear(rank, out_features, bias=False)
-        nn.init.kaiming_uniform_(self.lora_down.weight, a=5 ** 0.5)
+        nn.init.kaiming_uniform_(self.lora_down.weight, a=5**0.5)
         nn.init.zeros_(self.lora_up.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -75,8 +81,14 @@ class LoRALayer(nn.Module):
 
 
 class Flux3LoRANetwork(nn.Module):
-    def __init__(self, transformer: nn.Module, rank: int = 16, alpha: float = 16.0, targets: str = "blocks",
-                 prefix: str = "diffusion_model."):
+    def __init__(
+        self,
+        transformer: nn.Module,
+        rank: int = 16,
+        alpha: float = 16.0,
+        targets: str = "blocks",
+        prefix: str = "diffusion_model.",
+    ):
         super().__init__()
         if targets not in TARGET_PRESETS:
             raise ValueError(f"lora.targets must be one of {TARGET_PRESETS}, got {targets!r}")
@@ -105,7 +117,14 @@ class Flux3LoRANetwork(nn.Module):
         counts: Dict[str, int] = {}
         for name in self.name_map.values():
             counts[param_group_of(name)] = counts.get(param_group_of(name), 0) + 1
-        logger.info("FLUX.3 LoRA: %d adapters (%s), rank %d, alpha %s, targets %s", len(self.lora_layers), counts, rank, alpha, targets)
+        logger.info(
+            "FLUX.3 LoRA: %d adapters (%s), rank %d, alpha %s, targets %s",
+            len(self.lora_layers),
+            counts,
+            rank,
+            alpha,
+            targets,
+        )
 
     def _add(self, name: str, in_features: int, out_features: int, rank: int, alpha: float) -> LoRALayer:
         layer = LoRALayer(in_features, out_features, rank, alpha)

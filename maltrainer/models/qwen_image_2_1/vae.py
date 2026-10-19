@@ -18,25 +18,137 @@ logger = logging.getLogger(__name__)
 
 # Official 64-channel normalization constants for Qwen-Image-2.1
 LATENTS_MEAN = [
-    0.5126, 0.7721, -0.0631, 1.3506, -0.7855, -2.1025, -0.3458, 1.3722,
-    1.8873, -1.7177, -0.6510, 0.2732, 0.7562, -0.6163, -1.0277, 3.8363,
-    2.0210, 0.0472, 0.9320, 2.0087, 2.4954, -0.1391, -1.4249, 1.8464,
-    -0.5236, 1.2826, 3.7046, -1.3035, 2.7286, -1.4518, -1.9036, -1.9955,
-    -0.0342, -1.0265, -0.7636, 3.0555, 0.0746, -3.0751, -0.1076, 1.7376,
-    -1.0914, -1.9435, -0.2784, -1.3680, 0.4809, -0.4433, 0.3764, 0.5729,
-    -2.0595, 1.0960, -1.3260, -2.0211, -5.0179, 0.5275, 4.0162, 1.8505,
-    0.3026, 1.9373, 1.4937, 0.2632, 0.5547, -1.7121, -0.1562, 0.0304,
+    0.5126,
+    0.7721,
+    -0.0631,
+    1.3506,
+    -0.7855,
+    -2.1025,
+    -0.3458,
+    1.3722,
+    1.8873,
+    -1.7177,
+    -0.6510,
+    0.2732,
+    0.7562,
+    -0.6163,
+    -1.0277,
+    3.8363,
+    2.0210,
+    0.0472,
+    0.9320,
+    2.0087,
+    2.4954,
+    -0.1391,
+    -1.4249,
+    1.8464,
+    -0.5236,
+    1.2826,
+    3.7046,
+    -1.3035,
+    2.7286,
+    -1.4518,
+    -1.9036,
+    -1.9955,
+    -0.0342,
+    -1.0265,
+    -0.7636,
+    3.0555,
+    0.0746,
+    -3.0751,
+    -0.1076,
+    1.7376,
+    -1.0914,
+    -1.9435,
+    -0.2784,
+    -1.3680,
+    0.4809,
+    -0.4433,
+    0.3764,
+    0.5729,
+    -2.0595,
+    1.0960,
+    -1.3260,
+    -2.0211,
+    -5.0179,
+    0.5275,
+    4.0162,
+    1.8505,
+    0.3026,
+    1.9373,
+    1.4937,
+    0.2632,
+    0.5547,
+    -1.7121,
+    -0.1562,
+    0.0304,
 ]
 
 LATENTS_STD = [
-    3.2001, 3.2936, 3.4321, 3.0091, 3.1061, 4.0379, 4.0705, 3.7910,
-    3.0785, 3.6500, 3.9308, 3.0904, 2.8778, 3.7675, 3.7320, 5.0756,
-    3.2864, 4.0397, 3.1317, 4.0443, 2.9249, 3.9454, 3.0988, 4.2489,
-    3.4896, 3.8513, 3.9323, 3.4719, 3.7498, 4.2830, 3.5694, 4.2467,
-    3.9037, 3.2947, 5.0770, 3.5075, 3.2700, 3.4767, 2.8063, 5.1125,
-    3.5327, 4.7833, 3.1286, 4.1819, 3.8527, 3.8312, 3.5605, 4.3875,
-    3.9624, 4.0168, 3.5643, 4.0550, 5.5614, 4.2963, 4.4080, 3.4959,
-    3.8747, 3.7608, 3.5735, 3.1490, 3.7662, 3.6746, 3.4563, 3.8161,
+    3.2001,
+    3.2936,
+    3.4321,
+    3.0091,
+    3.1061,
+    4.0379,
+    4.0705,
+    3.7910,
+    3.0785,
+    3.6500,
+    3.9308,
+    3.0904,
+    2.8778,
+    3.7675,
+    3.7320,
+    5.0756,
+    3.2864,
+    4.0397,
+    3.1317,
+    4.0443,
+    2.9249,
+    3.9454,
+    3.0988,
+    4.2489,
+    3.4896,
+    3.8513,
+    3.9323,
+    3.4719,
+    3.7498,
+    4.2830,
+    3.5694,
+    4.2467,
+    3.9037,
+    3.2947,
+    5.0770,
+    3.5075,
+    3.2700,
+    3.4767,
+    2.8063,
+    5.1125,
+    3.5327,
+    4.7833,
+    3.1286,
+    4.1819,
+    3.8527,
+    3.8312,
+    3.5605,
+    4.3875,
+    3.9624,
+    4.0168,
+    3.5643,
+    4.0550,
+    5.5614,
+    4.2963,
+    4.4080,
+    3.4959,
+    3.8747,
+    3.7608,
+    3.5735,
+    3.1490,
+    3.7662,
+    3.6746,
+    3.4563,
+    3.8161,
 ]
 
 
@@ -216,7 +328,7 @@ class DupUp3D(nn.Module):
         x = x.permute(0, 1, 5, 2, 6, 3, 7, 4).contiguous()
         x = x.view(x.size(0), self.out_channels, x.size(2) * ft, x.size(4) * fs, x.size(6) * fs)
         # first_chunk: a single frame keeps only the last of the duplicated frames
-        return x[:, :, ft - 1:].squeeze(2)
+        return x[:, :, ft - 1 :].squeeze(2)
 
 
 class EncoderStage(nn.Module):
@@ -269,23 +381,42 @@ class Qwen21VAEEncoder(nn.Module):
         self.conv1 = CausalConv3d(4, base_dim, 3, padding=1)
         dims = [base_dim, base_dim * 2, base_dim * 4, base_dim * 8, base_dim * 8]
         # temperal_downsample = [False, True, True, True]; the last stage does not downsample
-        self.downsamples = nn.ModuleList([
-            EncoderStage([ResBlock(dims[0], dims[0]), ResBlock(dims[0], dims[0])], Resample2D(dims[0], "down"),
-                         AvgDown3D(dims[0], dims[0], factor_t=1, factor_s=2)),
-            EncoderStage([ResBlock(dims[0], dims[1]), ResBlock(dims[1], dims[1])], Resample3D(dims[1], "down"),
-                         AvgDown3D(dims[0], dims[1], factor_t=2, factor_s=2)),
-            EncoderStage([ResBlock(dims[1], dims[2]), ResBlock(dims[2], dims[2])], Resample3D(dims[2], "down"),
-                         AvgDown3D(dims[1], dims[2], factor_t=2, factor_s=2)),
-            EncoderStage([ResBlock(dims[2], dims[3]), ResBlock(dims[3], dims[3])], Resample3D(dims[3], "down"),
-                         AvgDown3D(dims[2], dims[3], factor_t=2, factor_s=2)),
-            EncoderStage([ResBlock(dims[3], dims[4]), ResBlock(dims[4], dims[4])], None,
-                         AvgDown3D(dims[3], dims[4], factor_t=1, factor_s=1)),
-        ])
-        self.middle = nn.ModuleList([
-            ResBlock(dims[4], dims[4]),
-            VAEAttention(dims[4]),
-            ResBlock(dims[4], dims[4]),
-        ])
+        self.downsamples = nn.ModuleList(
+            [
+                EncoderStage(
+                    [ResBlock(dims[0], dims[0]), ResBlock(dims[0], dims[0])],
+                    Resample2D(dims[0], "down"),
+                    AvgDown3D(dims[0], dims[0], factor_t=1, factor_s=2),
+                ),
+                EncoderStage(
+                    [ResBlock(dims[0], dims[1]), ResBlock(dims[1], dims[1])],
+                    Resample3D(dims[1], "down"),
+                    AvgDown3D(dims[0], dims[1], factor_t=2, factor_s=2),
+                ),
+                EncoderStage(
+                    [ResBlock(dims[1], dims[2]), ResBlock(dims[2], dims[2])],
+                    Resample3D(dims[2], "down"),
+                    AvgDown3D(dims[1], dims[2], factor_t=2, factor_s=2),
+                ),
+                EncoderStage(
+                    [ResBlock(dims[2], dims[3]), ResBlock(dims[3], dims[3])],
+                    Resample3D(dims[3], "down"),
+                    AvgDown3D(dims[2], dims[3], factor_t=2, factor_s=2),
+                ),
+                EncoderStage(
+                    [ResBlock(dims[3], dims[4]), ResBlock(dims[4], dims[4])],
+                    None,
+                    AvgDown3D(dims[3], dims[4], factor_t=1, factor_s=1),
+                ),
+            ]
+        )
+        self.middle = nn.ModuleList(
+            [
+                ResBlock(dims[4], dims[4]),
+                VAEAttention(dims[4]),
+                ResBlock(dims[4], dims[4]),
+            ]
+        )
         self.head = nn.Sequential(
             RMSNorm3d(dims[4]),
             nn.SiLU(),
@@ -306,23 +437,39 @@ class Qwen21VAEDecoder(nn.Module):
     def __init__(self, z_dim: int = 64):
         super().__init__()
         self.conv1 = CausalConv3d(z_dim, 1152, 3, padding=1)
-        self.middle = nn.ModuleList([
-            ResBlock(1152, 1152),
-            VAEAttention(1152),
-            ResBlock(1152, 1152),
-        ])
+        self.middle = nn.ModuleList(
+            [
+                ResBlock(1152, 1152),
+                VAEAttention(1152),
+                ResBlock(1152, 1152),
+            ]
+        )
         # temperal_upsample = [True, True, True, False]; the last stage does not upsample
-        self.upsamples = nn.ModuleList([
-            DecoderStage([ResBlock(1152, 1152), ResBlock(1152, 1152), ResBlock(1152, 1152)], Resample3D(1152, "up"),
-                         DupUp3D(1152, 1152, factor_t=2, factor_s=2)),
-            DecoderStage([ResBlock(1152, 1152), ResBlock(1152, 1152), ResBlock(1152, 1152)], Resample3D(1152, "up"),
-                         DupUp3D(1152, 1152, factor_t=2, factor_s=2)),
-            DecoderStage([ResBlock(1152, 576), ResBlock(576, 576), ResBlock(576, 576)], Resample3D(576, "up"),
-                         DupUp3D(1152, 576, factor_t=2, factor_s=2)),
-            DecoderStage([ResBlock(576, 288), ResBlock(288, 288), ResBlock(288, 288)], Resample2D(288, "up"),
-                         DupUp3D(576, 288, factor_t=1, factor_s=2)),
-            DecoderStage([ResBlock(288, 144), ResBlock(144, 144), ResBlock(144, 144)], None, None),
-        ])
+        self.upsamples = nn.ModuleList(
+            [
+                DecoderStage(
+                    [ResBlock(1152, 1152), ResBlock(1152, 1152), ResBlock(1152, 1152)],
+                    Resample3D(1152, "up"),
+                    DupUp3D(1152, 1152, factor_t=2, factor_s=2),
+                ),
+                DecoderStage(
+                    [ResBlock(1152, 1152), ResBlock(1152, 1152), ResBlock(1152, 1152)],
+                    Resample3D(1152, "up"),
+                    DupUp3D(1152, 1152, factor_t=2, factor_s=2),
+                ),
+                DecoderStage(
+                    [ResBlock(1152, 576), ResBlock(576, 576), ResBlock(576, 576)],
+                    Resample3D(576, "up"),
+                    DupUp3D(1152, 576, factor_t=2, factor_s=2),
+                ),
+                DecoderStage(
+                    [ResBlock(576, 288), ResBlock(288, 288), ResBlock(288, 288)],
+                    Resample2D(288, "up"),
+                    DupUp3D(576, 288, factor_t=1, factor_s=2),
+                ),
+                DecoderStage([ResBlock(288, 144), ResBlock(144, 144), ResBlock(144, 144)], None, None),
+            ]
+        )
         self.head = nn.Sequential(
             RMSNorm3d(144),
             nn.SiLU(),
@@ -434,11 +581,11 @@ def load_qwen_image_2_1_vae(
         enc_sd = {}
         for k in f.keys():
             if k.startswith("encoder."):
-                enc_sd[k[len("encoder."):]] = f.get_tensor(k)
+                enc_sd[k[len("encoder.") :]] = f.get_tensor(k)
         model.encoder.load_state_dict(enc_sd, strict=True)
 
         # Root-level `conv1` / `conv2` are quant_conv / post_quant_conv, not encoder layers.
-        quant_sd = {k[len("conv1."):]: f.get_tensor(k) for k in f.keys() if k.startswith("conv1.")}
+        quant_sd = {k[len("conv1.") :]: f.get_tensor(k) for k in f.keys() if k.startswith("conv1.")}
         if not quant_sd:
             raise KeyError(f"VAE checkpoint {vae_path} has no root `conv1.*` (quant_conv) weights")
         model.quant_conv.load_state_dict(quant_sd, strict=True)
@@ -447,10 +594,10 @@ def load_qwen_image_2_1_vae(
             dec_sd = {}
             for k in f.keys():
                 if k.startswith("decoder."):
-                    dec_sd[k[len("decoder."):]] = f.get_tensor(k)
+                    dec_sd[k[len("decoder.") :]] = f.get_tensor(k)
             model.decoder.load_state_dict(dec_sd, strict=True)
 
-            post_sd = {k[len("conv2."):]: f.get_tensor(k) for k in f.keys() if k.startswith("conv2.")}
+            post_sd = {k[len("conv2.") :]: f.get_tensor(k) for k in f.keys() if k.startswith("conv2.")}
             if not post_sd:
                 raise KeyError(f"VAE checkpoint {vae_path} has no root `conv2.*` (post_quant_conv) weights")
             model.post_quant_conv.load_state_dict(post_sd, strict=True)

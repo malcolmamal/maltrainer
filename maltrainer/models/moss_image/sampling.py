@@ -49,7 +49,9 @@ def initial_noise(seed: int, height: int, width: int) -> torch.Tensor:
     if height % DOWNSAMPLING or width % DOWNSAMPLING:
         raise ValueError("height and width must be multiples of 16")
     generator = torch.Generator("cpu").manual_seed(int(seed))
-    return torch.randn((1, 128, height // DOWNSAMPLING, width // DOWNSAMPLING), generator=generator, dtype=torch.float32)
+    return torch.randn(
+        (1, 128, height // DOWNSAMPLING, width // DOWNSAMPLING), generator=generator, dtype=torch.float32
+    )
 
 
 @torch.no_grad()

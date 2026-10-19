@@ -47,7 +47,10 @@ MODELS = {
     "moss_image": (
         "train_moss_image_lora.py",
         "templates/moss_image_automagic_template.yaml",
-        {"prodigy": "templates/moss_image_prodigy_template.yaml", "adamw8bit": "templates/moss_image_adamw_template.yaml"},
+        {
+            "prodigy": "templates/moss_image_prodigy_template.yaml",
+            "adamw8bit": "templates/moss_image_adamw_template.yaml",
+        },
         {
             "transformer_path": ("diffusion_models", "moss_image_base_bf16.safetensors"),
             "vae_path": ("vae", "flux2_vae.safetensors"),

@@ -137,7 +137,7 @@ class QwenImage21LoRANetwork(nn.Module):
                 (".alpha", "alpha"),
             ):
                 if key.endswith(suffix):
-                    pairs.setdefault(key[:-len(suffix)], {})[slot] = value
+                    pairs.setdefault(key[: -len(suffix)], {})[slot] = value
                     break
 
         if not hasattr(self, "assistant_layers"):
@@ -147,7 +147,7 @@ class QwenImage21LoRANetwork(nn.Module):
         for name, parts in sorted(pairs.items()):
             if "down" not in parts or "up" not in parts:
                 continue
-            module_path = name[len(self.prefix):] if name.startswith(self.prefix) else name
+            module_path = name[len(self.prefix) :] if name.startswith(self.prefix) else name
             try:
                 module = self.transformer.get_submodule(module_path)
             except AttributeError:

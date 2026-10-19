@@ -29,6 +29,7 @@ from transformers import Qwen2Tokenizer, Qwen3ForCausalLM
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>"):
     """Load textual inversion embedding and add to tokenizer/text_encoder."""
     logger.info(f"Loading textual inversion from {embedding_path}")
@@ -38,10 +39,10 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
 
     # Assume the embedding is stored under 'emb_params' or similar
     # Adjust based on how we save it in training
-    if 'emb_params' in embedding_data:
-        embedding_vectors = embedding_data['emb_params']
-    elif 'embedding' in embedding_data:
-        embedding_vectors = embedding_data['embedding']
+    if "emb_params" in embedding_data:
+        embedding_vectors = embedding_data["emb_params"]
+    elif "embedding" in embedding_data:
+        embedding_vectors = embedding_data["embedding"]
     else:
         # Try to find the embedding tensor
         embedding_vectors = None
@@ -69,7 +70,9 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
 
     # Set the embedding
     with torch.no_grad():
-        text_encoder.get_input_embeddings().weight[token_id:token_id+embedding_vectors.shape[0]] = embedding_vectors.to(text_encoder.device, text_encoder.dtype)
+        text_encoder.get_input_embeddings().weight[token_id : token_id + embedding_vectors.shape[0]] = (
+            embedding_vectors.to(text_encoder.device, text_encoder.dtype)
+        )
 
     logger.info(f"Loaded {embedding_vectors.shape[0]} embedding vectors for token '{token_string}'")
 
@@ -77,6 +80,7 @@ def load_textual_inversion_embedding(pipeline, embedding_path, token_string="<*>
     # Note: This assumes the pipeline allows attribute replacement
     pipeline.tokenizer = tokenizer
     pipeline.text_encoder = text_encoder
+
 
 def main():
     parser = argparse.ArgumentParser(description="Z-Image inference with LoRA and Textual Inversion support")
@@ -120,16 +124,16 @@ def main():
     base, ext = os.path.splitext(base_filename)
     if not ext:
         ext = ".png"
-    
+
     # Use provided seed or generate random one
     initial_seed = args.seed if args.seed is not None else torch.randint(0, 2**32, (1,)).item()
-    
+
     for i in range(args.num_images):
         current_seed = initial_seed + i
         generator = torch.Generator(device=device).manual_seed(current_seed)
-        
-        logger.info(f"Generating image {i+1}/{args.num_images} with seed {current_seed}")
-        
+
+        logger.info(f"Generating image {i + 1}/{args.num_images} with seed {current_seed}")
+
         with torch.no_grad():
             image = pipeline(
                 prompt=args.prompt,
@@ -137,18 +141,19 @@ def main():
                 num_inference_steps=args.num_inference_steps,
                 width=args.width,
                 height=args.height,
-                generator=generator
+                generator=generator,
             ).images[0]
 
         # Save image with timestamp and index
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if args.num_images > 1:
-            final_output_path = os.path.join(output_dir, f"{base}_{timestamp}_{i+1}{ext}")
+            final_output_path = os.path.join(output_dir, f"{base}_{timestamp}_{i + 1}{ext}")
         else:
             final_output_path = os.path.join(output_dir, f"{base}_{timestamp}{ext}")
-        
+
         image.save(final_output_path)
         logger.info(f"Image saved to {final_output_path}")
+
 
 if __name__ == "__main__":
     main()

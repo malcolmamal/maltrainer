@@ -120,16 +120,16 @@ class Qwen3VLTextEncoder(nn.Module):
         hidden_states = outputs.last_hidden_state
         # Drop system prompt tokens
         if self.drop_idx > 0 and hidden_states.shape[1] > self.drop_idx:
-            hidden_states = hidden_states[:, self.drop_idx:]
+            hidden_states = hidden_states[:, self.drop_idx :]
 
         return hidden_states
 
 
 def _map_te_key(k: str) -> str:
     if k.startswith("model.visual."):
-        return k[len("model."):]
+        return k[len("model.") :]
     if k.startswith("model."):
-        return "language_model." + k[len("model."):]
+        return "language_model." + k[len("model.") :]
     return k
 
 

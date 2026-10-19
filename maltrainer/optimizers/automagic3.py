@@ -38,14 +38,9 @@ class Automagic3(torch.optim.Optimizer):
         fused: bool = False,
     ):
         if min_lr > max_lr:
-            raise ValueError(
-                f"min_lr ({min_lr}) must be <= max_lr ({max_lr})"
-            )
+            raise ValueError(f"min_lr ({min_lr}) must be <= max_lr ({max_lr})")
         if lr > 1e-3:
-            print(
-                f"Note: start lr {lr} is high; the controller will correct it "
-                f"(the pooled vote will walk it down)."
-            )
+            print(f"Note: start lr {lr} is high; the controller will correct it (the pooled vote will walk it down).")
         defaults = dict(
             lr=lr,
             min_lr=min_lr,
@@ -76,18 +71,14 @@ class Automagic3(torch.optim.Optimizer):
                     continue
                 if self.fused:
                     # Fused: update each param the moment its grad is ready.
-                    handle = p.register_post_accumulate_grad_hook(
-                        self._make_backward_hook(group)
-                    )
+                    handle = p.register_post_accumulate_grad_hook(self._make_backward_hook(group))
                     self._hook_handles.append(handle)
                 elif p.dtype != torch.float32:
                     # Non-fused: the actual update happens in .step(); here we
                     # only stochastically accumulate low-precision grads across
                     # micro-batches so repeated round-to-nearest doesn't drop
                     # small grads (fp32 grads accumulate losslessly on their own).
-                    handle = p.register_post_accumulate_grad_hook(
-                        self._make_accum_hook()
-                    )
+                    handle = p.register_post_accumulate_grad_hook(self._make_accum_hook())
                     self._hook_handles.append(handle)
 
         total = sum(p.numel() for g in self.param_groups for p in g["params"])
@@ -129,12 +120,8 @@ class Automagic3(torch.optim.Optimizer):
         consts = cls._PACK_CONSTS.get(device)
         if consts is None:
             consts = (
-                torch.tensor(
-                    [1, 2, 4, 8, 16, 32, 64, 128], device=device, dtype=torch.uint8
-                ),
-                torch.tensor(
-                    [0, 1, 2, 3, 4, 5, 6, 7], device=device, dtype=torch.uint8
-                ),
+                torch.tensor([1, 2, 4, 8, 16, 32, 64, 128], device=device, dtype=torch.uint8),
+                torch.tensor([0, 1, 2, 3, 4, 5, 6, 7], device=device, dtype=torch.uint8),
             )
             cls._PACK_CONSTS[device] = consts
         return consts
@@ -177,9 +164,7 @@ class Automagic3(torch.optim.Optimizer):
         return cls._unpack_bits(up, numel), cls._unpack_bits(alternating, numel)
 
     def _rebuild_group_index(self) -> None:
-        self._param_group_index = {
-            p: gi for gi, group in enumerate(self.param_groups) for p in group["params"]
-        }
+        self._param_group_index = {p: gi for gi, group in enumerate(self.param_groups) for p in group["params"]}
         self._group_num: List = [None] * len(self.param_groups)
         self._group_den: List = [None] * len(self.param_groups)
 
@@ -215,18 +200,12 @@ class Automagic3(torch.optim.Optimizer):
         )
         H = group["polarity_history"]
         width = (p.numel() + 7) // 8
-        state["sign_history"] = torch.zeros(
-            (H, width), dtype=torch.uint8, device=p.device
-        )
+        state["sign_history"] = torch.zeros((H, width), dtype=torch.uint8, device=p.device)
         state["hist_idx"] = 0
         state["hist_fill"] = 0
         if p.dim() >= 2:
-            state["exp_avg_sq_row"] = torch.zeros(
-                p.shape[:-1], dtype=p.dtype, device=p.device
-            )
-            state["exp_avg_sq_col"] = torch.zeros(
-                p.shape[:-2] + p.shape[-1:], dtype=p.dtype, device=p.device
-            )
+            state["exp_avg_sq_row"] = torch.zeros(p.shape[:-1], dtype=p.dtype, device=p.device)
+            state["exp_avg_sq_col"] = torch.zeros(p.shape[:-2] + p.shape[-1:], dtype=p.dtype, device=p.device)
         else:
             state["exp_avg_sq"] = torch.zeros(p.shape, dtype=p.dtype, device=p.device)
 
@@ -398,11 +377,7 @@ class Automagic3(torch.optim.Optimizer):
     def get_learning_rates(self) -> List[float]:
         out = []
         for group in self.param_groups:
-            lrs = [
-                self.state[p]["lr"]
-                for p in group["params"]
-                if p in self.state and "lr" in self.state[p]
-            ]
+            lrs = [self.state[p]["lr"] for p in group["params"] if p in self.state and "lr" in self.state[p]]
             out.append(float(torch.stack(lrs).mean()) if lrs else float(group["lr"]))
         return out
 
@@ -430,18 +405,12 @@ class Automagic3(torch.optim.Optimizer):
             lrs = [
                 st["lr"]
                 for p in group["params"]
-                if (st := self.state.get(p)) is not None
-                and isinstance(st.get("lr"), torch.Tensor)
+                if (st := self.state.get(p)) is not None and isinstance(st.get("lr"), torch.Tensor)
             ]
             med = None
             if lrs:
                 dev = lrs[0].device
-                med = (
-                    torch.stack([t.to(torch.float32).to(dev) for t in lrs])
-                    .log_()
-                    .median()
-                    .exp_()
-                )
+                med = torch.stack([t.to(torch.float32).to(dev) for t in lrs]).log_().median().exp_()
             for p in group["params"]:
                 st = self.state.get(p)
                 if st is None:
@@ -466,9 +435,7 @@ class Automagic3(torch.optim.Optimizer):
                 if hist_ok:
                     st["sign_history"] = sh.to(torch.uint8)
                 else:
-                    st["sign_history"] = torch.zeros(
-                        (H, width), dtype=torch.uint8, device=p.device
-                    )
+                    st["sign_history"] = torch.zeros((H, width), dtype=torch.uint8, device=p.device)
                     st["hist_idx"] = 0
                     st["hist_fill"] = 0
         self._rebuild_group_index()

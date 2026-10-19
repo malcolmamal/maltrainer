@@ -103,8 +103,8 @@ def strip_prefix(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], cand
     """Drop a ComfyUI container prefix if every key carries it."""
     prefix = container_prefix(tensors, candidates)
     if prefix:
-        tensors = {key[len(prefix):]: value for key, value in tensors.items()}
-        layers = {key[len(prefix):] if key.startswith(prefix) else key: value for key, value in layers.items()}
+        tensors = {key[len(prefix) :]: value for key, value in tensors.items()}
+        layers = {key[len(prefix) :] if key.startswith(prefix) else key: value for key, value in layers.items()}
     return tensors, layers
 
 
@@ -123,7 +123,9 @@ def dequantize(weight: torch.Tensor, scale: torch.Tensor, dtype: torch.dtype) ->
     return (weight.float() * scale.float()).to(dtype)
 
 
-def dequantize_checkpoint(tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], dtype: torch.dtype) -> Dict[str, torch.Tensor]:
+def dequantize_checkpoint(
+    tensors: Dict[str, torch.Tensor], layers: Dict[str, dict], dtype: torch.dtype
+) -> Dict[str, torch.Tensor]:
     """Plain state dict with every fp8 layer dequantized (for small frozen encoders)."""
     out = dict(tensors)
     for prefix in layers:
@@ -180,8 +182,13 @@ class Fp8ScaledLinear(nn.Module):
         return f"in_features={self.in_features}, out_features={self.out_features}, fp8 scaled"
 
 
-def swap_in_fp8_linears(model: nn.Module, layers: Dict[str, dict], compute_dtype: torch.dtype,
-                        key_map: Optional[Callable[[str], str]] = None, tensors: Optional[Dict[str, torch.Tensor]] = None) -> int:
+def swap_in_fp8_linears(
+    model: nn.Module,
+    layers: Dict[str, dict],
+    compute_dtype: torch.dtype,
+    key_map: Optional[Callable[[str], str]] = None,
+    tensors: Optional[Dict[str, torch.Tensor]] = None,
+) -> int:
     """Replace every nn.Linear named in ``layers`` with an Fp8ScaledLinear of the same shape.
 
     Pass ``tensors`` to size each scale buffer from the checkpoint (per-tensor scalar or

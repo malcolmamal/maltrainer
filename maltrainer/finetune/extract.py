@@ -93,7 +93,7 @@ def keep_count(s: torch.Tensor, mode: str, value: float, cap: int) -> int:
 def factor(diff: torch.Tensor, caps: Sequence[int], mode: str, value: float, device: str):
     """{cap: (down [k, in], up [out, k], k, dropped share of ||diff||)} from one SVD, in fp32 on the CPU."""
     u, s, vh = torch.linalg.svd(diff.to(device, torch.float32), full_matrices=False)
-    energy = (s.double() ** 2)
+    energy = s.double() ** 2
     total = float(energy.sum())
     out = {}
     for cap in caps:
@@ -126,11 +126,14 @@ def extract(
     ranks: Dict[int, List[int]] = {cap: [] for cap in caps}
     errors: Dict[int, List[float]] = {cap: [] for cap in caps}
     unchanged, skipped_changed = 0, []
-    with safe_open(str(base_path), framework="pt", device="cpu") as base, safe_open(str(tuned_path), framework="pt", device="cpu") as tuned:
+    with (
+        safe_open(str(base_path), framework="pt", device="cpu") as base,
+        safe_open(str(tuned_path), framework="pt", device="cpu") as tuned,
+    ):
         base_keys, tuned_keys = list(base.keys()), list(tuned.keys())
         base_prefix, tuned_prefix = strip_prefix(base_keys), strip_prefix(tuned_keys)
-        base_names = {k[len(base_prefix):]: k for k in base_keys}
-        tuned_names = {k[len(tuned_prefix):]: k for k in tuned_keys}
+        base_names = {k[len(base_prefix) :]: k for k in base_keys}
+        tuned_names = {k[len(tuned_prefix) :]: k for k in tuned_keys}
         if set(base_names) != set(tuned_names):
             only = sorted(set(base_names) ^ set(tuned_names))
             raise ValueError(f"the checkpoints have different tensors, e.g. {only[:3]} ({len(only)} differ)")

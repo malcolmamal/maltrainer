@@ -67,10 +67,16 @@ class WindowRotator:
     ``make_optimizer(params, name)``: a fresh optimizer for a window's params (in a fixed order).
     """
 
-    def __init__(self, model: nn.Module, master: Dict[str, torch.Tensor], windows: Sequence[Window],
-                 device: torch.device, compute_dtype: torch.dtype,
-                 make_optimizer: Callable[[List[nn.Parameter], str], torch.optim.Optimizer],
-                 blocks: str = "blocks"):
+    def __init__(
+        self,
+        model: nn.Module,
+        master: Dict[str, torch.Tensor],
+        windows: Sequence[Window],
+        device: torch.device,
+        compute_dtype: torch.dtype,
+        make_optimizer: Callable[[List[nn.Parameter], str], torch.optim.Optimizer],
+        blocks: str = "blocks",
+    ):
         self.model = model
         self.master = master
         self.device = torch.device(device)
@@ -92,8 +98,9 @@ class WindowRotator:
             self.windows.append((name, keys))
         untrained = [k for k in ordered if k not in owner]
         if untrained:
-            logger.warning("%d block Linears are in no finetune window and stay frozen, e.g. %s",
-                           len(untrained), untrained[:3])
+            logger.warning(
+                "%d block Linears are in no finetune window and stay frozen, e.g. %s", len(untrained), untrained[:3]
+            )
         self.current: Optional[int] = None
         self.optimizer: Optional[torch.optim.Optimizer] = None
         self.optimizer_states: Dict[int, dict] = {}  # frozen windows' optimizer state, on the CPU
@@ -156,7 +163,9 @@ class WindowRotator:
             self.master[key] = weight.to("cpu", torch.bfloat16, copy=True)  # before the lossy fp8 encode
             fp8, scale = quantize_rows(weight)
             with torch.device("meta"):  # the buffers are replaced right away
-                frozen = Fp8ScaledLinear(linear.in_features, linear.out_features, linear.bias is not None, self.compute_dtype)
+                frozen = Fp8ScaledLinear(
+                    linear.in_features, linear.out_features, linear.bias is not None, self.compute_dtype
+                )
             frozen.weight, frozen.weight_scale = fp8, scale
             if linear.bias is not None:
                 frozen.bias = linear.bias.detach()

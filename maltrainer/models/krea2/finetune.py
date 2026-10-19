@@ -69,8 +69,13 @@ def always_on_linears(model: nn.Module, modules: Sequence[str]) -> List[Tuple[st
     return out
 
 
-def save_krea2_model(model: nn.Module, rotator: WindowRotator, path: Path, key_prefix: str = "",
-                     metadata: Optional[Dict[str, str]] = None) -> None:
+def save_krea2_model(
+    model: nn.Module,
+    rotator: WindowRotator,
+    path: Path,
+    key_prefix: str = "",
+    metadata: Optional[Dict[str, str]] = None,
+) -> None:
     """A full bf16 Krea 2 file with the source's key prefix, which ComfyUI and load_krea2_transformer
     read back: the rotating weights from the master (the active window live), everything else
     (text fusion, norms, modulation, I/O) as the model holds it. Written aside, then renamed."""

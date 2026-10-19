@@ -1,4 +1,3 @@
-
 import logging
 
 import torch
@@ -7,10 +6,11 @@ from diffusers import ZImagePipeline
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def test_load(lora_path, prompt):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     pipe = ZImagePipeline.from_pretrained("Tongyi-MAI/Z-Image", torch_dtype=torch.bfloat16).to(device)
-    
+
     logger.info(f"Loading LoRA from {lora_path}")
     try:
         pipe.load_lora_weights(lora_path)
@@ -25,7 +25,8 @@ def test_load(lora_path, prompt):
     image.save("test_good_lora.png")
     logger.info("Saved test_good_lora.png")
 
+
 if __name__ == "__main__":
     lora_path = r"C:\Development\trainers\maltrainer\good-lora\zbase_gilliananderson_v1.safetensors"
-    prompt = "sks woman, photo of a woman, high quality" 
+    prompt = "sks woman, photo of a woman, high quality"
     test_load(lora_path, prompt)

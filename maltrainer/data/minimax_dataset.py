@@ -215,12 +215,7 @@ def count_media_files(data_root: Union[str, Path], kinds: Iterable[str] = MEDIA_
     if not data_root.exists():
         return 0
     kinds = set(kinds)
-    return sum(
-        1
-        for root, _, files in os.walk(data_root)
-        for name in files
-        if _media_kind(Path(root) / name) in kinds
-    )
+    return sum(1 for root, _, files in os.walk(data_root) for name in files if _media_kind(Path(root) / name) in kinds)
 
 
 # --- decoding -----------------------------------------------------------------------
@@ -247,9 +242,7 @@ def _require_av():
     try:
         import av  # noqa: F401
     except ImportError as e:  # pragma: no cover - depends on the environment
-        raise ImportError(
-            "Video and audio training items need PyAV: pip install av"
-        ) from e
+        raise ImportError("Video and audio training items need PyAV: pip install av") from e
     return av
 
 
@@ -345,9 +338,7 @@ def read_audio(path: Path) -> Optional[np.ndarray]:
     return np.clip(wav[:2], -1.0, 1.0)
 
 
-def plan_segments(
-    total_frames: int, max_frames: int, mode: str, min_frames: int
-) -> List[Tuple[int, int]]:
+def plan_segments(total_frames: int, max_frames: int, mode: str, min_frames: int) -> List[Tuple[int, int]]:
     """(start_frame, frames) windows on the 17k + 5 grid.
 
     ``first`` keeps one window from the start (``min_frames`` or longer). ``split`` tiles the
@@ -381,7 +372,7 @@ def slice_audio(wav: np.ndarray, start_frame: int, frames: int) -> np.ndarray:
     """
     start = round(start_frame / FPS * AUDIO_SAMPLE_RATE)
     want = audio_latent_frames(frames) * AUDIO_HOP
-    window = wav[:, start:start + want]
+    window = wav[:, start : start + want]
     if window.shape[1] < want:
         window = np.pad(window, ((0, 0), (0, want - window.shape[1])))
     return window

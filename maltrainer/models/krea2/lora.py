@@ -60,7 +60,7 @@ class LoRALayer(nn.Module):
         self.scale = alpha / rank
         self.lora_down = nn.Linear(in_features, rank, bias=False)
         self.lora_up = nn.Linear(rank, out_features, bias=False)
-        nn.init.kaiming_uniform_(self.lora_down.weight, a=5 ** 0.5)
+        nn.init.kaiming_uniform_(self.lora_down.weight, a=5**0.5)
         nn.init.zeros_(self.lora_up.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -71,8 +71,15 @@ class LoRALayer(nn.Module):
 
 
 class Krea2LoRANetwork(nn.Module):
-    def __init__(self, transformer: nn.Module, rank: int = 16, alpha: float = 16.0, targets: str = "attn-mlp",
-                 block_range: Optional[Iterable[int]] = None, prefix: str = "diffusion_model."):
+    def __init__(
+        self,
+        transformer: nn.Module,
+        rank: int = 16,
+        alpha: float = 16.0,
+        targets: str = "attn-mlp",
+        block_range: Optional[Iterable[int]] = None,
+        prefix: str = "diffusion_model.",
+    ):
         super().__init__()
         if targets not in TARGET_PRESETS:
             raise ValueError(f"lora.targets must be one of {TARGET_PRESETS}, got {targets!r}")
@@ -96,7 +103,14 @@ class Krea2LoRANetwork(nn.Module):
         counts: Dict[str, int] = {}
         for name in self.name_map.values():
             counts[param_group_of(name)] = counts.get(param_group_of(name), 0) + 1
-        logger.info("Krea 2 LoRA: %d layers (%s), rank %d, alpha %s, targets %s", len(self.lora_layers), counts, rank, alpha, targets)
+        logger.info(
+            "Krea 2 LoRA: %d layers (%s), rank %d, alpha %s, targets %s",
+            len(self.lora_layers),
+            counts,
+            rank,
+            alpha,
+            targets,
+        )
 
     @staticmethod
     def _wrap(module: nn.Module, lora: nn.Module, active: List[bool]) -> None:

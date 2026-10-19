@@ -194,9 +194,7 @@ def main() -> int:
         ),
     )
     parser.add_argument("model", type=Path, help="path to a .safetensors LoRA checkpoint")
-    parser.add_argument(
-        "--all", action="store_true", help="print every metadata key as key=value, sorted"
-    )
+    parser.add_argument("--all", action="store_true", help="print every metadata key as key=value, sorted")
     parser.add_argument("--json", action="store_true", help="print all metadata as a JSON object")
     parser.add_argument(
         "--config",

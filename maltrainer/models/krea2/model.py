@@ -53,7 +53,7 @@ def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000, time_
 def rope(pos: torch.Tensor, dim: int, theta: float) -> torch.Tensor:
     """Flux RoPE rotation matrices for one axis: [B, L, dim/2, 2, 2] fp32."""
     scale = torch.linspace(0, (dim - 2) / dim, steps=dim // 2, dtype=torch.float64, device=pos.device)
-    omega = 1.0 / (theta ** scale)
+    omega = 1.0 / (theta**scale)
     out = torch.einsum("...n,d->...nd", pos.to(torch.float64), omega)
     out = torch.stack([torch.cos(out), -torch.sin(out), torch.sin(out), torch.cos(out)], dim=-1)
     return out.reshape(*out.shape[:-1], 2, 2).float()
@@ -118,7 +118,9 @@ class Attention(nn.Module):
         self.qknorm = QKNorm(self.headdim)
         self.wo = nn.Linear(dim, dim, bias=bias)
 
-    def forward(self, x: torch.Tensor, freqs: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, freqs: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         b, seq, _ = x.shape
         q = self.wq(x).view(b, seq, self.heads, self.headdim).transpose(1, 2)
         k = self.wk(x).view(b, seq, self.kvheads, self.headdim).transpose(1, 2)
@@ -173,9 +175,13 @@ class TextFusionTransformer(nn.Module):
 
     def __init__(self, num_txt_layers, txt_dim, heads, multiplier, bias=False, kvheads=None):
         super().__init__()
-        self.layerwise_blocks = nn.ModuleList([TextFusionBlock(txt_dim, heads, multiplier, bias, kvheads) for _ in range(2)])
+        self.layerwise_blocks = nn.ModuleList(
+            [TextFusionBlock(txt_dim, heads, multiplier, bias, kvheads) for _ in range(2)]
+        )
         self.projector = nn.Linear(num_txt_layers, 1, bias=False)
-        self.refiner_blocks = nn.ModuleList([TextFusionBlock(txt_dim, heads, multiplier, bias, kvheads) for _ in range(2)])
+        self.refiner_blocks = nn.ModuleList(
+            [TextFusionBlock(txt_dim, heads, multiplier, bias, kvheads) for _ in range(2)]
+        )
 
     def forward(self, x, mask=None):
         b, seq, n, d = x.shape
@@ -222,14 +228,19 @@ class Krea2Transformer(nn.Module):
         c = self.config = config
         headdim = c.features // c.heads
         self.axes_dim = [headdim - 12 * (headdim // 16), 6 * (headdim // 16), 6 * (headdim // 16)]
-        self.first = nn.Linear(c.channels * c.patch ** 2, c.features, bias=True)
+        self.first = nn.Linear(c.channels * c.patch**2, c.features, bias=True)
         self.blocks = nn.ModuleList(
             [SingleStreamBlock(c.features, c.heads, c.multiplier, False, c.kvheads) for _ in range(c.layers)]
         )
-        self.tmlp = nn.Sequential(nn.Linear(c.tdim, c.features), nn.GELU(approximate="tanh"), nn.Linear(c.features, c.features))
+        self.tmlp = nn.Sequential(
+            nn.Linear(c.tdim, c.features), nn.GELU(approximate="tanh"), nn.Linear(c.features, c.features)
+        )
         self.txtfusion = TextFusionTransformer(c.txtlayers, c.txtdim, c.txtheads, c.multiplier, False, c.txtkvheads)
         self.txtmlp = nn.Sequential(
-            RMSNorm(c.txtdim), nn.Linear(c.txtdim, c.features), nn.GELU(approximate="tanh"), nn.Linear(c.features, c.features)
+            RMSNorm(c.txtdim),
+            nn.Linear(c.txtdim, c.features),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(c.features, c.features),
         )
         self.last = LastLayer(c.features, c.patch, c.channels)
         self.tproj = nn.Sequential(nn.GELU(approximate="tanh"), nn.Linear(c.features, c.features * 6))

@@ -105,11 +105,14 @@ MODELS: Dict[str, ModelSpec] = {
             script="train_qwen_image_2_1_lora.py",
             template="templates/qwen_image_2_1_template.yaml",
             optimizers=(
-                OptimizerSpec("automagic3", "Automagic3 (recommended)", 1e-6,
-                              "self-tuning; the learning rate is only its starting point"),
+                OptimizerSpec(
+                    "automagic3",
+                    "Automagic3 (recommended)",
+                    1e-6,
+                    "self-tuning; the learning rate is only its starting point",
+                ),
                 OptimizerSpec("adamw8bit", "AdamW 8-bit", 1e-4, "keep checkpoints 1250-1750"),
-                OptimizerSpec("prodigy", "Prodigy", 1.0,
-                              "not recommended on Qwen: overcooks past ~1500 steps"),
+                OptimizerSpec("prodigy", "Prodigy", 1.0, "not recommended on Qwen: overcooks past ~1500 steps"),
             ),
             default_optimizer="automagic3",
             default_duration_mode="steps",
@@ -143,12 +146,21 @@ MODELS: Dict[str, ModelSpec] = {
             script="train_krea2_lora.py",
             template="templates/krea2_template.yaml",
             optimizers=(
-                OptimizerSpec("automagic3", "Automagic3 (recommended)", 1e-6,
-                              "self-tuning; per module family, 16-step sign window"),
-                OptimizerSpec("prodigy", "Prodigy (OneTrainer recipe)", 1.0,
-                              "rank 16 / alpha 1, 200 warmup steps, unshifted logit-normal"),
-                OptimizerSpec("adamw8bit", "AdamW 8-bit (Fizgig Standard)", 1e-4,
-                              "rank 32, every Linear, flat 1e-4, EMA 0.98"),
+                OptimizerSpec(
+                    "automagic3",
+                    "Automagic3 (recommended)",
+                    1e-6,
+                    "self-tuning; per module family, 16-step sign window",
+                ),
+                OptimizerSpec(
+                    "prodigy",
+                    "Prodigy (OneTrainer recipe)",
+                    1.0,
+                    "rank 16 / alpha 1, 200 warmup steps, unshifted logit-normal",
+                ),
+                OptimizerSpec(
+                    "adamw8bit", "AdamW 8-bit (Fizgig Standard)", 1e-4, "rank 32, every Linear, flat 1e-4, EMA 0.98"
+                ),
             ),
             default_optimizer="automagic3",
             default_duration_mode="steps",
@@ -162,8 +174,10 @@ MODELS: Dict[str, ModelSpec] = {
             ),
             per_run_output=True,
             resolution_note="Aspect-ratio buckets around 512×512 on a 16 px grid.",
-            optimizer_templates=(("prodigy", "templates/krea2_prodigy_template.yaml"),
-                                 ("adamw8bit", "templates/krea2_adamw_template.yaml")),
+            optimizer_templates=(
+                ("prodigy", "templates/krea2_prodigy_template.yaml"),
+                ("adamw8bit", "templates/krea2_adamw_template.yaml"),
+            ),
             output_prefix="krea2_",
             caption_from_trigger=True,
         ),
@@ -173,8 +187,12 @@ MODELS: Dict[str, ModelSpec] = {
             script="train_flux3_klein_lora.py",
             template="templates/flux3_klein_template.yaml",
             optimizers=(
-                OptimizerSpec("automagic3", "Automagic3 (recommended)", 1e-6,
-                              "self-tuning; per module family, 16-step sign window"),
+                OptimizerSpec(
+                    "automagic3",
+                    "Automagic3 (recommended)",
+                    1e-6,
+                    "self-tuning; per module family, 16-step sign window",
+                ),
                 OptimizerSpec("adamw8bit", "AdamW 8-bit", 1e-4, "the diffusers FLUX.3 example's rate"),
                 OptimizerSpec("prodigy", "Prodigy", 1.0, "learning rate is Prodigy's multiplier"),
             ),
@@ -199,10 +217,12 @@ MODELS: Dict[str, ModelSpec] = {
             script="train_moss_image_lora.py",
             template="templates/moss_image_automagic_template.yaml",
             optimizers=(
-                OptimizerSpec("automagic3", "Automagic3 (recommended)", 1e-6,
-                              "self-tuning; per module family, 8-step sign window"),
-                OptimizerSpec("prodigy", "Prodigy", 1.0,
-                              "learning rate is Prodigy's multiplier; 100 warmup steps, no EMA"),
+                OptimizerSpec(
+                    "automagic3", "Automagic3 (recommended)", 1e-6, "self-tuning; per module family, 8-step sign window"
+                ),
+                OptimizerSpec(
+                    "prodigy", "Prodigy", 1.0, "learning rate is Prodigy's multiplier; 100 warmup steps, no EMA"
+                ),
                 OptimizerSpec("adamw8bit", "AdamW 8-bit", 1e-4, "flat rate, weight decay 0.01"),
             ),
             default_optimizer="automagic3",
@@ -217,8 +237,10 @@ MODELS: Dict[str, ModelSpec] = {
             ),
             per_run_output=True,
             resolution_note="Aspect-ratio buckets around 512×512 on a 16 px grid.",
-            optimizer_templates=(("prodigy", "templates/moss_image_prodigy_template.yaml"),
-                                 ("adamw8bit", "templates/moss_image_adamw_template.yaml")),
+            optimizer_templates=(
+                ("prodigy", "templates/moss_image_prodigy_template.yaml"),
+                ("adamw8bit", "templates/moss_image_adamw_template.yaml"),
+            ),
             output_prefix="moss_image_",
             caption_from_trigger=True,
         ),
@@ -343,6 +365,7 @@ class TrainingJob:
     async def start_readers(self) -> None:
         if not self.process:
             return
+
         async def _emit_log(line: str, stream_name: str, replace: bool) -> None:
             text = line.rstrip("\n")
             if text == "":
@@ -590,7 +613,9 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
     train_cfg["optimizer"] = optimizer
     train_cfg["learning_rate"] = learning_rate
     if spec.id == "qwen_image_2_1" and optimizer == "prodigy":
-        warnings.append("Prodigy overcooks Qwen-Image 2.1 LoRAs in benchmarks; keep checkpoints at or below ~1500 steps.")
+        warnings.append(
+            "Prodigy overcooks Qwen-Image 2.1 LoRAs in benchmarks; keep checkpoints at or below ~1500 steps."
+        )
 
     trigger = (request.trigger or "").strip()
     if trigger:
@@ -627,10 +652,7 @@ def build_plan(request: StartTrainRequest) -> tuple[TrainPlan, Dict[str, Any], M
             rounded = int(round(wanted / 50.0)) * 50
             max_steps = min(max(rounded, spec.min_auto_steps), spec.max_auto_steps)
             auto_steps = True
-            note = (
-                f"Steps chosen automatically: {image_count} images × ~{spec.target_epochs} epochs "
-                f"= {wanted} steps"
-            )
+            note = f"Steps chosen automatically: {image_count} images × ~{spec.target_epochs} epochs = {wanted} steps"
             if rounded != wanted:
                 note += f", rounded to {rounded}"
             if max_steps != rounded:
@@ -810,8 +832,10 @@ async def list_models() -> list[ModelInfo]:
             ModelInfo(
                 id=spec.id,
                 label=spec.label,
-                optimizers=[OptimizerInfo(name=o.name, label=o.label, default_lr=o.default_lr, note=o.note)
-                            for o in spec.optimizers],
+                optimizers=[
+                    OptimizerInfo(name=o.name, label=o.label, default_lr=o.default_lr, note=o.note)
+                    for o in spec.optimizers
+                ],
                 default_optimizer=spec.default_optimizer,
                 default_duration_mode=spec.default_duration_mode,
                 default_epochs=spec.default_epochs,

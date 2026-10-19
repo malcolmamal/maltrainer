@@ -165,9 +165,7 @@ class SupraDiT(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_tokens, d_model))
         self.t_embed = TimestepEmbedder(d_model)
         self.ctx_proj = nn.Linear(ctx_dim, d_model)
-        self.blocks = nn.ModuleList(
-            [DiTBlock(d_model, n_heads, d_model, mlp_ratio) for _ in range(depth)]
-        )
+        self.blocks = nn.ModuleList([DiTBlock(d_model, n_heads, d_model, mlp_ratio) for _ in range(depth)])
         self.final = FinalLayer(d_model, latent_ch * PATCH * PATCH)
 
     def _position_embed(self, grid_h: int, grid_w: int) -> torch.Tensor:

@@ -92,7 +92,9 @@ VIDEO_SIGMA_SHIFT = 12.0
 AUDIO_SIGMA_SHIFT = 3.0
 
 
-def remap_sigma(sigma: torch.Tensor, from_shift: float = VIDEO_SIGMA_SHIFT, to_shift: float = AUDIO_SIGMA_SHIFT) -> torch.Tensor:
+def remap_sigma(
+    sigma: torch.Tensor, from_shift: float = VIDEO_SIGMA_SHIFT, to_shift: float = AUDIO_SIGMA_SHIFT
+) -> torch.Tensor:
     """A sigma on the ``from_shift`` schedule -> the same base-grid point on ``to_shift``.
 
     Mirrors comfy/ldm/minimax/model.py ``time_shift_sigma``.
@@ -218,8 +220,7 @@ class MiniMaxH3LoRATrainer:
             # Every item packs its own sequence (text length, frame count, aspect and audio
             # length all vary) and H3's per-timestep modulation is shared across the batch.
             raise ValueError(
-                "MiniMax H3 trains at batch_size 1; use train.gradient_accumulation_steps "
-                "for a larger effective batch."
+                "MiniMax H3 trains at batch_size 1; use train.gradient_accumulation_steps for a larger effective batch."
             )
 
         # Initialize accelerator
@@ -239,7 +240,7 @@ class MiniMaxH3LoRATrainer:
         log_dir = Path(config.get("output", {}).get("path", "./output"))
         log_dir.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_dir / "training.log")
-        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(file_formatter)
         logging.getLogger().addHandler(file_handler)
 
@@ -309,17 +310,21 @@ class MiniMaxH3LoRATrainer:
                         self.samples.append(H3Sample(str(source.path), "image", source.caption, 1, latent))
                         continue
 
-                    budget = max_frames if long_media != "split" else max_frames * int(
-                        dataset_config.get("max_segments_per_file", 16)
+                    budget = (
+                        max_frames
+                        if long_media != "split"
+                        else max_frames * int(dataset_config.get("max_segments_per_file", 16))
                     )
                     frames = read_video_frames(source.path, clip_resolution, budget)
                     segments = plan_segments(len(frames), max_frames, long_media, MIN_CLIP_FRAMES)
                     if not segments:
-                        logger.warning("Skipping %s: %d frames is shorter than one H3 clip", source.path.name, len(frames))
+                        logger.warning(
+                            "Skipping %s: %d frames is shorter than one H3 clip", source.path.name, len(frames)
+                        )
                         continue
                     for start, count in segments:
                         with torch.no_grad():
-                            latent = vae.encode_video(frames_tensor(frames[start:start + count]).to(self.device))
+                            latent = vae.encode_video(frames_tensor(frames[start : start + count]).to(self.device))
                         latent = latent.detach().cpu()
                         if latent.shape[2] != video_latent_frames(count):
                             raise ValueError(
@@ -356,7 +361,9 @@ class MiniMaxH3LoRATrainer:
                 return pack_audio_rows(audio_vae.encode(waveform)).detach().cpu()
 
             decoded: Dict[str, object] = {}
-            for index, source, start in tqdm(pending_audio, desc="Caching clip audio", disable=not self.is_main_process):
+            for index, source, start in tqdm(
+                pending_audio, desc="Caching clip audio", disable=not self.is_main_process
+            ):
                 key = str(source.path)
                 if key not in decoded:
                     decoded = {key: read_audio(source.path)}  # one file at a time in memory
@@ -369,8 +376,10 @@ class MiniMaxH3LoRATrainer:
                 sample.audio = rows
             decoded.clear()
 
-            budget_frames = max_frames if long_media != "split" else max_frames * int(
-                dataset_config.get("max_segments_per_file", 16)
+            budget_frames = (
+                max_frames
+                if long_media != "split"
+                else max_frames * int(dataset_config.get("max_segments_per_file", 16))
             )
             for source in tqdm(audio_sources, desc="Caching audio items", disable=not self.is_main_process):
                 try:
@@ -443,7 +452,9 @@ class MiniMaxH3LoRATrainer:
         self.run_metadata["dataset_composition"] = counts
         logger.info(
             "Pre-cached %d samples (%s) and %d prompt embeddings. Unloaded feature extractors from VRAM.",
-            len(self.samples), ", ".join(f"{k}={v}" for k, v in counts.items()), len(self.text_cache),
+            len(self.samples),
+            ", ".join(f"{k}={v}" for k, v in counts.items()),
+            len(self.text_cache),
         )
 
     @staticmethod
@@ -555,7 +566,7 @@ class MiniMaxH3LoRATrainer:
         order = [index for index in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
         world = self.accelerator.num_processes
-        return order[self.accelerator.process_index::world] if world > 1 else order
+        return order[self.accelerator.process_index :: world] if world > 1 else order
 
     def _count_dataset_samples(self) -> int:
         """Files only: the dry run does not decode, so split long clips count once."""
@@ -597,7 +608,9 @@ class MiniMaxH3LoRATrainer:
         self._write_dry_run_checkpoint(output_dir, "final", total_steps, steps_per_epoch, num_epochs, start_time)
         logger.info("Dry run completed successfully.")
 
-    def _write_dry_run_checkpoint(self, output_dir: Path, step, total_steps: int, steps_per_epoch: int, num_epochs: int, start_time: float):
+    def _write_dry_run_checkpoint(
+        self, output_dir: Path, step, total_steps: int, steps_per_epoch: int, num_epochs: int, start_time: float
+    ):
         elapsed = max(time.time() - start_time, 0.0)
         completed_steps = total_steps if step == "final" else int(step)
         progress = min(completed_steps / max(total_steps, 1), 1.0)
@@ -661,9 +674,9 @@ class MiniMaxH3LoRATrainer:
             "audio_indices": audio_indices,
             "timestep_indices": timestep_indices,
             "token_tags": token_tags,
-            "position_ids": build_packed_position_ids(
-                num_text_tokens, latent_t, latent_h, latent_w, audio_t
-            ).to(device=self.device),
+            "position_ids": build_packed_position_ids(num_text_tokens, latent_t, latent_h, latent_w, audio_t).to(
+                device=self.device
+            ),
         }
         self._layout_cache[key] = layout
         return layout
@@ -734,6 +747,7 @@ class MiniMaxH3LoRATrainer:
         if optimizer_name in {"adamw8bit", "adam8bit"}:
             try:
                 import bitsandbytes as bnb
+
                 optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
                 self.optimizer = optimizer_cls(params, lr=lr)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
@@ -806,7 +820,8 @@ class MiniMaxH3LoRATrainer:
                 if configured_lr < 0.01 and "prodigy_lr" not in train_config:
                     logger.info(
                         "train.learning_rate (%.2e) is AdamW-scale, so Prodigy's multiplier is "
-                        "1.0 instead. Set train.prodigy_lr to control it explicitly.", configured_lr
+                        "1.0 instead. Set train.prodigy_lr to control it explicitly.",
+                        configured_lr,
                     )
                 if self.lora_dtype is not torch.float32:
                     logger.warning(
@@ -827,9 +842,13 @@ class MiniMaxH3LoRATrainer:
                 "max_lr": float(train_config.get("automagic_max_lr", train_config.get("max_lr", 1e3))),
                 "beta2": float(train_config.get("automagic_beta2", train_config.get("beta2", 0.999))),
                 "eps": float(train_config.get("automagic_eps", train_config.get("eps", 1e-30))),
-                "clip_threshold": float(train_config.get("automagic_clip_threshold", train_config.get("clip_threshold", 1.0))),
+                "clip_threshold": float(
+                    train_config.get("automagic_clip_threshold", train_config.get("clip_threshold", 1.0))
+                ),
                 "weight_decay": weight_decay,
-                "polarity_history": int(train_config.get("automagic_polarity_history", train_config.get("polarity_history", 8))),
+                "polarity_history": int(
+                    train_config.get("automagic_polarity_history", train_config.get("polarity_history", 8))
+                ),
                 "fused": bool(train_config.get("automagic_fused", False)),
             }
             self.optimizer = Automagic3(params, **automagic_params)
@@ -845,6 +864,7 @@ class MiniMaxH3LoRATrainer:
 
         warmup_steps = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
         if warmup_steps > 0:
+
             def lr_lambda(step: int) -> float:
                 return min((step + 1) / warmup_steps, 1.0)
 
@@ -887,7 +907,7 @@ class MiniMaxH3LoRATrainer:
             flat_cond = guided.reshape(bsz, -1)
             flat_uncond = uncond.reshape(bsz, -1)
             dot = (flat_cond * flat_uncond).sum(dim=1, keepdim=True)
-            squared_norm = (flat_uncond ** 2).sum(dim=1, keepdim=True) + 1e-8
+            squared_norm = (flat_uncond**2).sum(dim=1, keepdim=True) + 1e-8
             uncond = uncond * (dot / squared_norm).view(bsz, 1, 1)
         if schedule == "sigma":
             # (target - uncond) carries sigma * fresh_noise, which nothing can predict at low
@@ -1012,7 +1032,9 @@ class MiniMaxH3LoRATrainer:
         self.run_metadata["planned_total_steps"] = total_steps
         self.run_metadata["dataset_samples"] = len(self.samples)
 
-        logger.info("Starting accelerated MiniMax H3 LoRA training for %d epochs (%d total steps)...", num_epochs, total_steps)
+        logger.info(
+            "Starting accelerated MiniMax H3 LoRA training for %d epochs (%d total steps)...", num_epochs, total_steps
+        )
 
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
         shift_logged = False
@@ -1033,7 +1055,11 @@ class MiniMaxH3LoRATrainer:
                         "Timestep schedule: %s, sigma shift %.3f (latent %dx%d); audio sigma follows "
                         "the inference coupling (video shift %.0f -> audio shift %.0f)",
                         train_config.get("timestep_distribution", "krea2_shift"),
-                        flow_shift, h_lat, w_lat, VIDEO_SIGMA_SHIFT, AUDIO_SIGMA_SHIFT,
+                        flow_shift,
+                        h_lat,
+                        w_lat,
+                        VIDEO_SIGMA_SHIFT,
+                        AUDIO_SIGMA_SHIFT,
                     )
 
                 with self.accelerator.accumulate(self.lora_network):
@@ -1055,9 +1081,7 @@ class MiniMaxH3LoRATrainer:
                     global_step += 1
                     progress_bar.update(1)
 
-                    detail = "".join(
-                        f", {name}: {parts[name]:.6f}" for name in ("video", "audio") if name in parts
-                    )
+                    detail = "".join(f", {name}: {parts[name]:.6f}" for name in ("video", "audio") if name in parts)
                     detail += f" [{sample.kind}]"
 
                     # For Prodigy, param_groups['lr'] is only the multiplier and sits at 1.0
@@ -1073,26 +1097,48 @@ class MiniMaxH3LoRATrainer:
                         adapted_lr = inner_optimizer.get_avg_learning_rate()
                         self.progress_logger.info(
                             "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (automagic3)%s",
-                            global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
-                            epoch + 1, num_epochs, adapted_lr, detail,
+                            global_step,
+                            total_steps,
+                            int(global_step / total_steps * 100),
+                            loss.item(),
+                            epoch + 1,
+                            num_epochs,
+                            adapted_lr,
+                            detail,
                         )
                     elif prodigy_d is not None:
                         self.progress_logger.info(
                             "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e (mult %.3f x d %.2e)%s",
-                            global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
-                            epoch + 1, num_epochs, current_lr * prodigy_d, current_lr, prodigy_d, detail,
+                            global_step,
+                            total_steps,
+                            int(global_step / total_steps * 100),
+                            loss.item(),
+                            epoch + 1,
+                            num_epochs,
+                            current_lr * prodigy_d,
+                            current_lr,
+                            prodigy_d,
+                            detail,
                         )
                     else:
                         self.progress_logger.info(
                             "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, LR: %.2e%s",
-                            global_step, total_steps, int(global_step / total_steps * 100), loss.item(),
-                            epoch + 1, num_epochs, current_lr, detail,
+                            global_step,
+                            total_steps,
+                            int(global_step / total_steps * 100),
+                            loss.item(),
+                            epoch + 1,
+                            num_epochs,
+                            current_lr,
+                            detail,
                         )
 
                     if global_step % save_every == 0:
                         self.save_checkpoint(global_step)
 
-                progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"})
+                progress_bar.set_postfix(
+                    {"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"}
+                )
 
         progress_bar.close()
         self.save_checkpoint("final")
@@ -1155,7 +1201,9 @@ def main():
     parser = argparse.ArgumentParser(description="Train MiniMax H3 LoRA in Maltrainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")
-    parser.add_argument("--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step during dry run")
+    parser.add_argument(
+        "--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step during dry run"
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)

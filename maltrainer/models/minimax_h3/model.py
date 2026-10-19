@@ -71,9 +71,7 @@ def get_timestep_embedding(
     assert len(timesteps.shape) == 1, "Timesteps should be a 1d-tensor"
 
     half_dim = embedding_dim // 2
-    exponent = -math.log(max_period) * torch.arange(
-        start=0, end=half_dim, dtype=torch.float32, device=timesteps.device
-    )
+    exponent = -math.log(max_period) * torch.arange(start=0, end=half_dim, dtype=torch.float32, device=timesteps.device)
     exponent = exponent / (half_dim - downscale_freq_shift)
 
     emb = torch.exp(exponent)
@@ -91,7 +89,6 @@ def get_timestep_embedding(
     return emb
 
 
-
 def _apply_rotary_emb(hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
     rotary_dim = cos.shape[-1]
     rotary, passthrough = hidden_states[..., :rotary_dim], hidden_states[..., rotary_dim:]
@@ -105,7 +102,9 @@ def _apply_rotary_emb(hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch
 class MiniMaxH3RotaryPosEmbed(nn.Module):
     def __init__(self, rope_freq_dim: int, rope_theta: float):
         super().__init__()
-        inv_freq = 1.0 / (rope_theta ** (torch.arange(0, 2 * rope_freq_dim, 2, dtype=torch.float32) / (2 * rope_freq_dim)))
+        inv_freq = 1.0 / (
+            rope_theta ** (torch.arange(0, 2 * rope_freq_dim, 2, dtype=torch.float32) / (2 * rope_freq_dim))
+        )
         self.register_buffer("inv_freq", inv_freq, persistent=True)
 
     def forward(self, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:

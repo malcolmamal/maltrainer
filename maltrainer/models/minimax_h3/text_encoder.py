@@ -191,6 +191,7 @@ def load_minimax_h3_text_encoder(
     else:
         logger.info("Loading text encoder safetensors from %s", text_encoder_path)
         from safetensors.torch import load_file
+
         sd = load_file(str(text_encoder_path))
         mapped_sd = {}
         for k, v in sd.items():

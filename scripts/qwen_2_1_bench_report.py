@@ -58,8 +58,13 @@ def parse_log(path: Path) -> dict:
     if not steps:
         raise SystemExit(f"no progress lines in {path}")
     seconds = (times[-1] - times[0]).total_seconds()
-    return {"step": steps, "loss": losses, "lr": lrs,
-            "sec_per_step": seconds / max(1, steps[-1] - steps[0]), "wall_minutes": seconds / 60}
+    return {
+        "step": steps,
+        "loss": losses,
+        "lr": lrs,
+        "sec_per_step": seconds / max(1, steps[-1] - steps[0]),
+        "wall_minutes": seconds / 60,
+    }
 
 
 def ema(values: list[float], alpha: float = 0.02) -> np.ndarray:
@@ -116,8 +121,10 @@ def main() -> None:
     for name, run_dir in runs.items():
         run_dir = Path(run_dir)
         log = parse_log(run_dir / "training.log")
-        ckpts = sorted(run_dir.glob("*.safetensors"),
-                       key=lambda p: 10**9 if checkpoint_step(p) == "final" else int(checkpoint_step(p)))
+        ckpts = sorted(
+            run_dir.glob("*.safetensors"),
+            key=lambda p: 10**9 if checkpoint_step(p) == "final" else int(checkpoint_step(p)),
+        )
         final_step = log["step"][-1]
         dynamics[name] = {
             **log,
@@ -127,9 +134,11 @@ def main() -> None:
             "lr_max": max(log["lr"]),
             "dw": [(step_num(checkpoint_step(c), final_step), adapter_norm(c)) for c in ckpts],
         }
-        print(f"{name:>11}: {log['sec_per_step']:.3f} s/step, {log['wall_minutes']:.1f} min, "
-              f"loss {dynamics[name]['loss_first200']:.4f} -> {dynamics[name]['loss_last200']:.4f}, "
-              f"LR final {log['lr'][-1]:.2e} (max {max(log['lr']):.2e}), ||dW|| final {dynamics[name]['dw'][-1][1]:.3f}")
+        print(
+            f"{name:>11}: {log['sec_per_step']:.3f} s/step, {log['wall_minutes']:.1f} min, "
+            f"loss {dynamics[name]['loss_first200']:.4f} -> {dynamics[name]['loss_last200']:.4f}, "
+            f"LR final {log['lr'][-1]:.2e} (max {max(log['lr']):.2e}), ||dW|| final {dynamics[name]['dw'][-1][1]:.3f}"
+        )
 
     fig, axes = plt.subplots(1, 3, figsize=(17, 4.6))
     for name, d in dynamics.items():
@@ -157,14 +166,20 @@ def main() -> None:
         ("likeness_norm", "Likeness (0 = base model, 1 = real photo)", [(0, "base"), (1, "real photos")]),
         ("adherence", "Prompt adherence vs base (VLM judge, Δ P(yes))", [(0, "base")]),
         ("diversity", "Seed diversity (1 − mean CLIP sim)", [(base_row["diversity"], "base")]),
-        ("memorization", "Memorization (max CLIP sim to a training image)",
-         [(base_row["memorization"], "base"), (ref["training_pairwise_clip"], "train pairwise")]),
+        (
+            "memorization",
+            "Memorization (max CLIP sim to a training image)",
+            [(base_row["memorization"], "base"), (ref["training_pairwise_clip"], "train pairwise")],
+        ),
     ]
     fig, axes = plt.subplots(1, 4, figsize=(21, 4.6))
     for ax, (key, title, refs) in zip(axes, panels):
         for name in runs:
-            pts = sorted((step_num(r["step"], final_steps[name]), r[key]) for r in rows
-                         if r["run"] == name and r.get(key) is not None)
+            pts = sorted(
+                (step_num(r["step"], final_steps[name]), r[key])
+                for r in rows
+                if r["run"] == name and r.get(key) is not None
+            )
             if pts:
                 ax.plot(*zip(*pts), "o-", color=color(name), label=name, lw=1.6, ms=4)
         for y, label in refs:
@@ -186,7 +201,9 @@ def main() -> None:
         sheet = Image.new("RGB", (left + len(cols) * (cell + pad), head + len(runs) * (cell + pad)), "white")
         draw = ImageDraw.Draw(sheet)
         for c, step in enumerate(cols):
-            draw.text((left + c * (cell + pad) + 4, 6), "base (no LoRA)" if step == "base" else f"step {step}", fill="black")
+            draw.text(
+                (left + c * (cell + pad) + 4, 6), "base (no LoRA)" if step == "base" else f"step {step}", fill="black"
+            )
         for r, name in enumerate(runs):
             y = head + r * (cell + pad)
             draw.text((6, y + cell // 2), name, fill="black")
@@ -194,8 +211,10 @@ def main() -> None:
                 rel = (Path("base") if step == "base" else Path(name) / step) / f"{pid}_s{args.grid_seed}.png"
                 path = bench / rel
                 if path.exists():
-                    sheet.paste(Image.open(path).convert("RGB").resize((cell, cell), Image.LANCZOS),
-                                (left + c * (cell + pad), y))
+                    sheet.paste(
+                        Image.open(path).convert("RGB").resize((cell, cell), Image.LANCZOS),
+                        (left + c * (cell + pad), y),
+                    )
         sheet.save(out / f"grid_{pid}.png")
 
     report = {

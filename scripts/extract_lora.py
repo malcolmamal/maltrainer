@@ -42,7 +42,7 @@ def detect_profile(path: Path):
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
     prefix = strip_prefix(keys)
-    names = [k[len(prefix):] for k in keys]
+    names = [k[len(prefix) :] for k in keys]
     for profile in PROFILES.values():
         if profile.detect(names):
             return profile
@@ -53,11 +53,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("base", type=Path, help="the base checkpoint the finetune started from")
     parser.add_argument("finetuned", type=Path, help="the finetuned checkpoint")
-    parser.add_argument("--rank", type=int, nargs="+", default=[64], help="rank (cap) per layer; several = several files (default 64)")
-    parser.add_argument("--mode", choices=MODES, default="fixed", help="how each layer's rank is chosen (default fixed)")
-    parser.add_argument("--value", type=float, default=None,
-                        help="fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; threshold: absolute")
-    parser.add_argument("--model", choices=["auto", *PROFILES], default="auto", help="checkpoint layout (default: detected)")
+    parser.add_argument(
+        "--rank", type=int, nargs="+", default=[64], help="rank (cap) per layer; several = several files (default 64)"
+    )
+    parser.add_argument(
+        "--mode", choices=MODES, default="fixed", help="how each layer's rank is chosen (default fixed)"
+    )
+    parser.add_argument(
+        "--value",
+        type=float,
+        default=None,
+        help="fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; threshold: absolute",
+    )
+    parser.add_argument(
+        "--model", choices=["auto", *PROFILES], default="auto", help="checkpoint layout (default: detected)"
+    )
     parser.add_argument("--dtype", choices=sorted(DTYPES), default="bfloat16", help="saved dtype (default bfloat16)")
     parser.add_argument("--device", default=None, help="cuda or cpu for the SVDs (default: cuda if available)")
     parser.add_argument("--output-dir", type=Path, help="where to write (default: next to the finetune)")
@@ -84,13 +94,21 @@ def main() -> int:
         if target.exists() and not args.force:
             parser.error(f"{target} exists; pass --force to overwrite")
 
-    print(f"{args.finetuned.name} - {args.base.name}: {profile.name} layout, mode {args.mode}"
-          f"{f' {args.value:g}' if args.value is not None else ''}, rank {sorted(targets)} on {device}")
+    print(
+        f"{args.finetuned.name} - {args.base.name}: {profile.name} layout, mode {args.mode}"
+        f"{f' {args.value:g}' if args.value is not None else ''}, rank {sorted(targets)} on {device}"
+    )
     started = time.time()
     try:
         states, report = extract(
-            args.base, args.finetuned, list(targets), mode=args.mode, value=args.value or 0.0,
-            profile=profile, device=device, dtype=DTYPES[args.dtype],
+            args.base,
+            args.finetuned,
+            list(targets),
+            mode=args.mode,
+            value=args.value or 0.0,
+            profile=profile,
+            device=device,
+            dtype=DTYPES[args.dtype],
             progress=lambda names: tqdm(names, desc="SVD per layer"),
         )
     except ValueError as error:
@@ -108,21 +126,25 @@ def main() -> int:
             "ss_network_dim": str(info["rank_max"]),
             "ss_network_alpha": str(info["rank_max"]),
             "maltrainer_architecture": f"{profile.name}_extracted",
-            "maltrainer_extract": json.dumps({
-                "method": "SVD per layer of finetuned - base",
-                "mode": args.mode,
-                "value": args.value,
-                "rank_cap": rank,
-                "profile": profile.name,
-                "save_dtype": args.dtype,
-                "base": {"file": args.base.name, "bytes": args.base.stat().st_size},
-                "finetuned": {"file": args.finetuned.name, "bytes": args.finetuned.stat().st_size},
-            }),
+            "maltrainer_extract": json.dumps(
+                {
+                    "method": "SVD per layer of finetuned - base",
+                    "mode": args.mode,
+                    "value": args.value,
+                    "rank_cap": rank,
+                    "profile": profile.name,
+                    "save_dtype": args.dtype,
+                    "base": {"file": args.base.name, "bytes": args.base.stat().st_size},
+                    "finetuned": {"file": args.finetuned.name, "bytes": args.finetuned.stat().st_size},
+                }
+            ),
         }
         save_file(states[rank], str(target), metadata=metadata)
-        print(f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} (mean {info['rank_mean']:.1f}), "
-              f"dropped norm per layer: mean {info['dropped_mean']:.1%}, worst {info['dropped_worst']:.1%}")
-        print(f"       wrote {target} ({target.stat().st_size / 1024 ** 2:.0f} MB)")
+        print(
+            f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} (mean {info['rank_mean']:.1f}), "
+            f"dropped norm per layer: mean {info['dropped_mean']:.1%}, worst {info['dropped_worst']:.1%}"
+        )
+        print(f"       wrote {target} ({target.stat().st_size / 1024**2:.0f} MB)")
     print(f"  done in {time.time() - started:.0f}s")
     return 0
 

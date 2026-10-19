@@ -90,7 +90,9 @@ class Downsample(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, ch: int = 128, ch_mult: Sequence[int] = (1, 2, 4, 4), num_res_blocks: int = 2, z_channels: int = 32):
+    def __init__(
+        self, ch: int = 128, ch_mult: Sequence[int] = (1, 2, 4, 4), num_res_blocks: int = 2, z_channels: int = 32
+    ):
         super().__init__()
         self.conv_in = nn.Conv2d(3, ch, 3, padding=1)
         in_mult = (1,) + tuple(ch_mult)
@@ -125,7 +127,9 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, ch: int = 128, ch_mult: Sequence[int] = (1, 2, 4, 4), num_res_blocks: int = 2, z_channels: int = 32):
+    def __init__(
+        self, ch: int = 128, ch_mult: Sequence[int] = (1, 2, 4, 4), num_res_blocks: int = 2, z_channels: int = 32
+    ):
         super().__init__()
         block_in = ch * ch_mult[-1]
         self.conv_in = nn.Conv2d(z_channels, block_in, 3, padding=1)
@@ -196,7 +200,9 @@ class Flux2VAEEncoder(nn.Module):
         mean = moments.chunk(2, dim=1)[0]
         B, C, H, W = mean.shape
         z = mean.view(B, C, H // 2, 2, W // 2, 2).permute(0, 1, 3, 5, 2, 4).reshape(B, C * 4, H // 2, W // 2)
-        return F.batch_norm(z, self.bn_running_mean.to(z.dtype), self.bn_running_var.to(z.dtype), training=False, eps=BN_EPS)
+        return F.batch_norm(
+            z, self.bn_running_mean.to(z.dtype), self.bn_running_var.to(z.dtype), training=False, eps=BN_EPS
+        )
 
 
 def _read_vae_state(path: Union[str, Path]) -> dict:
@@ -206,13 +212,17 @@ def _read_vae_state(path: Union[str, Path]) -> dict:
     state = load_file(str(path))
     for prefix in ("first_stage_model.", "vae."):
         if all(key.startswith(prefix) for key in state):
-            state = {key[len(prefix):]: value for key, value in state.items()}
+            state = {key[len(prefix) :]: value for key, value in state.items()}
     if "bn.running_mean" not in state:
-        raise ValueError(f"{path.name} has no batch-norm latent statistics; this needs the Flux2 VAE (flux2_vae.safetensors)")
+        raise ValueError(
+            f"{path.name} has no batch-norm latent statistics; this needs the Flux2 VAE (flux2_vae.safetensors)"
+        )
     return state
 
 
-def load_flux2_vae_decoder(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32) -> Flux2VAEDecoder:
+def load_flux2_vae_decoder(
+    path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32
+) -> Flux2VAEDecoder:
     """The decoder half of ComfyUI's flux2_vae.safetensors, for previews."""
     state = _read_vae_state(path)
     if "decoder.post_quant_conv.weight" in state:
@@ -233,16 +243,20 @@ def load_flux2_vae_decoder(path: Union[str, Path], device: torch.device, dtype: 
     return model
 
 
-def load_flux2_vae_encoder(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32) -> Flux2VAEEncoder:
+def load_flux2_vae_encoder(
+    path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32
+) -> Flux2VAEEncoder:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Flux2 VAE not found at {path}")
     state = load_file(str(path))
     for prefix in ("first_stage_model.", "vae."):
         if all(key.startswith(prefix) for key in state):
-            state = {key[len(prefix):]: value for key, value in state.items()}
+            state = {key[len(prefix) :]: value for key, value in state.items()}
     if "bn.running_mean" not in state:
-        raise ValueError(f"{path.name} has no batch-norm latent statistics; FLUX.3 needs the Flux2 VAE (flux2_vae.safetensors)")
+        raise ValueError(
+            f"{path.name} has no batch-norm latent statistics; FLUX.3 needs the Flux2 VAE (flux2_vae.safetensors)"
+        )
     if "encoder.quant_conv.weight" in state:
         state = {key.replace("encoder.quant_conv.", "quant_conv.", 1): value for key, value in state.items()}
 

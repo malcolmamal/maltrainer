@@ -168,7 +168,11 @@ class MOSSImageLoRATrainer:
         pending = []
         for source in sources:
             folder = FolderCache(source.path.parent)
-            key = cache_key("moss_image_latent/v1", content_hash(source.path), resolution, aspect_mode, vae_id) if use_disk else None
+            key = (
+                cache_key("moss_image_latent/v1", content_hash(source.path), resolution, aspect_mode, vae_id)
+                if use_disk
+                else None
+            )
             latent = folder.get("latents", key) if use_disk else None
             if latent is None:
                 pending.append((source, folder, key))
@@ -198,7 +202,9 @@ class MOSSImageLoRATrainer:
             self.samples.append((str(source.path), source.caption))
             size = (latent.shape[-1] * 16, latent.shape[-2] * 16)
             sizes[size] = sizes.get(size, 0) + 1
-        logger.info("Training sizes (w x h: images): %s", ", ".join(f"{w}x{h}: {n}" for (w, h), n in sorted(sizes.items())))
+        logger.info(
+            "Training sizes (w x h: images): %s", ", ".join(f"{w}x{h}: {n}" for (w, h), n in sorted(sizes.items()))
+        )
         logger.info("Latents: %d from the disk cache, %d encoded", len(sources) - len(pending), len(pending))
         print("VAE latents ready.", flush=True)
 
@@ -213,8 +219,12 @@ class MOSSImageLoRATrainer:
             prompt_folders.setdefault(caption, set()).add(Path(dataset_config["path"]))
         prompts = sorted(prompt_folders)
         text_id = cache_key(
-            "moss_image_text/v1", model_identity(model_config["text_encoder_path"]), model_config.get("tokenizer_path"),
-            TEMPLATE, MAX_SEQUENCE_LENGTH, self.dtype,
+            "moss_image_text/v1",
+            model_identity(model_config["text_encoder_path"]),
+            model_config.get("tokenizer_path"),
+            TEMPLATE,
+            MAX_SEQUENCE_LENGTH,
+            self.dtype,
         )
         pending_prompts = []
         for caption in prompts:
@@ -236,7 +246,9 @@ class MOSSImageLoRATrainer:
             encoder = load_moss_image_text_encoder(
                 model_config["text_encoder_path"], self.device, self.dtype, model_config.get("tokenizer_path")
             )
-            for caption, key, folders in tqdm(pending_prompts, desc="Caching prompts", disable=not self.is_main_process):
+            for caption, key, folders in tqdm(
+                pending_prompts, desc="Caching prompts", disable=not self.is_main_process
+            ):
                 self.text_cache[caption] = encoder.encode(caption, self.device, self.dtype).cpu()
                 if use_disk:
                     for folder in folders:
@@ -244,12 +256,18 @@ class MOSSImageLoRATrainer:
             del encoder
             gc.collect()
             torch.cuda.empty_cache()
-        logger.info("Prompt embeddings: %d from the disk cache, %d encoded", len(prompts) - len(pending_prompts), len(pending_prompts))
+        logger.info(
+            "Prompt embeddings: %d from the disk cache, %d encoded",
+            len(prompts) - len(pending_prompts),
+            len(pending_prompts),
+        )
         lengths = sorted({embeds.shape[0] for embeds in self.text_cache.values()})
         print("Text embeddings ready.", flush=True)
         logger.info(
             "Pre-cached %d images and %d prompt embeddings (text lengths: %s tokens).",
-            len(self.samples), len(self.text_cache), lengths,
+            len(self.samples),
+            len(self.text_cache),
+            lengths,
         )
 
     def _extra_prompts(self) -> List[str]:
@@ -267,11 +285,19 @@ class MOSSImageLoRATrainer:
             self._preview_decoder = load_flux2_vae_decoder(self.config["model"]["vae_path"], self.device)
         context = self.text_cache[prompt].to(self.device, self.dtype)
         negative = self.text_cache[p.negative].to(self.device, self.dtype) if p.cfg != 1.0 else None
-        with tqdm(total=p.steps, desc=f"Sampling ({p.current})", leave=False,
-                  disable=not self.is_main_process) as bar:
-            latents = moss_sample(self.lora_network, context, p.height, p.width, steps=p.steps, seed=seed, cfg=p.cfg,
-                                  negative=negative, device=self.device,
-                                  on_step=lambda done, total: (setattr(bar, "total", total), bar.update(done - bar.n)))
+        with tqdm(total=p.steps, desc=f"Sampling ({p.current})", leave=False, disable=not self.is_main_process) as bar:
+            latents = moss_sample(
+                self.lora_network,
+                context,
+                p.height,
+                p.width,
+                steps=p.steps,
+                seed=seed,
+                cfg=p.cfg,
+                negative=negative,
+                device=self.device,
+                on_step=lambda done, total: (setattr(bar, "total", total), bar.update(done - bar.n)),
+            )
         image = self._preview_decoder.decode(latents)[0]
         return Image.fromarray((image.permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8"))
 
@@ -296,11 +322,21 @@ class MOSSImageLoRATrainer:
         try:
             fresh = load_config(str(self.config_path))
         except Exception as error:  # e.g. a half-edited YAML file
-            logger.warning("[sample] %s changed but could not be read (%s); the previous settings stay", self.config_path.name, error)
+            logger.warning(
+                "[sample] %s changed but could not be read (%s); the previous settings stay",
+                self.config_path.name,
+                error,
+            )
             return
-        ignored = sorted(k for k in set(fresh) | set(self.config) if k != "sample" and fresh.get(k) != self.config.get(k))
+        ignored = sorted(
+            k for k in set(fresh) | set(self.config) if k != "sample" and fresh.get(k) != self.config.get(k)
+        )
         if ignored:
-            logger.info("[sample] %s changed outside sample: (%s): those apply at the next start", self.config_path.name, ", ".join(ignored))
+            logger.info(
+                "[sample] %s changed outside sample: (%s): those apply at the next start",
+                self.config_path.name,
+                ", ".join(ignored),
+            )
         changes = self.previews.update(fresh.get("sample"))
         self.config["sample"] = fresh.get("sample")
         if changes:
@@ -321,11 +357,17 @@ class MOSSImageLoRATrainer:
                 if self._cpu_encoder is None:
                     model_config = self.config["model"]
                     self._cpu_encoder = load_moss_image_text_encoder(
-                        model_config["text_encoder_path"], torch.device("cpu"), self.dtype, model_config.get("tokenizer_path"))
+                        model_config["text_encoder_path"],
+                        torch.device("cpu"),
+                        self.dtype,
+                        model_config.get("tokenizer_path"),
+                    )
                 for caption in missing:
                     started = time.time()
                     self.text_cache[caption] = self._cpu_encoder.encode(caption, torch.device("cpu"), self.dtype).cpu()
-                    logger.info("[sample] encoded on the CPU in %.0fs: %s", time.time() - started, caption or "(empty negative)")
+                    logger.info(
+                        "[sample] encoded on the CPU in %.0fs: %s", time.time() - started, caption or "(empty negative)"
+                    )
             except Exception as error:
                 logger.error("[sample] encoding new prompts failed: %s", error)
 
@@ -393,12 +435,14 @@ class MOSSImageLoRATrainer:
         self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
         trainable = sum(p.numel() for p in self.lora_network.trainable_parameters())
-        self.run_metadata.update({
-            "lora_layers": len(self.lora_network.lora_layers),
-            "trainable_parameters": trainable,
-            "lora_dtype": str(self.lora_dtype).replace("torch.", ""),
-            "lora_skip_blocks": list(self.lora_network.skip_blocks),
-        })
+        self.run_metadata.update(
+            {
+                "lora_layers": len(self.lora_network.lora_layers),
+                "trainable_parameters": trainable,
+                "lora_dtype": str(self.lora_dtype).replace("torch.", ""),
+                "lora_skip_blocks": list(self.lora_network.skip_blocks),
+            }
+        )
         logger.info("LoRA: %.1fM trainable parameters in %s", trainable / 1e6, self.lora_dtype)
         self._maybe_compile()
 
@@ -436,7 +480,11 @@ class MOSSImageLoRATrainer:
                 "fused": bool(train_config.get("automagic_fused", False)),
             }
             self.optimizer = Automagic3(groups, **kwargs)
-            self.run_metadata["optimizer_resolved"] = {"name": "automagic3", "groups": [g["name"] for g in groups], **kwargs}
+            self.run_metadata["optimizer_resolved"] = {
+                "name": "automagic3",
+                "groups": [g["name"] for g in groups],
+                **kwargs,
+            }
         elif name.startswith("prodigy"):
             import inspect
 
@@ -463,7 +511,9 @@ class MOSSImageLoRATrainer:
         elif name in {"adamw8bit", "adam8bit"}:
             import bitsandbytes as bnb
 
-            self.optimizer = bnb.optim.AdamW8bit(self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay)
+            self.optimizer = bnb.optim.AdamW8bit(
+                self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay
+            )
             self.run_metadata["optimizer_resolved"] = {"name": name, "lr": lr}
         else:
             self.optimizer = AdamW(self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay)
@@ -472,7 +522,9 @@ class MOSSImageLoRATrainer:
 
         warmup = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
         if warmup > 0:
-            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lambda step: min((step + 1) / warmup, 1.0))
+            self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+                self.optimizer, lambda step: min((step + 1) / warmup, 1.0)
+            )
             logger.info("Learning-rate warmup over %d steps.", warmup)
 
     # ------------------------------------------------------------------ training
@@ -519,7 +571,7 @@ class MOSSImageLoRATrainer:
         order = [i for i in range(len(self.samples)) for _ in range(repeats)]
         random.shuffle(order)
         world = self.accelerator.num_processes
-        return order[self.accelerator.process_index::world] if world > 1 else order
+        return order[self.accelerator.process_index :: world] if world > 1 else order
 
     def _training_step(self, index: int) -> torch.Tensor:
         train_config = self.config["train"]
@@ -549,16 +601,27 @@ class MOSSImageLoRATrainer:
 
         ema_decay = float(train_config.get("ema_decay", 0.0) or 0.0)
         if ema_decay > 0:
-            self.ema = ParameterEMA(network.trainable_parameters(), decay=ema_decay, warmup=bool(train_config.get("ema_warmup", True)))
+            self.ema = ParameterEMA(
+                network.trainable_parameters(), decay=ema_decay, warmup=bool(train_config.get("ema_warmup", True))
+            )
             self.run_metadata["ema_decay"] = ema_decay
             logger.info("EMA of the LoRA weights: decay %.4f (checkpoints save the average)", ema_decay)
 
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(len(self._epoch_order()), train_config)
-        self.run_metadata.update({"steps_per_epoch": steps_per_epoch, "planned_total_steps": total_steps, "dataset_samples": len(self.samples)})
+        self.run_metadata.update(
+            {
+                "steps_per_epoch": steps_per_epoch,
+                "planned_total_steps": total_steps,
+                "dataset_samples": len(self.samples),
+            }
+        )
         self.run_metadata["resolved_sigma_shift"] = float(train_config.get("timestep_shift", 1.0))
         logger.info(
             "Starting MOSS-Image LoRA training: %d epochs, %d total steps; timesteps %s, shift %.2f",
-            num_epochs, total_steps, train_config.get("timestep_distribution", "logit_normal"), self.run_metadata["resolved_sigma_shift"],
+            num_epochs,
+            total_steps,
+            train_config.get("timestep_distribution", "logit_normal"),
+            self.run_metadata["resolved_sigma_shift"],
         )
 
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
@@ -576,7 +639,9 @@ class MOSSImageLoRATrainer:
                     self.accelerator.backward(loss)
                     monitor.record(loss.item(), float(self.last_sigma))
                     if self.accelerator.sync_gradients:
-                        self.accelerator.clip_grad_norm_(network.trainable_parameters(), float(train_config.get("max_grad_norm", 1.0)))
+                        self.accelerator.clip_grad_norm_(
+                            network.trainable_parameters(), float(train_config.get("max_grad_norm", 1.0))
+                        )
                         self.optimizer.step()
                         if self.lr_scheduler is not None:
                             self.lr_scheduler.step()
@@ -596,7 +661,9 @@ class MOSSImageLoRATrainer:
                     if keys is not None:
                         monitor.exclude(keys.take_paused_seconds())
                     self._watch_config()
-                progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"})
+                progress_bar.set_postfix(
+                    {"loss": f"{loss.item():.4f}", "step": global_step, "epoch": f"{epoch + 1}/{num_epochs}"}
+                )
                 if global_step >= total_steps or stopped:
                     break
             if global_step >= total_steps or stopped:
@@ -606,7 +673,9 @@ class MOSSImageLoRATrainer:
         if keys is not None:
             keys.close()
         if stopped:
-            logger.info("MOSS-Image LoRA training stopped by key at step %d (saved as step %d).", global_step, global_step)
+            logger.info(
+                "MOSS-Image LoRA training stopped by key at step %d (saved as step %d).", global_step, global_step
+            )
             return
         self.save_checkpoint("final")
         logger.info("MOSS-Image LoRA training completed!")
@@ -614,13 +683,25 @@ class MOSSImageLoRATrainer:
     def _log_step(self, step, total, loss, epoch, num_epochs):
         group = self.optimizer.param_groups[0]
         inner = getattr(self.optimizer, "optimizer", self.optimizer)
-        prefix = ("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (step, total, int(step / total * 100), loss.item(), epoch + 1, num_epochs))
+        prefix = "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, " % (
+            step,
+            total,
+            int(step / total * 100),
+            loss.item(),
+            epoch + 1,
+            num_epochs,
+        )
         prefix += getattr(self, "step_note", "")
         if hasattr(inner, "get_avg_learning_rate"):
-            rates = ", ".join(f"{g.get('name', i)} {lr:.2e}" for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates())))
+            rates = ", ".join(
+                f"{g.get('name', i)} {lr:.2e}"
+                for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates()))
+            )
             self.progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
         elif group.get("d") is not None:
-            self.progress_logger.info("%sLR: %.2e (mult %.3f x d %.2e)", prefix, group["lr"] * group["d"], group["lr"], group["d"])
+            self.progress_logger.info(
+                "%sLR: %.2e (mult %.3f x d %.2e)", prefix, group["lr"] * group["d"], group["lr"], group["d"]
+            )
         else:
             self.progress_logger.info("%sLR: %.2e", prefix, group["lr"])
 
@@ -640,8 +721,14 @@ class MOSSImageLoRATrainer:
                 state_dict = network.get_state_dict(save_dtype)
         else:
             state_dict = network.get_state_dict(save_dtype)
-        runtime = dict(self.run_metadata, saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"), save_dtype=str(save_dtype).replace("torch.", ""))
-        metadata = build_metadata(self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True)))
+        runtime = dict(
+            self.run_metadata,
+            saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+            save_dtype=str(save_dtype).replace("torch.", ""),
+        )
+        metadata = build_metadata(
+            self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True))
+        )
         save_file(state_dict, str(save_path), metadata=metadata)
         self.last_saved_path = str(save_path)
         logger.info("Saved LoRA checkpoint to %s", save_path)
@@ -673,14 +760,24 @@ class MOSSImageLoRATrainer:
         """Plan from the real dataset folder and tick through the steps without loading models."""
         samples = self._dry_run_samples()
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(samples, self.config["train"])
-        logger.info("Dry run: %d samples, %d steps/epoch -> %d epochs, %d total steps", samples, steps_per_epoch, num_epochs, total_steps)
+        logger.info(
+            "Dry run: %d samples, %d steps/epoch -> %d epochs, %d total steps",
+            samples,
+            steps_per_epoch,
+            num_epochs,
+            total_steps,
+        )
         with tqdm(total=total_steps, desc="Training Steps (dry run)", disable=not self.is_main_process) as bar:
             for step in range(1, total_steps + 1):
                 time.sleep(self.dry_run_step_time)
                 bar.update(1)
                 self.progress_logger.info(
                     "Step: %d/%d [%d%%], Loss: 0.000000, Epoch: %d/%d, LR: 0.00e+00 (dry run)",
-                    step, total_steps, int(step / total_steps * 100), math.ceil(step / steps_per_epoch), num_epochs,
+                    step,
+                    total_steps,
+                    int(step / total_steps * 100),
+                    math.ceil(step / steps_per_epoch),
+                    num_epochs,
                 )
         logger.info("Dry run complete: would save final checkpoint at step %d", total_steps)
 
@@ -707,9 +804,15 @@ def main():
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")
     parser.add_argument("--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step")
-    parser.add_argument("--suggest-steps", type=float, nargs="?", const=DEFAULT_EPOCHS, metavar="EPOCHS",
-                        help=f"Count the dataset's images and suggest train.max_steps for EPOCHS epochs "
-                             f"(default {DEFAULT_EPOCHS}), then exit without training")
+    parser.add_argument(
+        "--suggest-steps",
+        type=float,
+        nargs="?",
+        const=DEFAULT_EPOCHS,
+        metavar="EPOCHS",
+        help=f"Count the dataset's images and suggest train.max_steps for EPOCHS epochs "
+        f"(default {DEFAULT_EPOCHS}), then exit without training",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)

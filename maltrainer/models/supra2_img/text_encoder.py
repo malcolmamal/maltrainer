@@ -44,9 +44,7 @@ def load_flan_t5(
     state = load_file(str(weights_path), device="cpu")
     incompat = model.load_state_dict(state, strict=False)
     missing = [key for key in incompat.missing_keys if "embed_tokens" not in key]
-    unexpected = [
-        key for key in incompat.unexpected_keys if not key.startswith("decoder.") and key != "lm_head.weight"
-    ]
+    unexpected = [key for key in incompat.unexpected_keys if not key.startswith("decoder.") and key != "lm_head.weight"]
     if missing or unexpected:
         raise RuntimeError(f"Flan-T5 load mismatch missing={missing} unexpected={unexpected}")
     model.to(device=device)

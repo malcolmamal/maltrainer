@@ -44,7 +44,7 @@ def is_int8_convrot(path: Union[str, Path]) -> bool:
 def _strip_container_prefix(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     for prefix in CONTAINER_PREFIXES:
         if state_dict and all(key.startswith(prefix) for key in state_dict):
-            return {key[len(prefix):]: value for key, value in state_dict.items()}
+            return {key[len(prefix) :]: value for key, value in state_dict.items()}
     return state_dict
 
 

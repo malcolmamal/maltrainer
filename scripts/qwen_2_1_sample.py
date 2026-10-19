@@ -84,22 +84,16 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    transformer = load_qwen_image_2_1_transformer(
-        model_config["transformer_path"], device=device, dtype=dtype
-    )
+    transformer = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
     if args.lora:
         # target_modules that match nothing: inject no fresh adapters, then attach the
         # trained ones through the same frozen-adapter path the trainer uses
         network = QwenImage21LoRANetwork(transformer, target_modules=["__none__"])
-        attached = network.load_assistant_adapter(
-            args.lora, multiplier=args.lora_scale, device=device, dtype=dtype
-        )
+        attached = network.load_assistant_adapter(args.lora, multiplier=args.lora_scale, device=device, dtype=dtype)
         print(f"applied LoRA {Path(args.lora).name}: {attached} modules at scale {args.lora_scale}")
 
     generator = torch.Generator(device=device).manual_seed(args.seed)
-    latents = torch.randn(
-        (1, 64, latent_h, latent_w), device=device, dtype=torch.float32, generator=generator
-    )
+    latents = torch.randn((1, 64, latent_h, latent_w), device=device, dtype=torch.float32, generator=generator)
     sigmas = build_sigmas(args.steps, latent_h * latent_w, device)
 
     for i in range(args.steps):
@@ -120,9 +114,7 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    vae = load_qwen_image_2_1_vae(
-        model_config["vae_path"], device=device, dtype=dtype, include_decoder=True
-    )
+    vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype, include_decoder=True)
     with torch.no_grad():
         image = vae.decode(latents.to(dtype))
     array = (image[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8")

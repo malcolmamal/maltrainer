@@ -116,8 +116,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", type=Path, required=True, help="the combined-run YAML")
     parser.add_argument("--force", action="store_true", help="overwrite an existing merged file")
-    parser.add_argument("trainer_args", nargs=argparse.REMAINDER,
-                        help="anything after -- is passed to every trainer run (e.g. -- --dry-run)")
+    parser.add_argument(
+        "trainer_args",
+        nargs=argparse.REMAINDER,
+        help="anything after -- is passed to every trainer run (e.g. -- --dry-run)",
+    )
     args = parser.parse_args()
 
     try:

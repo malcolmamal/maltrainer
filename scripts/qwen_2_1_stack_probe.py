@@ -74,8 +74,7 @@ def main() -> None:
     vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype)
     with torch.no_grad():
         latents = [
-            vae.encode(item["pixel_values"].unsqueeze(0).to(device, dtype), deterministic=True).cpu()
-            for item in items
+            vae.encode(item["pixel_values"].unsqueeze(0).to(device, dtype), deterministic=True).cpu() for item in items
         ]
     del vae
     gc.collect()
@@ -98,18 +97,14 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    transformer = load_qwen_image_2_1_transformer(
-        model_config["transformer_path"], device=device, dtype=dtype
-    )
+    transformer = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
 
     print(f"\n{'sigma':>6} {'matched':>9} {'mismatched':>11} {'zero':>8} {'noise-only':>11}")
     generator = torch.Generator(device=device).manual_seed(0)
     for sigma in SIGMAS:
         totals = {"matched": 0.0, "mismatched": 0.0, "zero": 0.0, "noise": 0.0}
         count = 0
-        for latent, embed, wrong in tqdm(
-            list(zip(latents, embeds, shuffled)), desc=f"sigma {sigma:.2f}", leave=False
-        ):
+        for latent, embed, wrong in tqdm(list(zip(latents, embeds, shuffled)), desc=f"sigma {sigma:.2f}", leave=False):
             x0 = latent.to(device, dtype)
             b, c, h, w = x0.shape
             mu = calculate_shift(h * w)
@@ -134,8 +129,8 @@ def main() -> None:
                 totals["noise"] += torch.nn.functional.mse_loss(noise_flat, target).item()
                 count += 1
         print(
-            f"{sigma:>6.2f} {totals['matched']/count:>9.4f} {totals['mismatched']/count:>11.4f} "
-            f"{totals['zero']/count:>8.4f} {totals['noise']/count:>11.4f}"
+            f"{sigma:>6.2f} {totals['matched'] / count:>9.4f} {totals['mismatched'] / count:>11.4f} "
+            f"{totals['zero'] / count:>8.4f} {totals['noise'] / count:>11.4f}"
         )
 
     print(

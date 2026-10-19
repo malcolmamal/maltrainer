@@ -85,15 +85,17 @@ def save_full_model(
         keys = list(source.keys())
         prefix = _container_prefix(keys)
         for key in keys:
-            name = key[len(prefix):]
+            name = key[len(prefix) :]
             tensor = overrides.get(name, live.get(name))
             if tensor is None:
                 out[key] = source.get_tensor(key)
             else:
                 out[key] = tensor.detach().to("cpu", dtype).contiguous()
-    missing = set(live) - {key[len(prefix):] for key in keys}
+    missing = set(live) - {key[len(prefix) :] for key in keys}
     if missing:
-        raise ValueError(f"{Path(layout_path).name} has no entry for {sorted(missing)[:5]}; save against the file the model was loaded from")
+        raise ValueError(
+            f"{Path(layout_path).name} has no entry for {sorted(missing)[:5]}; save against the file the model was loaded from"
+        )
     tmp = Path(str(out_path) + ".tmp")
     save_file(out, str(tmp), metadata=metadata)
     tmp.replace(out_path)
@@ -133,6 +135,8 @@ def _split_fused_qkv(name: str, diff: torch.Tensor) -> List[Tuple[str, torch.Ten
 EXTRACT_PROFILE = ExtractProfile(
     name="moss_image",
     split=_split_fused_qkv,
-    detect=lambda names: any(n == "shared_block_modulation.weight" for n in names)
-    and any(n.startswith("layers.0.proj.ffn_up_gate") for n in names),
+    detect=lambda names: (
+        any(n == "shared_block_modulation.weight" for n in names)
+        and any(n.startswith("layers.0.proj.ffn_up_gate") for n in names)
+    ),
 )

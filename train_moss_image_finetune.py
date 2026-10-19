@@ -115,7 +115,9 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         reg_path = dataset_config.get("reg_path")
         if not reg_path:
             return sources
-        reg = scan_media_sources(reg_path, kinds=["image"], default_caption=dataset_config.get("reg_default_caption", ""))
+        reg = scan_media_sources(
+            reg_path, kinds=["image"], default_caption=dataset_config.get("reg_default_caption", "")
+        )
         if not reg:
             raise ValueError(f"dataset.reg_path {reg_path} has no images")
         self.reg_keys = {str(source.path) for source in reg}
@@ -129,7 +131,14 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         groups[0].folder_repeats = dict(dataset_config.get("folder_repeats") or {})
         reg_path = dataset_config.get("reg_path")
         if reg_path:
-            groups.append(Group("Regularisation", reg_path, max(int(dataset_config.get("reg_repeats", 1)), 0), folder_counts(reg_path)))
+            groups.append(
+                Group(
+                    "Regularisation",
+                    reg_path,
+                    max(int(dataset_config.get("reg_repeats", 1)), 0),
+                    folder_counts(reg_path),
+                )
+            )
         return groups
 
     @classmethod
@@ -142,19 +151,29 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         dataset_config = config["dataset"]
         root = dataset_config.get("path", "")
         stray = unknown_keys(dataset_config.get("folder_repeats"), [name for name, _ in folder_counts(root)])
-        stray_note = ([f"dataset.folder_repeats names {', '.join(stray)}, which matches no folder (no effect)"]
-                      if stray else [])
-        sources = scan_media_sources(root, kinds=["image"], trigger_token=dataset_config.get("trigger"),
-                                     default_caption=dataset_config.get("default_caption", ""))
+        stray_note = (
+            [f"dataset.folder_repeats names {', '.join(stray)}, which matches no folder (no effect)"] if stray else []
+        )
+        sources = scan_media_sources(
+            root,
+            kinds=["image"],
+            trigger_token=dataset_config.get("trigger"),
+            default_caption=dataset_config.get("default_caption", ""),
+        )
         by_folder: dict = {}
         for source in sources:
             by_folder.setdefault(source.path.parent, []).append(source.caption)
         notes = list(stray_note)
-        uncaptioned = sorted(Path(os.path.relpath(folder, root)).as_posix()
-                             for folder, captions in by_folder.items() if any(not c.strip() for c in captions))
+        uncaptioned = sorted(
+            Path(os.path.relpath(folder, root)).as_posix()
+            for folder, captions in by_folder.items()
+            if any(not c.strip() for c in captions)
+        )
         if uncaptioned:
-            notes.append(f"images with no caption at all in {', '.join(uncaptioned)}: they would train on the empty "
-                         f"prompt (CFG's negative); add .txt captions or a prefix.txt")
+            notes.append(
+                f"images with no caption at all in {', '.join(uncaptioned)}: they would train on the empty "
+                f"prompt (CFG's negative); add .txt captions or a prefix.txt"
+            )
         prior_config = config.get("prior", {}) or {}
         if float(prior_config.get("weight", 0.0) or 0.0) <= 0:
             return notes
@@ -162,6 +181,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             classes = {k.lower() for k in resolve_classes(prior_config, dataset_config.get("trigger"))}
         except ValueError as error:
             return notes + [str(error)]
+
         def names_its_folder(folder: Path, captions: List[str]) -> bool:
             # the nearest prefix.txt decides, as it does for the captions: "[folder]" in it names
             # the person; fixed text ("extreme close-up photo of human eyes") is a concept
@@ -177,12 +197,17 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             # no prefix.txt: a person only if the captions spell the folder's name out
             return any(re.search(rf"(?<!\w){re.escape(folder.name)}(?!\w)", c, re.IGNORECASE) for c in captions)
 
-        people = {folder.name.lower(): Path(os.path.relpath(folder, root)).as_posix()
-                  for folder, captions in by_folder.items() if names_its_folder(folder, captions)}
+        people = {
+            folder.name.lower(): Path(os.path.relpath(folder, root)).as_posix()
+            for folder, captions in by_folder.items()
+            if names_its_folder(folder, captions)
+        }
         missing = sorted(rel for name, rel in people.items() if name not in classes)
         if missing:
-            notes.append(f"prior.classes has no entry for {', '.join(missing)}: add each as "
-                         f"<folder>: woman / man, or those people train without prior preservation")
+            notes.append(
+                f"prior.classes has no entry for {', '.join(missing)}: add each as "
+                f"<folder>: woman / man, or those people train without prior preservation"
+            )
         unused = sorted(classes - set(people))
         if people and unused:
             notes.append(f"prior.classes names {', '.join(unused)}, which no folder here names (harmless)")
@@ -225,7 +250,9 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             if key in self.reg_keys:
                 reg.append(i)
             else:
-                folders.setdefault(Path(os.path.relpath(Path(key).parent, dataset_config["path"])).as_posix(), []).append(i)
+                folders.setdefault(
+                    Path(os.path.relpath(Path(key).parent, dataset_config["path"])).as_posix(), []
+                ).append(i)
         groups = [(indices, folder_repeats(folder, table, default)) for folder, indices in sorted(folders.items())]
         return groups + [(reg, float(max(dataset_config.get("reg_repeats", 1), 0)))]
 
@@ -272,21 +299,27 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             logger.warning(
                 "finetune.trainable_prefixes trains the text adapter (%.1fM parameters in text_embedder). "
                 "OpenMOSS and Fizgig keep it frozen: it reads every prompt, and in Fizgig's runs "
-                "training it exaggerated expressions more each epoch.", text_side / 1e6,
+                "training it exaggerated expressions more each epoch.",
+                text_side / 1e6,
             )
         self.transformer.train()
         # The inherited _training_step runs whatever lora_network holds.
         self.lora_network = self.transformer
         trainable = sum(p.numel() for _, p in self.named_trainable)
         total = sum(p.numel() for p in self.transformer.parameters())
-        self.run_metadata.update({
-            "trainable_parameters": trainable,
-            "trainable_prefixes": list(prefixes) or "all",
-            "linears_only": linears_only,
-        })
+        self.run_metadata.update(
+            {
+                "trainable_parameters": trainable,
+                "trainable_prefixes": list(prefixes) or "all",
+                "linears_only": linears_only,
+            }
+        )
         logger.info(
-            "Finetuning %.3fB of %.3fB parameters (%s%s)", trainable / 1e9, total / 1e9,
-            ", ".join(prefixes) or "all", ", Linear weights only" if linears_only else "",
+            "Finetuning %.3fB of %.3fB parameters (%s%s)",
+            trainable / 1e9,
+            total / 1e9,
+            ", ".join(prefixes) or "all",
+            ", Linear weights only" if linears_only else "",
         )
         self._maybe_compile()
 
@@ -315,7 +348,11 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             "fused": fused,
         }
         self.optimizer = Automagic3(groups, **kwargs)
-        self.run_metadata["optimizer_resolved"] = {"name": "automagic3", "groups": [g["name"] for g in groups], **kwargs}
+        self.run_metadata["optimizer_resolved"] = {
+            "name": "automagic3",
+            "groups": [g["name"] for g in groups],
+            **kwargs,
+        }
         logger.info("Optimizer: %s", self.run_metadata["optimizer_resolved"])
 
         if self.resume_dir is not None:
@@ -327,7 +364,9 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                     f"{[g['name'] for g in groups]}; keep finetune.trainable_prefixes and "
                     "train.automagic_param_groups as they were"
                 )
-            self.optimizer.load_state_dict(torch.load(self.resume_dir / STATE_OPTIMIZER, map_location=self.device, weights_only=False))
+            self.optimizer.load_state_dict(
+                torch.load(self.resume_dir / STATE_OPTIMIZER, map_location=self.device, weights_only=False)
+            )
             self.resume_state = state
 
     # ------------------------------------------------------------------ training
@@ -340,16 +379,26 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         ema_decay = float(train_config.get("ema_decay", 0.0) or 0.0)
         if ema_decay > 0:
             self.ema = OffloadedParameterEMA(
-                self.named_trainable, decay=ema_decay, warmup=bool(train_config.get("ema_warmup", True)),
+                self.named_trainable,
+                decay=ema_decay,
+                warmup=bool(train_config.get("ema_warmup", True)),
                 every=int(train_config.get("ema_every", 1) or 1),
             )
             self.run_metadata.update({"ema_decay": ema_decay, "ema_every": self.ema.every})
-            logger.info("EMA in CPU RAM: decay %.4f every %d step(s) (checkpoints save the average)", ema_decay, self.ema.every)
+            logger.info(
+                "EMA in CPU RAM: decay %.4f every %d step(s) (checkpoints save the average)", ema_decay, self.ema.every
+            )
 
         if not self.samples:
             raise ValueError("No usable images: every file in the dataset failed to load")
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(self._epoch_size(), train_config)
-        self.run_metadata.update({"steps_per_epoch": steps_per_epoch, "planned_total_steps": total_steps, "dataset_samples": len(self.samples)})
+        self.run_metadata.update(
+            {
+                "steps_per_epoch": steps_per_epoch,
+                "planned_total_steps": total_steps,
+                "dataset_samples": len(self.samples),
+            }
+        )
 
         resume = self.resume_state
         same_data = True
@@ -363,7 +412,12 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             # Older states carry no fingerprint; treat them as the same data.
             same_data = resume.get("dataset_fingerprint", self._dataset_fingerprint()) == self._dataset_fingerprint()
             if same_data:
-                logger.info("Resumed at step %d (epoch %d, sample %d of its order)", self.global_step, self.epoch + 1, self.position)
+                logger.info(
+                    "Resumed at step %d (epoch %d, sample %d of its order)",
+                    self.global_step,
+                    self.epoch + 1,
+                    self.position,
+                )
             else:
                 # The old epoch's shuffled order means nothing for a different set: carry on
                 # with a fresh epoch. Weights, optimizer, EMA and step count still continue.
@@ -372,10 +426,17 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 self.position = 0
                 logger.warning(
                     "The dataset changed since the saved state (%s samples then, %d now); resuming at step %d "
-                    "with a fresh epoch.", resume.get("dataset_samples", "?"), self._epoch_size(), self.global_step,
+                    "with a fresh epoch.",
+                    resume.get("dataset_samples", "?"),
+                    self._epoch_size(),
+                    self.global_step,
                 )
             if self.global_step >= total_steps:
-                logger.warning("The resumed run is already at step %d of %d; raise train.max_steps to continue.", self.global_step, total_steps)
+                logger.warning(
+                    "The resumed run is already at step %d of %d; raise train.max_steps to continue.",
+                    self.global_step,
+                    total_steps,
+                )
                 return
         if resume is not None:
             # The epochs this run will end at: the ones done so far, then what the remaining steps
@@ -389,10 +450,14 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
 
         logger.info(
             "Starting MOSS-Image finetuning: %d epochs, %d total steps; timesteps %s, shift %.2f",
-            num_epochs, total_steps, train_config.get("timestep_distribution", "logit_normal"),
+            num_epochs,
+            total_steps,
+            train_config.get("timestep_distribution", "logit_normal"),
             float(train_config.get("timestep_shift", 1.0)),
         )
-        progress_bar = tqdm(total=total_steps, initial=self.global_step, desc="Training Steps", disable=not self.is_main_process)
+        progress_bar = tqdm(
+            total=total_steps, initial=self.global_step, desc="Training Steps", disable=not self.is_main_process
+        )
         keys = KeyCommands(menu=self._preview_menu)
         stopped = False
         micro = 0
@@ -487,7 +552,9 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         if keys is not None:
             keys.close()
         if stopped:
-            logger.info("MOSS-Image finetuning stopped by key at step %d; resume from the _state folder.", self.global_step)
+            logger.info(
+                "MOSS-Image finetuning stopped by key at step %d; resume from the _state folder.", self.global_step
+            )
             return
         self.save_checkpoint("final")
         logger.info("MOSS-Image finetuning completed!")
@@ -510,7 +577,9 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             return
         captions = self._prior_captions()
         if not captions:
-            raise ValueError(f"prior.weight > 0, but no caption names a trigger of prior.classes {sorted(self.prior_classes)}")
+            raise ValueError(
+                f"prior.weight > 0, but no caption names a trigger of prior.classes {sorted(self.prior_classes)}"
+            )
         if self.resume_dir is not None:
             path = self.resume_dir / STATE_PRIOR
             if not path.exists():
@@ -523,35 +592,50 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             if missing:
                 # images added since the prior was recorded (e.g. new people): record theirs from the
                 # original model too, by putting the base checkpoint's values back for the recording
-                logger.info("Prior: %d image(s) added since it was recorded; recording theirs from the original "
-                            "weights in %s (~%.0f min)", len(missing), self.layout_path.name,
-                            len(missing) * self.prior.samples_per_image / 6 / 60)
+                logger.info(
+                    "Prior: %d image(s) added since it was recorded; recording theirs from the original "
+                    "weights in %s (~%.0f min)",
+                    len(missing),
+                    self.layout_path.name,
+                    len(missing) * self.prior.samples_per_image / 6 / 60,
+                )
                 was_training = self.transformer.training
                 self.transformer.eval()
                 with weights_from_file(self.named_trainable, self.layout_path):
                     self.prior.build(
                         ((self._rel(key), self.latent_cache[key], caption) for key, caption in missing.items()),
-                        self._sample_sigma, self._predict, self.device,
+                        self._sample_sigma,
+                        self._predict,
+                        self.device,
                     )
                 self.transformer.train(was_training)
                 torch.cuda.empty_cache()
         else:
             self.prior.build(
                 ((self._rel(key), self.latent_cache[key], caption) for key, caption in captions.items()),
-                self._sample_sigma, self._predict, self.device,
+                self._sample_sigma,
+                self._predict,
+                self.device,
             )
         self.prior_path = Path(self.config["output"]["path"]) / f"{self._name()}_prior.safetensors"
         self.prior_path.parent.mkdir(parents=True, exist_ok=True)
         self.prior.save(self.prior_path)
-        self.run_metadata.update({
-            "prior_weight": self.prior.weight,
-            "prior_samples_per_image": self.prior.samples_per_image,
-            "prior_every": self.prior.every,
-            "prior_classes": self.prior_classes,
-            "prior_images": len(self.prior),
-        })
-        logger.info("Prior preservation: weight %g on %d images, every %d step(s), classes %s",
-                    self.prior.weight, len(self.prior), self.prior.every, self.prior_classes)
+        self.run_metadata.update(
+            {
+                "prior_weight": self.prior.weight,
+                "prior_samples_per_image": self.prior.samples_per_image,
+                "prior_every": self.prior.every,
+                "prior_classes": self.prior_classes,
+                "prior_images": len(self.prior),
+            }
+        )
+        logger.info(
+            "Prior preservation: weight %g on %d images, every %d step(s), classes %s",
+            self.prior.weight,
+            len(self.prior),
+            self.prior.every,
+            self.prior_classes,
+        )
 
     # ------------------------------------------------------------------ saving
 
@@ -606,20 +690,38 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         while self._free_bytes(output_dir) < need:
             free = self._free_bytes(output_dir)
             if step != "final":
-                logger.error("Not saving step %s: it needs %.1f GB and %s has %.1f GB free. Training continues; "
-                             "free space for the next save.", step, need / 1e9, output_dir, free / 1e9)
+                logger.error(
+                    "Not saving step %s: it needs %.1f GB and %s has %.1f GB free. Training continues; "
+                    "free space for the next save.",
+                    step,
+                    need / 1e9,
+                    output_dir,
+                    free / 1e9,
+                )
                 return False
-            logger.error("The final model needs %.1f GB and %s has %.1f GB free: free space there; checking again "
-                         "every 30 s (the trained weights are in memory, nothing is lost while it waits).",
-                         need / 1e9, output_dir, free / 1e9)
+            logger.error(
+                "The final model needs %.1f GB and %s has %.1f GB free: free space there; checking again "
+                "every 30 s (the trained weights are in memory, nothing is lost while it waits).",
+                need / 1e9,
+                output_dir,
+                free / 1e9,
+            )
             time.sleep(30)
-        runtime = dict(self.run_metadata, saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"), global_step=self.global_step,
-                       save_dtype=str(save_dtype).replace("torch.", ""))
-        metadata = build_metadata(self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True)))
+        runtime = dict(
+            self.run_metadata,
+            saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+            global_step=self.global_step,
+            save_dtype=str(save_dtype).replace("torch.", ""),
+        )
+        metadata = build_metadata(
+            self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True))
+        )
         started = time.time()
         overrides = self.ema.averaged() if self.ema is not None else None
         try:
-            save_full_model(self.transformer, self.layout_path, save_path, overrides=overrides, metadata=metadata, dtype=save_dtype)
+            save_full_model(
+                self.transformer, self.layout_path, save_path, overrides=overrides, metadata=metadata, dtype=save_dtype
+            )
         except Exception as error:  # a full disk mid-write (safetensors raises its own error type)
             Path(str(save_path) + ".tmp").unlink(missing_ok=True)
             logger.error("Saving step %s failed (%s); the partial file is removed and training continues.", step, error)
@@ -627,23 +729,33 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 raise
             return False
         self.last_saved_path = str(save_path)
-        logger.info("Saved finetuned model%s to %s (%.0fs)", " (EMA)" if overrides else "", save_path, time.time() - started)
+        logger.info(
+            "Saved finetuned model%s to %s (%.0fs)", " (EMA)" if overrides else "", save_path, time.time() - started
+        )
         if bool(self.config["train"].get("save_state", True)):
             # Without EMA, in the training dtype, the checkpoint holds exactly the raw weights.
             same_weights = overrides is None and save_dtype == self.dtype
             state_need = self._state_bytes(hard_linked=same_weights) + self.DISK_MARGIN
             free = self._free_bytes(output_dir)
             if free < state_need:
-                logger.error("Not writing the resume state for step %s: it needs %.1f GB and %.1f GB is free. The "
-                             "previous state is kept (resume from there, or from this checkpoint as a new base).",
-                             step, state_need / 1e9, free / 1e9)
+                logger.error(
+                    "Not writing the resume state for step %s: it needs %.1f GB and %.1f GB is free. The "
+                    "previous state is kept (resume from there, or from this checkpoint as a new base).",
+                    step,
+                    state_need / 1e9,
+                    free / 1e9,
+                )
             else:
                 try:
                     self._save_state(output_dir / f"{name}_state", weights=save_path if same_weights else None)
                 except Exception as error:
                     shutil.rmtree(output_dir / f"{name}_state.tmp", ignore_errors=True)
-                    logger.error("Writing the resume state for step %s failed (%s); the partial copy is removed and "
-                                 "the previous state kept.", step, error)
+                    logger.error(
+                        "Writing the resume state for step %s failed (%s); the partial copy is removed and "
+                        "the previous state kept.",
+                        step,
+                        error,
+                    )
         return True
 
     def _save_state(self, state_dir: Path, weights: Optional[Path] = None) -> None:
@@ -665,7 +777,12 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             except OSError as e:  # another volume, or a filesystem without hard links
                 logger.info("Could not hard-link the state weights (%s); writing a copy", e)
         if not linked:
-            save_full_model(self.transformer, self.layout_path, tmp / STATE_MODEL, metadata={"maltrainer_state_step": str(self.global_step)})
+            save_full_model(
+                self.transformer,
+                self.layout_path,
+                tmp / STATE_MODEL,
+                metadata={"maltrainer_state_step": str(self.global_step)},
+            )
         torch.save(self.optimizer.state_dict(), tmp / STATE_OPTIMIZER)
         if self.prior is not None and self.prior_path is not None:
             try:
@@ -676,27 +793,35 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         if self.ema is not None:
             tensors, ema_counters = self.ema.state()
             save_file(tensors, str(tmp / STATE_EMA))
-        torch.save({
-            "global_step": self.global_step,
-            "epoch": self.epoch,
-            "position": self.position,
-            "epoch_rng": self.epoch_rng,
-            "python_rng": random.getstate(),
-            "torch_rng": torch.get_rng_state(),
-            "cuda_rng": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
-            "ema_counters": ema_counters,
-            "group_names": [g["name"] for g in self.optimizer.param_groups],
-            "dataset_fingerprint": self._dataset_fingerprint(),
-            "dataset_samples": self._epoch_size(),
-        }, tmp / STATE_TRAINER)
+        torch.save(
+            {
+                "global_step": self.global_step,
+                "epoch": self.epoch,
+                "position": self.position,
+                "epoch_rng": self.epoch_rng,
+                "python_rng": random.getstate(),
+                "torch_rng": torch.get_rng_state(),
+                "cuda_rng": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+                "ema_counters": ema_counters,
+                "group_names": [g["name"] for g in self.optimizer.param_groups],
+                "dataset_fingerprint": self._dataset_fingerprint(),
+                "dataset_samples": self._epoch_size(),
+            },
+            tmp / STATE_TRAINER,
+        )
         old = state_dir.with_name(state_dir.name + ".old")
         shutil.rmtree(old, ignore_errors=True)
         if state_dir.exists():
             state_dir.rename(old)
         tmp.rename(state_dir)
         shutil.rmtree(old, ignore_errors=True)
-        logger.info("Saved resume state (step %d%s) to %s (%.0fs)", self.global_step,
-                    ", weights hard-linked to the checkpoint" if linked else "", state_dir, time.time() - started)
+        logger.info(
+            "Saved resume state (step %d%s) to %s (%.0fs)",
+            self.global_step,
+            ", weights hard-linked to the checkpoint" if linked else "",
+            state_dir,
+            time.time() - started,
+        )
 
 
 def main():
@@ -705,9 +830,15 @@ def main():
     parser.add_argument("--resume-from", type=str, help="A <name>_state folder; overrides train.resume_from")
     parser.add_argument("--dry-run", action="store_true", help="Simulate training without loading models")
     parser.add_argument("--dry-run-step-time", type=float, default=0.025, help="Seconds per simulated step")
-    parser.add_argument("--suggest-steps", type=float, nargs="?", const=DEFAULT_EPOCHS, metavar="EPOCHS",
-                        help=f"Count the subject and regularisation images and suggest train.max_steps for "
-                             f"EPOCHS epochs of each (default {DEFAULT_EPOCHS}), then exit without training")
+    parser.add_argument(
+        "--suggest-steps",
+        type=float,
+        nargs="?",
+        const=DEFAULT_EPOCHS,
+        metavar="EPOCHS",
+        help=f"Count the subject and regularisation images and suggest train.max_steps for "
+        f"EPOCHS epochs of each (default {DEFAULT_EPOCHS}), then exit without training",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)

@@ -62,6 +62,7 @@ def unswizzle_nvfp4_scales(scales: torch.Tensor, rows: int, columns: int) -> tor
 
 _NVFP4_LUT_CACHE: dict[tuple[torch.device, torch.dtype], torch.Tensor] = {}
 
+
 def get_nvfp4_lut(device: torch.device, dtype: torch.dtype) -> torch.Tensor:
     key = (device, dtype)
     if key in _NVFP4_LUT_CACHE:
@@ -164,11 +165,11 @@ class ComfyNvfp4Linear(nn.Module):
     def dequantize_weight(self, dtype: torch.dtype) -> torch.Tensor:
         lut = get_nvfp4_lut(self.packed_weight.device, dtype)
         decoded = lut[self.packed_weight.long()].reshape(self.out_features, self.in_features)
-        
+
         block_scales = self.scales_u8.view(torch.float8_e4m3fn).to(dtype=dtype)
         per_tensor = self.per_tensor_scale_u8.view(torch.float32).reshape(())
         block_scales = block_scales * per_tensor
-        
+
         decoded = decoded.view(self.out_features, self.in_features // NVFP4_BLOCK_SIZE, NVFP4_BLOCK_SIZE)
         decoded = decoded * block_scales.unsqueeze(-1)
         return decoded.reshape(self.out_features, self.in_features)
@@ -247,7 +248,9 @@ def load_comfy_quantized_state_dict(
                 if pre_scale_key in source_keys:
                     consumed_keys.add(pre_scale_key)
             else:
-                raise TypeError(f"Comfy quant marker {prefix} maps to {type(module).__name__}; expected Linear or Embedding")
+                raise TypeError(
+                    f"Comfy quant marker {prefix} maps to {type(module).__name__}; expected Linear or Embedding"
+                )
             _replace_submodule(model, module_path, replacement)
             consumed.update(consumed_keys)
 

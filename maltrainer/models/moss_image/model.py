@@ -86,7 +86,7 @@ def timestep_embedding(sigma: torch.Tensor, dim: int = TIME_FREQ_DIM, max_period
 def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     """[n] positions -> [n, dim/2, 2, 2] rotation matrices (comfy/ldm/flux/math.py)."""
     scale = torch.linspace(0, (dim - 2) / dim, steps=dim // 2, dtype=torch.float64, device=pos.device)
-    omega = 1.0 / (theta ** scale)
+    omega = 1.0 / (theta**scale)
     out = torch.einsum("...n,d->...nd", pos.to(torch.float32).to(torch.float64), omega)
     out = torch.stack([torch.cos(out), -torch.sin(out), torch.sin(out), torch.cos(out)], dim=-1)
     return out.reshape(*out.shape[:-1], 2, 2).float()
@@ -98,7 +98,7 @@ def position_ids(h: int, w: int, text_len: int, device) -> torch.Tensor:
     ids[: h * w, 1] = text_len
     ids[: h * w, 2] = (torch.arange(h, device=device, dtype=torch.float32) - (h - 1) / 2).repeat_interleave(w)
     ids[: h * w, 3] = (torch.arange(w, device=device, dtype=torch.float32) - (w - 1) / 2).repeat(h)
-    ids[h * w:, 1] = torch.arange(text_len, device=device, dtype=torch.float32)
+    ids[h * w :, 1] = torch.arange(text_len, device=device, dtype=torch.float32)
     return ids
 
 
@@ -188,7 +188,9 @@ class Block(nn.Module):
         self.proj["ffn_up_gate"] = nn.Linear(dim, 2 * ffn_dim, bias=False)
         self.proj["ffn_down"] = nn.Linear(ffn_dim, dim, bias=False)
 
-    def forward(self, x: torch.Tensor, shift_a, scale_a, gate_a, shift_f, scale_f, gate_f, pe: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, shift_a, scale_a, gate_a, shift_f, scale_f, gate_f, pe: torch.Tensor
+    ) -> torch.Tensor:
         """The six adaLN vectors are [B, 1, D], shared by every token."""
         y = self.norm1(x) * (1 + scale_a) + shift_a
         if self.fused_qkv:
@@ -211,7 +213,9 @@ class MOSSImageTransformer(nn.Module):
         self.text_embedder = TextEmbedder(config.text_dim, d, config.ffn_dim, config.num_heads)
         self.time_embedding = nn.Sequential(nn.Linear(TIME_FREQ_DIM, d), nn.SiLU(), nn.Linear(d, d))
         self.shared_block_modulation = nn.Linear(d, 6 * d)
-        self.layers = nn.ModuleList([Block(d, config.ffn_dim, config.num_heads, config.fused_qkv) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList(
+            [Block(d, config.ffn_dim, config.num_heads, config.fused_qkv) for _ in range(config.num_layers)]
+        )
         self.final_norm_video = RMSNorm(d)
         self.final_linear_video = nn.Linear(d, LATENT_CHANNELS, bias=False)
         self.video_head_modulation = nn.Linear(d, 2 * d)

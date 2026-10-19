@@ -57,12 +57,14 @@ def boost_file(source: Path, target: Path, factor: float) -> None:
     blocks = sorted({"txtfusion.{}_blocks.{}".format(*TEXT_FUSION_BLOCK.search(key).groups()) for key in boosted})
 
     meta = dict(metadata)
-    meta["maltrainer_text_fusion_boost"] = json.dumps({
-        "factor": factor,
-        "blocks": blocks,
-        "adapters": len(boosted),
-        "source": {"file": source.name, "sha256": sha256_prefix(source)},
-    })
+    meta["maltrainer_text_fusion_boost"] = json.dumps(
+        {
+            "factor": factor,
+            "blocks": blocks,
+            "adapters": len(boosted),
+            "source": {"file": source.name, "sha256": sha256_prefix(source)},
+        }
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
     save_file(state, str(target), metadata=meta)
     print(f"  x{factor:g} on {len(boosted)} adapters in {len(blocks)} blocks: {', '.join(blocks)}")

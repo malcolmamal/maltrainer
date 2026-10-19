@@ -100,24 +100,37 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         self.transformer.train()
 
         self.rotator = WindowRotator(
-            self.transformer, master, parse_windows(finetune_config.get("windows")), self.device, self.dtype,
+            self.transformer,
+            master,
+            parse_windows(finetune_config.get("windows")),
+            self.device,
+            self.dtype,
             self._make_optimizer,
         )
         always = finetune_config.get("always_on", list(DEFAULT_ALWAYS_ON)) or []
         self.always_on = always_on_linears(self.transformer, always)
         # the inherited _training_step calls whatever lora_network holds
         self.lora_network = self.transformer
-        windows = ", ".join(f"{n} {self.rotator.window_parameters(i) / 1e9:.2f}B" for i, n in enumerate(self.rotator.names))
+        windows = ", ".join(
+            f"{n} {self.rotator.window_parameters(i) / 1e9:.2f}B" for i, n in enumerate(self.rotator.names)
+        )
         always_count = sum(p.numel() for _, p in self.always_on)
-        self.run_metadata.update({
-            "windows": self.rotator.names,
-            "always_on": list(always),
-            "rotate_every": self._rotate_every(),
-            "rotating_parameters": sum(self.rotator.window_parameters(i) for i in range(len(self.rotator.windows))),
-            "always_on_parameters": always_count,
-        })
-        logger.info("Windows: %s; always trained: %s (%.2fB); rotating every %d steps",
-                    windows, ", ".join(always) or "nothing", always_count / 1e9, self._rotate_every())
+        self.run_metadata.update(
+            {
+                "windows": self.rotator.names,
+                "always_on": list(always),
+                "rotate_every": self._rotate_every(),
+                "rotating_parameters": sum(self.rotator.window_parameters(i) for i in range(len(self.rotator.windows))),
+                "always_on_parameters": always_count,
+            }
+        )
+        logger.info(
+            "Windows: %s; always trained: %s (%.2fB); rotating every %d steps",
+            windows,
+            ", ".join(always) or "nothing",
+            always_count / 1e9,
+            self._rotate_every(),
+        )
 
     def _rotate_every(self) -> int:
         return max(int((self.config.get("finetune", {}) or {}).get("rotate_every", 100) or 100), 1)
@@ -176,8 +189,13 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             raise ValueError("No usable images: every file in the dataset failed to load")
         epoch_size = len(self._epoch_order())
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(epoch_size, train_config)
-        self.run_metadata.update({"steps_per_epoch": steps_per_epoch, "planned_total_steps": total_steps,
-                                  "dataset_samples": len(self.samples)})
+        self.run_metadata.update(
+            {
+                "steps_per_epoch": steps_per_epoch,
+                "planned_total_steps": total_steps,
+                "dataset_samples": len(self.samples),
+            }
+        )
 
         resume = self.resume_state
         same_data = True
@@ -185,22 +203,42 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             self.global_step, self.epoch, self.position = resume["global_step"], resume["epoch"], resume["position"]
             same_data = resume.get("dataset_fingerprint") == self._dataset_fingerprint()
             if same_data:
-                logger.info("Resumed at step %d (epoch %d, sample %d of its order)", self.global_step, self.epoch + 1, self.position)
+                logger.info(
+                    "Resumed at step %d (epoch %d, sample %d of its order)",
+                    self.global_step,
+                    self.epoch + 1,
+                    self.position,
+                )
             else:
                 if self.position > 0:
                     self.epoch += 1
                 self.position = 0
-                logger.warning("The dataset changed since the saved state (%s samples then, %d now); resuming at "
-                               "step %d with a fresh epoch.", resume.get("dataset_samples", "?"), epoch_size, self.global_step)
+                logger.warning(
+                    "The dataset changed since the saved state (%s samples then, %d now); resuming at "
+                    "step %d with a fresh epoch.",
+                    resume.get("dataset_samples", "?"),
+                    epoch_size,
+                    self.global_step,
+                )
             if self.global_step >= total_steps:
-                logger.warning("The resumed run is already at step %d of %d; raise train.max_steps to continue.",
-                               self.global_step, total_steps)
+                logger.warning(
+                    "The resumed run is already at step %d of %d; raise train.max_steps to continue.",
+                    self.global_step,
+                    total_steps,
+                )
                 return
             num_epochs = self.epoch + -(-(total_steps - self.global_step + self.position) // steps_per_epoch)
 
-        logger.info("Starting Krea 2 finetuning: %d epochs, %d total steps, %d windows of %d steps",
-                    num_epochs, total_steps, len(self.rotator.windows), self._rotate_every())
-        progress_bar = tqdm(total=total_steps, initial=self.global_step, desc="Training Steps", disable=not self.is_main_process)
+        logger.info(
+            "Starting Krea 2 finetuning: %d epochs, %d total steps, %d windows of %d steps",
+            num_epochs,
+            total_steps,
+            len(self.rotator.windows),
+            self._rotate_every(),
+        )
+        progress_bar = tqdm(
+            total=total_steps, initial=self.global_step, desc="Training Steps", disable=not self.is_main_process
+        )
         keys = KeyCommands() if self.is_main_process else None
         monitor = TrainMonitor(every=int(train_config.get("monitor_every", 100) or 100))
         stopped = False
@@ -227,9 +265,13 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
                     started = time.time()
                     self.rotator.activate(window)
                     monitor.exclude(time.time() - started)
-                    logger.info("Step %d: training window %s (%.2fB, %.1fs to swap)", self.global_step,
-                                self.rotator.names[window], self.rotator.window_parameters(window) / 1e9,
-                                time.time() - started)
+                    logger.info(
+                        "Step %d: training window %s (%.2fB, %.1fs to swap)",
+                        self.global_step,
+                        self.rotator.names[window],
+                        self.rotator.window_parameters(window) / 1e9,
+                        time.time() - started,
+                    )
                 loss, _, sigma = self._training_step(order[pos], shift_logged)
                 loss.backward()  # fused: every trained weight steps here
                 self.rotator.optimizer.step()  # applies the window's rate votes
@@ -239,8 +281,13 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
                 self.global_step += 1
                 self.position = pos + 1
                 progress_bar.update(1)
-                progress_bar.set_postfix({"loss": f"{loss.item():.4f}", "window": self.rotator.names[window],
-                                          "epoch": f"{epoch + 1}/{num_epochs}"})
+                progress_bar.set_postfix(
+                    {
+                        "loss": f"{loss.item():.4f}",
+                        "window": self.rotator.names[window],
+                        "epoch": f"{epoch + 1}/{num_epochs}",
+                    }
+                )
                 self._log_step(self.global_step, total_steps, loss, epoch, num_epochs)
                 monitor.step_done(self.global_step, total_steps, self.rotator.optimizer)
                 if save_every > 0 and self.global_step % save_every == 0 and self.global_step < total_steps:
@@ -267,9 +314,17 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
 
     def _log_step(self, step, total, loss, epoch, num_epochs):
         window = self.rotator.names[self.rotator.current] if self.rotator.current is not None else "-"
-        self.progress_logger.info("Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, Window: %s, LR: %.2e",
-                                  step, total, int(step / total * 100), loss.item(), epoch + 1, num_epochs, window,
-                                  self.rotator.optimizer.get_avg_learning_rate())
+        self.progress_logger.info(
+            "Step: %d/%d [%d%%], Loss: %.6f, Epoch: %d/%d, Window: %s, LR: %.2e",
+            step,
+            total,
+            int(step / total * 100),
+            loss.item(),
+            epoch + 1,
+            num_epochs,
+            window,
+            self.rotator.optimizer.get_avg_learning_rate(),
+        )
 
     # ------------------------------------------------------------------ saving
 
@@ -294,15 +349,30 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         while shutil.disk_usage(output_dir).free < need:
             free = shutil.disk_usage(output_dir).free
             if step != "final":
-                logger.error("Not saving step %s: it needs %.1f GB and %s has %.1f GB free. Training continues.",
-                             step, need / 1e9, output_dir, free / 1e9)
+                logger.error(
+                    "Not saving step %s: it needs %.1f GB and %s has %.1f GB free. Training continues.",
+                    step,
+                    need / 1e9,
+                    output_dir,
+                    free / 1e9,
+                )
                 return False
-            logger.error("The final model needs %.1f GB and %s has %.1f GB free: free space there; checking "
-                         "again every 30 s.", need / 1e9, output_dir, free / 1e9)
+            logger.error(
+                "The final model needs %.1f GB and %s has %.1f GB free: free space there; checking again every 30 s.",
+                need / 1e9,
+                output_dir,
+                free / 1e9,
+            )
             time.sleep(30)
-        runtime = dict(self.run_metadata, saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"), global_step=self.global_step,
-                       save_dtype="bfloat16")
-        metadata = build_metadata(self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True)))
+        runtime = dict(
+            self.run_metadata,
+            saved_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+            global_step=self.global_step,
+            save_dtype="bfloat16",
+        )
+        metadata = build_metadata(
+            self.config, step=step, runtime=runtime, embed_config=bool(output_config.get("embed_config", True))
+        )
         started = time.time()
         try:
             save_krea2_model(self.transformer, self.rotator, save_path, self.key_prefix, metadata)
@@ -319,7 +389,9 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
                 self._save_state(output_dir / f"{name}_state", save_path)
             except Exception as error:
                 shutil.rmtree(output_dir / f"{name}_state.tmp", ignore_errors=True)
-                logger.error("Writing the resume state for step %s failed (%s); the previous state is kept.", step, error)
+                logger.error(
+                    "Writing the resume state for step %s failed (%s); the previous state is kept.", step, error
+                )
         return True
 
     def _save_state(self, state_dir: Path, weights: Path) -> None:
@@ -333,21 +405,27 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         except OSError as e:  # another volume, or no hard links
             logger.info("Could not hard-link the state weights (%s); copying", e)
             shutil.copyfile(weights, tmp / STATE_MODEL)
-        torch.save({
-            "rotation": self.rotator.state_dict(),
-            "always": self.always_optimizer.state_dict() if self.always_optimizer is not None else None,
-        }, tmp / STATE_OPTIMIZER)
-        torch.save({
-            "global_step": self.global_step,
-            "epoch": self.epoch,
-            "position": self.position,
-            "epoch_rng": self.epoch_rng,
-            "python_rng": random.getstate(),
-            "torch_rng": torch.get_rng_state(),
-            "cuda_rng": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
-            "dataset_fingerprint": self._dataset_fingerprint(),
-            "dataset_samples": len(self._epoch_order()),
-        }, tmp / STATE_TRAINER)
+        torch.save(
+            {
+                "rotation": self.rotator.state_dict(),
+                "always": self.always_optimizer.state_dict() if self.always_optimizer is not None else None,
+            },
+            tmp / STATE_OPTIMIZER,
+        )
+        torch.save(
+            {
+                "global_step": self.global_step,
+                "epoch": self.epoch,
+                "position": self.position,
+                "epoch_rng": self.epoch_rng,
+                "python_rng": random.getstate(),
+                "torch_rng": torch.get_rng_state(),
+                "cuda_rng": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+                "dataset_fingerprint": self._dataset_fingerprint(),
+                "dataset_samples": len(self._epoch_order()),
+            },
+            tmp / STATE_TRAINER,
+        )
         old = state_dir.with_name(state_dir.name + ".old")
         shutil.rmtree(old, ignore_errors=True)
         if state_dir.exists():

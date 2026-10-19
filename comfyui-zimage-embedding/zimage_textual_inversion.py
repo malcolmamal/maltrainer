@@ -26,7 +26,7 @@ class ZImageTextEncodeWithEmbeddings:
             "optional": {
                 "embedding_file": ("STRING", {"default": ""}),
                 "token_string": ("STRING", {"default": "<*>"}),
-            }
+            },
         }
 
     RETURN_TYPES = ("CONDITIONING",)
@@ -59,13 +59,13 @@ class ZImageTextEncodeWithEmbeddings:
 
         # Find embedding vectors
         embedding_vectors = None
-        
+
         # Priority 1: Check for 'emb_params' (common format)
-        if 'emb_params' in embedding_data:
-            embedding_vectors = embedding_data['emb_params']
+        if "emb_params" in embedding_data:
+            embedding_vectors = embedding_data["emb_params"]
         # Priority 2: Check for 'embedding' (our trainer format)
-        elif 'embedding' in embedding_data:
-            embedding_vectors = embedding_data['embedding']
+        elif "embedding" in embedding_data:
+            embedding_vectors = embedding_data["embedding"]
         # Priority 3: Heuristic search for correct shape
         else:
             for key, tensor in embedding_data.items():
@@ -87,8 +87,9 @@ class ZImageTextEncodeWithEmbeddings:
 
         # Set the embedding
         with torch.no_grad():
-            self.text_encoder.get_input_embeddings().weight[token_id:token_id+embedding_vectors.shape[0]] = \
+            self.text_encoder.get_input_embeddings().weight[token_id : token_id + embedding_vectors.shape[0]] = (
                 embedding_vectors.to(self.text_encoder.device, self.text_encoder.dtype)
+            )
 
         print(f"Loaded {embedding_vectors.shape[0]} embedding vectors for token '{token_string}'")
 
@@ -111,7 +112,8 @@ class ZImageTextEncodeWithEmbeddings:
 
         # Return in ComfyUI conditioning format
         # For Z-Image, we return the text embeddings directly
-        return ([[text_embeds, {"context": text_embeds}]], )
+        return ([[text_embeds, {"context": text_embeds}]],)
+
 
 # Node registration
 NODE_CLASS_MAPPINGS = {

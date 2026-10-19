@@ -50,8 +50,12 @@ MAX_SEQUENCE_LENGTH = 4096  # OpenMOSS's ComfyUI node and the report's final-sta
 TOKENIZER_ASSETS = Path(__file__).resolve().parent / "assets" / "tokenizer"
 
 KEY_PREFIXES = (
-    "text_encoders.qwen35_9b.transformer.model.", "text_encoders.qwen35_9b.transformer.",
-    "model.language_model.", "language_model.model.", "language_model.", "model.",
+    "text_encoders.qwen35_9b.transformer.model.",
+    "text_encoders.qwen35_9b.transformer.",
+    "model.language_model.",
+    "language_model.model.",
+    "language_model.",
+    "model.",
 )
 SKIPPED = ("visual.", "lm_head.", "mtp.")
 
@@ -147,7 +151,9 @@ def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> 
     initial_dtype = query.dtype
     query = F.normalize(query, dim=-1)
     key = F.normalize(key, dim=-1)
-    query, key, value, beta, g = [x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)]
+    query, key, value, beta, g = [
+        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+    ]
 
     batch_size, num_heads, sequence_length, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
@@ -162,7 +168,9 @@ def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> 
 
     v_beta = value * beta.unsqueeze(-1)
     k_beta = key * beta.unsqueeze(-1)
-    query, key, value, k_beta, v_beta = [x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, k_beta, v_beta)]
+    query, key, value, k_beta, v_beta = [
+        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, k_beta, v_beta)
+    ]
     g = g.reshape(g.shape[0], g.shape[1], -1, chunk_size)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
 
@@ -185,7 +193,10 @@ def chunk_gated_delta_rule(query, key, value, g, beta, chunk_size: int = 64) -> 
         attn = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
         v_new = v_i - k_cumdecay[:, :, i] @ state
         core_attn_out[:, :, i] = (q_i * g[:, :, i, :, None].exp()) @ state + attn @ v_new
-        state = state * g[:, :, i, -1, None, None].exp() + (k_i * (g[:, :, i, -1, None] - g[:, :, i]).exp()[..., None]).transpose(-1, -2) @ v_new
+        state = (
+            state * g[:, :, i, -1, None, None].exp()
+            + (k_i * (g[:, :, i, -1, None] - g[:, :, i]).exp()[..., None]).transpose(-1, -2) @ v_new
+        )
 
     core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
     return core_attn_out[:, :, :sequence_length].transpose(1, 2).contiguous().to(initial_dtype)
@@ -210,16 +221,25 @@ class GatedDeltaNet(nn.Module):
         self.out_proj = nn.Linear(self.value_dim, hidden, bias=False)
         self.dt_bias = nn.Parameter(torch.ones(self.num_value_heads))
         self.A_log = nn.Parameter(torch.zeros(self.num_value_heads))
-        self.conv1d = nn.Conv1d(conv_dim, conv_dim, kernel_size=config.conv_kernel_size, groups=conv_dim,
-                                padding=config.conv_kernel_size - 1, bias=False)
+        self.conv1d = nn.Conv1d(
+            conv_dim,
+            conv_dim,
+            kernel_size=config.conv_kernel_size,
+            groups=conv_dim,
+            padding=config.conv_kernel_size - 1,
+            bias=False,
+        )
         self.norm = RMSNormGated(self.value_head_dim, eps=config.rms_norm_eps)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, L, _ = x.shape
         z = self.in_proj_z(x)
         mixed = self.in_proj_qkv(x).transpose(1, 2)
-        mixed = F.silu(F.conv1d(mixed, self.conv1d.weight.to(mixed.dtype), None, padding=self.conv1d.padding,
-                                groups=self.conv1d.groups)[:, :, :L]).transpose(1, 2)
+        mixed = F.silu(
+            F.conv1d(
+                mixed, self.conv1d.weight.to(mixed.dtype), None, padding=self.conv1d.padding, groups=self.conv1d.groups
+            )[:, :, :L]
+        ).transpose(1, 2)
         query, key, value = mixed.split([self.key_dim, self.key_dim, self.value_dim], dim=-1)
 
         beta = self.in_proj_b(x).sigmoid()
@@ -260,7 +280,7 @@ class GatedAttention(nn.Module):
     def forward(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
         B, L, _ = x.shape
         qg = self.q_proj(x).view(B, L, self.num_heads, self.head_dim * 2)
-        q, gate = qg[..., : self.head_dim], qg[..., self.head_dim:].reshape(B, L, -1)
+        q, gate = qg[..., : self.head_dim], qg[..., self.head_dim :].reshape(B, L, -1)
         q = self.q_norm(q).transpose(1, 2)
         k = self.k_norm(self.k_proj(x).view(B, L, self.num_kv_heads, self.head_dim)).transpose(1, 2)
         v = self.v_proj(x).view(B, L, self.num_kv_heads, self.head_dim).transpose(1, 2)
@@ -358,16 +378,21 @@ def _upcast_linear_forward(module: nn.Linear, x: torch.Tensor) -> torch.Tensor:
 def _text_key(key: str) -> Optional[str]:
     for prefix in KEY_PREFIXES:
         if key.startswith(prefix):
-            key = key[len(prefix):]
+            key = key[len(prefix) :]
             break
     if key.startswith(SKIPPED):
         return None
     return key
 
 
-def load_moss_image_text_encoder(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.bfloat16,
-                                 tokenizer_path: Union[str, Path, None] = None, grad_precision: str = "bf16",
-                                 compute_dtype: torch.dtype = torch.float32) -> MOSSImageTextEncoder:
+def load_moss_image_text_encoder(
+    path: Union[str, Path],
+    device: torch.device,
+    dtype: torch.dtype = torch.bfloat16,
+    tokenizer_path: Union[str, Path, None] = None,
+    grad_precision: str = "bf16",
+    compute_dtype: torch.dtype = torch.float32,
+) -> MOSSImageTextEncoder:
     """``dtype`` is the storage dtype of the float weights; ``compute_dtype`` that of the activations."""
     from transformers import Qwen2Tokenizer
 
@@ -394,7 +419,9 @@ def load_moss_image_text_encoder(path: Union[str, Path], device: torch.device, d
 
     if quantized and "embed_tokens.int8_convrot_groupsize" in state:
         # The table is stored Hadamard-rotated; Int8Embedding un-rotates it on lookup.
-        embed = Int8Embedding(config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item()))
+        embed = Int8Embedding(
+            config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item())
+        )
         embed.weight.data.copy_(state.pop("embed_tokens.weight"))
         embed.scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
         state.pop("embed_tokens.int8_convrot_groupsize")
@@ -423,6 +450,9 @@ def load_moss_image_text_encoder(path: Union[str, Path], device: torch.device, d
     model.to(device=device).eval().requires_grad_(False)
     logger.info(
         "MOSS-Image text encoder: Qwen3.5, %d layers (%d full attention), hidden %d, %s",
-        config.num_hidden_layers, len(config.full_attention_layers), config.hidden_size, "INT8 ConvRot" if quantized else "plain",
+        config.num_hidden_layers,
+        len(config.full_attention_layers),
+        config.hidden_size,
+        "INT8 ConvRot" if quantized else "plain",
     )
     return MOSSImageTextEncoder(model, tokenizer)

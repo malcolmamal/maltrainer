@@ -1,4 +1,3 @@
-
 import sys
 
 import safetensors.torch as safetensors
@@ -13,6 +12,7 @@ def inspect_lora(path):
             print(k)
     except Exception as e:
         print(f"Error reading {path}: {e}")
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

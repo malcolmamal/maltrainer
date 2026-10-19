@@ -148,7 +148,9 @@ class MiniMaxH3LoRANetwork(nn.Module):
             raise ValueError("No MiniMax H3 modules matched the LoRA targets / block_range")
         logger.info(
             "Injected %d LoRA layers into MiniMax H3 transformer (rank=%d, alpha=%s%s, blocks %s%s)",
-            injected, self.rank, self.alpha,
+            injected,
+            self.rank,
+            self.alpha,
             f", including {adaln} per-block adaln_proj" if adaln else ", adaln_proj excluded",
             "%d-%d" % self.block_range if self.block_range else "0-49",
             "" if self.include_token_refiner else ", token refiner frozen",
@@ -215,8 +217,10 @@ class MiniMaxH3LoRANetwork(nn.Module):
         pairs: Dict[str, Dict[str, torch.Tensor]] = {}
         for key, value in state.items():
             for suffix, slot in (
-                (".lora_A.weight", "down"), (".lora_down.weight", "down"),
-                (".lora_B.weight", "up"), (".lora_up.weight", "up"),
+                (".lora_A.weight", "down"),
+                (".lora_down.weight", "down"),
+                (".lora_B.weight", "up"),
+                (".lora_up.weight", "up"),
                 (".alpha", "alpha"),
             ):
                 if key.endswith(suffix):
@@ -239,7 +243,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         for name, parts in sorted(pairs.items()):
             if "down" not in parts or "up" not in parts:
                 continue
-            module_path = name[len(self.prefix):] if name.startswith(self.prefix) else name
+            module_path = name[len(self.prefix) :] if name.startswith(self.prefix) else name
             module_path = kohya_names.get(module_path, module_path)
             try:
                 module = self.transformer.get_submodule(module_path)
@@ -298,12 +302,17 @@ class MiniMaxH3LoRANetwork(nn.Module):
                 "Training adapter has %d full-model AdaLN row(s) the pruned base cannot run without "
                 "model.training_adapter_adaln_grid (Fizgig's assets/h3_silu_temb_grid.safetensors); "
                 "they were skipped, so the adapter acts only through its other %d modules.",
-                len(unbridged), attached,
+                len(unbridged),
+                attached,
             )
         logger.info(
             "Attached frozen training adapter: %d modules (%d AdaLN via the t_emb grid), rank %d, "
             "multiplier %.2f (from %s)",
-            attached, grid_rows, rank, multiplier, Path(path).name,
+            attached,
+            grid_rows,
+            rank,
+            multiplier,
+            Path(path).name,
         )
         return attached
 

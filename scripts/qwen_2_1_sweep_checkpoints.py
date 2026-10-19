@@ -75,7 +75,7 @@ def swap_adapter(network: QwenImage21LoRANetwork, path: Path, scale: float) -> N
     for key in state:
         if not key.endswith(".lora_A.weight"):
             continue
-        module_path = key[len(network.prefix): -len(".lora_A.weight")]
+        module_path = key[len(network.prefix) : -len(".lora_A.weight")]
         layer = layers[module_path.replace(".", "_")]
         layer.lora_down.weight.data.copy_(state[key].to(layer.lora_down.weight.dtype))
         up = state[key.replace(".lora_A.", ".lora_B.")]
@@ -88,9 +88,7 @@ def swap_adapter(network: QwenImage21LoRANetwork, path: Path, scale: float) -> N
 def sample_latents(transformer, embeds, sigmas, seed, latent_h, latent_w, dtype, device) -> torch.Tensor:
     """Euler flow-matching sample from pure noise; returns normalized latents [1, 64, h, w]."""
     generator = torch.Generator(device=device).manual_seed(seed)
-    latents = torch.randn(
-        (1, 64, latent_h, latent_w), device=device, dtype=torch.float32, generator=generator
-    )
+    latents = torch.randn((1, 64, latent_h, latent_w), device=device, dtype=torch.float32, generator=generator)
     for i in range(len(sigmas) - 1):
         packed = latents.to(dtype).permute(0, 2, 3, 1).reshape(1, latent_h * latent_w, 64)
         with torch.no_grad():
@@ -147,9 +145,7 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    transformer = load_qwen_image_2_1_transformer(
-        model_config["transformer_path"], device=device, dtype=dtype
-    )
+    transformer = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
     network = QwenImage21LoRANetwork(transformer, target_modules=["__none__"])
     network.load_assistant_adapter(checkpoints[0], multiplier=1.0, device=device, dtype=dtype)
     layers = network.assistant_layers
@@ -178,16 +174,14 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    vae = load_qwen_image_2_1_vae(
-        model_config["vae_path"], device=device, dtype=dtype, include_decoder=True
-    )
+    vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype, include_decoder=True)
     grid: list[tuple[str, list[Image.Image]]] = []
     for label, latents_list in rows:
         images = []
         for seed, latents in zip(args.seeds, latents_list):
             with torch.no_grad():
                 decoded = vae.decode(latents.to(dtype))
-            array = (decoded[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255)
+            array = decoded[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255
             image = Image.fromarray(array.round().astype("uint8"))
             image.save(outdir / f"{label.replace(' ', '_')}_seed{seed}.png")
             images.append(image)
@@ -195,8 +189,7 @@ def main() -> None:
 
     pad, header = 4, 22
     cell = grid[0][1][0].width
-    sheet = Image.new("RGB", (len(args.seeds) * (cell + pad) + pad,
-                              len(grid) * (cell + pad + header) + pad), "white")
+    sheet = Image.new("RGB", (len(args.seeds) * (cell + pad) + pad, len(grid) * (cell + pad + header) + pad), "white")
     draw = ImageDraw.Draw(sheet)
     for r, (label, images) in enumerate(grid):
         y = pad + r * (cell + pad + header)

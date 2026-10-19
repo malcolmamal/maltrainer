@@ -155,7 +155,12 @@ class PriorPreservation:
             self.seeds[key] = torch.tensor(seeds, dtype=torch.int64)
             self.targets[key] = torch.stack(preds)
         size = sum(t.numel() * t.element_size() for t in self.targets.values()) / 1024**2
-        logger.info("Prior: %d images x %d inputs recorded (%.0f MB in CPU RAM)", len(self.targets), self.samples_per_image, size)
+        logger.info(
+            "Prior: %d images x %d inputs recorded (%.0f MB in CPU RAM)",
+            len(self.targets),
+            self.samples_per_image,
+            size,
+        )
 
     def due(self, step: int) -> bool:
         """Whether optimizer step ``step`` (0-based) adds the prior term."""
@@ -185,11 +190,13 @@ class PriorPreservation:
             tensors[f"{i}.sigma"] = self.sigmas[key]
             tensors[f"{i}.seed"] = self.seeds[key]
         metadata = {
-            "maltrainer_prior": json.dumps({
-                "keys": keys,
-                "captions": [self.captions[k] for k in keys],
-                "samples_per_image": self.samples_per_image,
-            })
+            "maltrainer_prior": json.dumps(
+                {
+                    "keys": keys,
+                    "captions": [self.captions[k] for k in keys],
+                    "samples_per_image": self.samples_per_image,
+                }
+            )
         }
         path = Path(path)
         tmp = path.with_name(path.name + ".tmp")

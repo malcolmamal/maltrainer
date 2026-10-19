@@ -30,8 +30,12 @@ TEXT_FFN = ("ffn_gate", "ffn_up", "ffn_down")
 # captions changes how all prompts are read, and in Fizgig's runs it exaggerated expressions
 # more with every epoch. TEXT_ATTN / TEXT_FFN stay for grouping loaded LoRAs that do adapt it.
 IO_LAYERS = (
-    "video_embedder", "time_embedding.0", "time_embedding.2",
-    "shared_block_modulation", "video_head_modulation", "final_linear_video",
+    "video_embedder",
+    "time_embedding.0",
+    "time_embedding.2",
+    "shared_block_modulation",
+    "video_head_modulation",
+    "final_linear_video",
 )
 
 # Named target sets.
@@ -85,8 +89,15 @@ def param_group_of(name: str) -> str:
 
 
 class MOSSImageLoRANetwork(nn.Module):
-    def __init__(self, transformer: nn.Module, rank: int = 16, alpha: float = 16.0, targets: str = "blocks",
-                 prefix: str = "diffusion_model.", skip_blocks: Iterable[int] = DEFAULT_SKIP_BLOCKS):
+    def __init__(
+        self,
+        transformer: nn.Module,
+        rank: int = 16,
+        alpha: float = 16.0,
+        targets: str = "blocks",
+        prefix: str = "diffusion_model.",
+        skip_blocks: Iterable[int] = DEFAULT_SKIP_BLOCKS,
+    ):
         super().__init__()
         if targets not in TARGET_PRESETS:
             raise ValueError(f"lora.targets must be one of {TARGET_PRESETS}, got {targets!r}")
@@ -119,7 +130,12 @@ class MOSSImageLoRANetwork(nn.Module):
             counts[param_group_of(name)] = counts.get(param_group_of(name), 0) + 1
         logger.info(
             "MOSS-Image LoRA: %d adapters (%s), rank %d, alpha %s, targets %s, skipped blocks %s",
-            len(self.lora_layers), counts, rank, alpha, targets, list(self.skip_blocks) or "none",
+            len(self.lora_layers),
+            counts,
+            rank,
+            alpha,
+            targets,
+            list(self.skip_blocks) or "none",
         )
 
     def _add(self, name: str, in_features: int, out_features: int, rank: int, alpha: float) -> LoRALayer:

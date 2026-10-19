@@ -82,8 +82,14 @@ class KeyCommands:
                 logger.info("Key commands unavailable: %s", e)
                 self.enabled = False
         if self.enabled:
-            logger.info("Keys: %s", ", ".join(f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}"
-                                              for k in (SAVE, QUIT, PAUSE, MENU, HELP) if k in self.keys))
+            logger.info(
+                "Keys: %s",
+                ", ".join(
+                    f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}"
+                    for k in (SAVE, QUIT, PAUSE, MENU, HELP)
+                    if k in self.keys
+                ),
+            )
 
     def poll(self) -> List[str]:
         """The command keys pressed since the last poll, in order."""
@@ -150,8 +156,11 @@ class KeyCommands:
 
     def _pause(self, step: int, save: Callable[[int], None]) -> bool:
         """Wait at this step until ``p`` again; True if ``q`` (with a successful save) ends the run."""
-        logger.info("Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s", step,
-                    ", [e] preview settings" if self.menu is not None else "")
+        logger.info(
+            "Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s",
+            step,
+            ", [e] preview settings" if self.menu is not None else "",
+        )
         started = time.time()
         try:
             while True:
