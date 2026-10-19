@@ -242,6 +242,7 @@ Then the progress bar runs. A warm start of a small set takes 15-20 s; 10,000 im
 | `q` | save, then stop (ready to resume). If the save fails, training continues instead |
 | `p` | pause until `p` again (model stays loaded; `s`, `q`, `h` still work) |
 | `e` | preview menu: prompts on/off, interval (←/→ ±100), raw/EMA rows. Training waits while it is open |
+| `g` | gallery: 8 trained people at random with generic prompts, to `samples/gallery/` (~3 min; training waits) |
 | `h` | list the keys |
 
 You can also **edit the `sample:` section of the config file while training runs**: saving the
@@ -360,7 +361,7 @@ The training config and run details are in each file's safetensors metadata
 | Read a file's training metadata | `python scripts/inspect_lora_metadata.py <file.safetensors>` |
 | Follow the log | `tail -f output/moss_image_finetune/<name>/training.log` |
 
-Keys while training: `s` save · `q` save and stop · `p` pause · `e` preview menu · `h` help.
+Keys while training: `s` save · `q` save and stop · `p` pause · `e` preview menu · `g` gallery · `h` help.
 
 ---
 

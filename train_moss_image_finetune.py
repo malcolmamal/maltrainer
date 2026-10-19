@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import gc
 import hashlib
 import logging
 import math
@@ -53,6 +54,7 @@ from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.optimizers import Automagic3
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import OffloadedParameterEMA
+from maltrainer.utils.gallery import Gallery
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.lora_metadata import build_metadata
 from maltrainer.utils.logging_utils import setup_logging
@@ -101,6 +103,10 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 every=int(prior_config.get("every", 1)),
                 seed=int(config.get("seed", 42)),
             )
+        # key g: a few of the trained people at random (sample.gallery; maltrainer/utils/gallery.py)
+        people = self.prior_classes or resolve_classes(prior_config, config.get("dataset", {}).get("trigger"))
+        self.gallery = Gallery((config.get("sample") or {}).get("gallery"), people,
+                               Path(config.get("output", {}).get("path", "./output")))
 
     # ------------------------------------------------------------------ data
 
@@ -206,7 +212,10 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         return out
 
     def _extra_prompts(self) -> List[str]:
-        return super()._extra_prompts() + sorted(set(self._prior_captions().values()))
+        gallery = self.gallery.captions
+        if gallery and self.previews.cfg != 1.0:
+            gallery = gallery + [self.previews.negative]
+        return super()._extra_prompts() + sorted(set(self._prior_captions().values())) + gallery
 
     def _repeat_groups(self) -> List[tuple]:
         """(sample indices, repeats) per subject folder (dataset.folder_repeats, else
@@ -388,7 +397,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             float(train_config.get("timestep_shift", 1.0)),
         )
         progress_bar = tqdm(total=total_steps, initial=self.global_step, desc="Training Steps", disable=not self.is_main_process)
-        keys = KeyCommands(menu=self._preview_menu)
+        keys = KeyCommands(menu=self._preview_menu, gallery=self._run_gallery if self.gallery.enabled else None)
         stopped = False
         micro = 0
         loss = None
@@ -486,6 +495,27 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             return
         self.save_checkpoint("final")
         logger.info("MOSS-Image finetuning completed!")
+
+    def _run_gallery(self) -> None:
+        """Key g: render the gallery with the weights checkpoints save (the EMA average if on), at
+        the preview settings (size, steps, CFG, negative)."""
+        ema = self.ema is not None
+        p = self.previews
+
+        def render_one(prompt: str, seed: int, label: str):
+            p.current = f"step {self.global_step}, {label}"
+            return self._render_preview(prompt, seed)
+
+        was_training = self.transformer.training
+        self.transformer.eval()
+        gc.collect()
+        torch.cuda.empty_cache()
+        try:
+            self.gallery.run(self.global_step, render_one, self.ema.applied if ema else contextlib.nullcontext,
+                             ready=self._preview_ready, label="EMA" if ema else "raw weights")
+        finally:
+            self.transformer.train(was_training)
+            torch.cuda.empty_cache()
 
     def _preview_variants(self):
         """With EMA on, two rows: the raw weights (what is training now) and the average (what
