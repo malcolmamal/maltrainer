@@ -79,7 +79,7 @@ class KeyCommands:
             return []
         pressed: list[str] = []
         if os.name == "nt":
-            import msvcrt
+            msvcrt = import_module("msvcrt")  # by name: the stubs omit msvcrt off Windows
 
             while msvcrt.kbhit():
                 char = msvcrt.getwch()

@@ -51,6 +51,9 @@ def mypy_output(root: Path) -> str:
             "mypy",
             "--no-pretty",
             "--no-error-summary",
+            # one platform everywhere, the one CI runs: msvcrt / termios code would check differently per OS
+            "--platform",
+            "linux",
             "--config-file",
             "pyproject.toml",
             *targets(root),

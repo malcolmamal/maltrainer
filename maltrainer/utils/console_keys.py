@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import os
 import sys
+from importlib import import_module
 
 
 def read_key() -> str:
     """One key press, blocking: "up", "down", "left", "right", "enter", "esc", "space", or the
     character itself (lower case)."""
     if os.name == "nt":
-        import msvcrt
-
+        msvcrt = import_module("msvcrt")  # by name: the stubs omit msvcrt off Windows
         char = msvcrt.getwch()
         if char in ("\x00", "\xe0"):
             return {"H": "up", "P": "down", "K": "left", "M": "right"}.get(msvcrt.getwch(), "")
