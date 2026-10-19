@@ -66,8 +66,8 @@ def _prefix_end(token_ids: List[int]) -> int:
 
 
 def _text_key(key: str) -> Optional[str]:
+    key = key.removeprefix("text_encoders.qwen3vl_4b.transformer.")  # a combined ComfyUI file, then its own spelling
     for prefix in (
-        "text_encoders.qwen3vl_4b.transformer.",
         "model.language_model.",
         "language_model.model.",
         "language_model.",
