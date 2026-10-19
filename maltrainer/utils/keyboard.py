@@ -6,6 +6,8 @@ Single-key commands while training runs in a console:
 - ``p`` pauses training until ``p`` is pressed again; ``s``, ``q`` and ``h`` still work while paused
 - ``e`` opens the trainer's menu, if it has one (the MOSS-Image trainers: the preview settings);
   training waits while it is open
+- ``g`` renders a gallery, if the trainer has one (the MOSS-Image finetune: a few of the trained
+  people at random, maltrainer/utils/gallery.py); training waits while it renders
 - ``h`` lists the keys
 
 Keys are read without blocking at each optimizer step, so a press acts at the next step
@@ -25,12 +27,13 @@ from typing import Callable, List, Optional
 
 logger = logging.getLogger(__name__)
 
-SAVE, QUIT, PAUSE, MENU, HELP = "s", "q", "p", "e", "h"
+SAVE, QUIT, PAUSE, MENU, GALLERY, HELP = "s", "q", "p", "e", "g", "h"
 HELP_TEXT = {
     SAVE: "save a checkpoint now (training continues)",
     QUIT: "save a checkpoint and stop",
     PAUSE: "pause training; press p again to resume (s, q and h still work while paused)",
     MENU: "preview settings: prompts on/off, the interval, the raw/EMA rows (training waits)",
+    GALLERY: "gallery: render a few trained people at random with generic prompts (training waits)",
     HELP: "list these keys",
 }
 
@@ -58,10 +61,17 @@ def read_key() -> str:
 
 
 class KeyCommands:
-    def __init__(self, keys: str = SAVE + QUIT + PAUSE + HELP, menu: Optional[Callable[[], None]] = None):
-        """``menu``: opened by ``e`` (the key exists only when a trainer offers one)."""
+    def __init__(
+        self,
+        keys: str = SAVE + QUIT + PAUSE + HELP,
+        menu: Optional[Callable[[], None]] = None,
+        gallery: Optional[Callable[[], None]] = None,
+    ):
+        """``menu``: opened by ``e``; ``gallery``: run by ``g`` (each key exists only when a trainer
+        offers it)."""
         self.menu = menu
-        self.keys = set(keys) | ({MENU} if menu is not None else set())
+        self.gallery = gallery
+        self.keys = set(keys) | ({MENU} if menu is not None else set()) | ({GALLERY} if gallery is not None else set())
         self._restore = None
         self.paused_seconds = 0.0  # time spent paused since take_paused_seconds() last read it
         try:
@@ -86,7 +96,7 @@ class KeyCommands:
                 "Keys: %s",
                 ", ".join(
                     f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}"
-                    for k in (SAVE, QUIT, PAUSE, MENU, HELP)
+                    for k in (SAVE, QUIT, PAUSE, MENU, GALLERY, HELP)
                     if k in self.keys
                 ),
             )
@@ -119,7 +129,7 @@ class KeyCommands:
 
     def show_help(self) -> None:
         logger.info("Keys (act at the next step):")
-        for key in (SAVE, QUIT, PAUSE, MENU, HELP):
+        for key in (SAVE, QUIT, PAUSE, MENU, GALLERY, HELP):
             if key in self.keys:
                 logger.info("  [%s] %s", key, HELP_TEXT[key])
 
@@ -154,12 +164,24 @@ class KeyCommands:
             if count_time:
                 self.paused_seconds += time.time() - started
 
+    def _run_gallery(self, count_time: bool = True) -> None:
+        """As ``_open_menu``: a failure is logged and training goes on."""
+        started = time.time()
+        try:
+            self.gallery()
+        except Exception as error:
+            logger.error("The gallery failed (%s); training continues", error)
+        finally:
+            if count_time:
+                self.paused_seconds += time.time() - started
+
     def _pause(self, step: int, save: Callable[[int], None]) -> bool:
         """Wait at this step until ``p`` again; True if ``q`` (with a successful save) ends the run."""
         logger.info(
-            "Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s",
+            "Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s%s",
             step,
             ", [e] preview settings" if self.menu is not None else "",
+            ", [g] gallery" if self.gallery is not None else "",
         )
         started = time.time()
         try:
@@ -169,6 +191,8 @@ class KeyCommands:
                     self.show_help()
                 if MENU in pressed and self.menu is not None:
                     self._open_menu(count_time=False)
+                if GALLERY in pressed and self.gallery is not None:
+                    self._run_gallery(count_time=False)
                 if self._save_keys(pressed, step, save):
                     return True
                 if PAUSE in pressed:
@@ -187,6 +211,8 @@ class KeyCommands:
             self.show_help()
         if MENU in pressed and self.menu is not None:
             self._open_menu()
+        if GALLERY in pressed and self.gallery is not None:
+            self._run_gallery()
         if self._save_keys(pressed, step, save):
             return True
         if PAUSE in pressed:
