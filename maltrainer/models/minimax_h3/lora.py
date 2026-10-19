@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -61,9 +62,9 @@ class GridAdaLNLoRA(nn.Module):
         self.scale = scale
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        index = torch.cdist(x.detach().float(), self.table.float()).argmin(dim=1)
-        full = self.grid[index].to(self.down.dtype)
-        return (full @ self.down.T @ self.up.T) * self.scale
+        index = torch.cdist(x.detach().float(), self.get_buffer("table").float()).argmin(dim=1)
+        full = self.get_buffer("grid")[index].to(self.get_buffer("down").dtype)
+        return (full @ self.get_buffer("down").T @ self.get_buffer("up").T) * self.scale
 
 
 class MiniMaxH3LoRANetwork(nn.Module):
@@ -110,8 +111,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         before block 20 nothing upstream needs a gradient, so the backward pass also stops
         there.
         """
-        injected = 0
-        adaln = 0
+        injected = adaln = 0
         for name, module in self.transformer.named_modules():
             if "modulation" in name or "norm" in name:
                 continue
@@ -180,7 +180,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
             # update is not truncated before it is even added.
             return (base + delta).to(base.dtype)
 
-        module.forward = forward
+        cast(Any, module).forward = forward
 
     def load_assistant_adapter(
         self,
@@ -235,9 +235,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
         }
         table = getattr(self.transformer, "adaln_t_table", None)
         grid = None
-
-        attached, grid_rows, skipped, unbridged = 0, 0, [], []
-        rank = 0
+        attached, grid_rows, rank, skipped, unbridged = 0, 0, 0, [], []
         for name, parts in sorted(pairs.items()):
             if "down" not in parts or "up" not in parts:
                 continue
@@ -272,7 +270,7 @@ class MiniMaxH3LoRANetwork(nn.Module):
                             f"AdaLN grid has {grid.shape[0]} rows but this checkpoint's curve table has "
                             f"{table.shape[0]}; they must come from the same H3 build."
                         )
-                layer = GridAdaLNLoRA(down, up, scale, table, grid)
+                layer: GridAdaLNLoRA | MiniMaxH3LoRALayer = GridAdaLNLoRA(down, up, scale, table, grid)
                 grid_rows += 1
             else:
                 layer = MiniMaxH3LoRALayer(module, rank, alpha)
@@ -341,7 +339,8 @@ class MiniMaxH3LoRANetwork(nn.Module):
         keep the training dtype.
         """
         state_dict = {}
-        for safe_name, lora_layer in self.lora_layers.items():
+        for safe_name, module in self.lora_layers.items():
+            lora_layer = cast(MiniMaxH3LoRALayer, module)
             name = self.name_map[safe_name]
             full_name = f"{self.prefix}{name}"
 

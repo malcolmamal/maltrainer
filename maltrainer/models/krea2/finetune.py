@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 import torch
 from safetensors.torch import save_file
@@ -64,7 +65,7 @@ def always_on_linears(model: nn.Module, modules: Sequence[str]) -> list[tuple[st
                 if module.weight.dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
                     raise ValueError(f"{module_name}.{name} is fp8; always-on modules must be bf16")
                 module.weight.requires_grad_(True)
-                out.append((f"{module_name}.{name}.weight", module.weight))
+                out.append((f"{module_name}.{name}.weight", cast(nn.Parameter, module.weight)))
     return out
 
 

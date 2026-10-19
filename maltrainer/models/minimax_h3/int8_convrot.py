@@ -9,6 +9,7 @@ import json
 import logging
 import math
 from types import MethodType
+from typing import Any, cast
 
 import torch
 from safetensors import safe_open
@@ -175,7 +176,7 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
 
 
 def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tensor:
-    group_size = int(module.int8_convrot_groupsize.item())
+    group_size = int(cast(torch.Tensor, module.int8_convrot_groupsize).item())
     operation = _Int8ConvRotFunction if inputs.is_cuda and hasattr(torch, "_int_mm") else _TransientInt8ConvRotFunction
     grad_precision = getattr(module, "int8_convrot_grad_precision", DEFAULT_GRAD_PRECISION)
     return operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size, grad_precision)
@@ -261,19 +262,15 @@ def enable_int8_convrot(model: nn.Module, grad_precision: str | None = None) -> 
             continue
         if module.weight.dtype is not torch.int8:
             raise TypeError("INT8 ConvRot scale is attached to a non-INT8 Linear weight")
-        group_size = int(module.int8_convrot_groupsize.item())
+        group_size = int(cast(torch.Tensor, module.int8_convrot_groupsize).item())
         if module.weight.shape[1] % group_size:
             raise ValueError(
                 f"INT8 ConvRot group size {group_size} does not divide {module.weight.shape[1]} input features"
             )
-        module.int8_convrot_grad_precision = precision
-        module.forward = MethodType(_int8_linear_forward, module)
+        cast(Any, module).int8_convrot_grad_precision = precision
+        cast(Any, module).forward = MethodType(_int8_linear_forward, module)
         patched += 1
-    logger.info(
-        "Enabled H3 INT8 ConvRot runtime on %d Linear layers (backward precision: %s)",
-        patched,
-        precision,
-    )
+    logger.info("Enabled H3 INT8 ConvRot runtime on %d Linear layers (backward precision: %s)", patched, precision)
     if precision == "int8":
         logger.warning(
             "INT8 backward re-quantizes the gradient in every one of the %d layers; expect "

@@ -148,7 +148,7 @@ class WanImageEncoder(nn.Module):
         super().__init__()
         dims = [dim * u for u in (1, *tuple(dim_mult))]
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
-        layers = []
+        layers: list[nn.Module] = []
         for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             layers += [ResidualBlock(in_dim if j == 0 else out_dim, out_dim) for j in range(num_res_blocks)]
             if i != len(dim_mult) - 1:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+from typing import cast
 
 import torch
 from torch import nn
@@ -150,7 +151,7 @@ class Krea2LoRANetwork(nn.Module):
 
     def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         out = {}
-        for safe, layer in self.lora_layers.items():
+        for safe, layer in cast("dict[str, LoRALayer]", self.lora_layers).items():
             key = f"{self.prefix}{self.name_map[safe]}"
             down = layer.lora_down.weight.detach().cpu()
             up = layer.lora_up.weight.detach().cpu()

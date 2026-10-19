@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import torch
 from torch import nn
@@ -81,7 +82,7 @@ class SupraLoRANetwork(nn.Module):
         def forward(x, _orig=original_forward, _lora=lora):
             return _orig(x) + _lora(x)
 
-        module.forward = forward
+        module.forward = forward  # type: ignore[method-assign]  # monkeypatching the instance forward is the point; the stub types forward as a method
 
     def set_lora_dtype(self, device: torch.device, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)
@@ -91,7 +92,7 @@ class SupraLoRANetwork(nn.Module):
 
     def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         state = {}
-        for safe_name, layer in self.lora_layers.items():
+        for safe_name, layer in cast("dict[str, SupraLoRALayer]", self.lora_layers).items():
             name = f"{self.prefix}{self.name_map[safe_name]}"
 
             def _store(tensor: torch.Tensor) -> torch.Tensor:
@@ -109,7 +110,7 @@ class SupraLoRANetwork(nn.Module):
         tensors = load_file(str(path), device="cpu")
         missing = []
         loaded = 0
-        for safe_name, layer in self.lora_layers.items():
+        for safe_name, layer in cast("dict[str, SupraLoRALayer]", self.lora_layers).items():
             name = f"{self.prefix}{self.name_map[safe_name]}"
             down_key = f"{name}.lora_A.weight"
             up_key = f"{name}.lora_B.weight"

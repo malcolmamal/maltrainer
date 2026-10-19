@@ -6,7 +6,7 @@ from pathlib import Path
 
 import torch
 from safetensors.torch import load_file
-from transformers import T5Config, T5EncoderModel, T5TokenizerFast
+from transformers import T5Config, T5EncoderModel, T5TokenizerFast  # type: ignore[attr-defined]  # lazy alias
 
 from maltrainer.models.supra2_img.model import MAX_CTX_LEN
 
@@ -47,7 +47,7 @@ def load_flan_t5(
     unexpected = [key for key in incompat.unexpected_keys if not key.startswith("decoder.") and key != "lm_head.weight"]
     if missing or unexpected:
         raise RuntimeError(f"Flan-T5 load mismatch missing={missing} unexpected={unexpected}")
-    model.to(device=device)
+    model.to(device=device)  # type: ignore[call-arg]  # transformers' wrapped .to breaks the stub
     model.requires_grad_(False)
     model.eval()
     return FlanT5Encoder(model, tokenizer, ctx_len=ctx_len)

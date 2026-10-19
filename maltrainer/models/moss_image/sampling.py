@@ -77,7 +77,7 @@ def sample(
     x = initial_noise(seed, height, width).to(device)
     pos = (context if context.dim() == 3 else context[None]).to(device)
     use_cfg = cfg != 1.0 and negative is not None
-    neg = (negative if negative.dim() == 3 else negative[None]).to(device) if use_cfg else None
+    neg = (negative if negative.dim() == 3 else negative[None]).to(device) if use_cfg and negative is not None else None
     sigmas = schedule(steps, shift)
     total = len(sigmas) - 1
     for i in range(total):

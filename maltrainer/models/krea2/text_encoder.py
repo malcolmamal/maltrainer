@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import torch
 from accelerate import init_empty_weights
@@ -81,7 +82,7 @@ def _text_key(key: str) -> str | None:
 
 
 class Krea2TextEncoder(nn.Module):
-    def __init__(self, model: nn.Module, tokenizer):
+    def __init__(self, model: Any, tokenizer):
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
@@ -133,14 +134,14 @@ def load_krea2_text_encoder(
     assets = Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS
     tokenizer = AutoTokenizer.from_pretrained(str(assets), trust_remote_code=True)
 
-    config = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
-    for name, value in QWEN3VL_4B_TEXT.items():
-        setattr(config, name, value)
+    config: Any = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
+    for name, setting in QWEN3VL_4B_TEXT.items():
+        setattr(config, name, setting)
     config.num_hidden_layers = TAP_LAYERS[-1]  # 35: the deepest tap is the input to layer 35
     config.use_cache = False
 
     with init_empty_weights(include_buffers=False):
-        model = Qwen3VLTextModel(config)
+        model: Any = Qwen3VLTextModel(config)
     model.norm = nn.Identity()
 
     tensors, layers = read_comfy_checkpoint(path)

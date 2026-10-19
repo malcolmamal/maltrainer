@@ -44,7 +44,9 @@ def run_menu(
     every = previews.every
     rows = {label: previews.rows.get(label, True) for label in row_labels}
     enabled = set(previews.enabled_prompts)
-    items = [("every", None)] + [("row", label) for label in row_labels] + [("prompt", p) for p in previews.prompts]
+    items: list[tuple[str, str]] = (
+        [("every", "")] + [("row", label) for label in row_labels] + [("prompt", p) for p in previews.prompts]
+    )
     cursor = 0
     drawn = 0
     if os.name == "nt":

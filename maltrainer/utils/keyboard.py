@@ -21,6 +21,7 @@ import os
 import sys
 import time
 from collections.abc import Callable
+from importlib import import_module
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class KeyCommands:
         self.menu = menu
         self.gallery = gallery
         self.keys = set(keys) | ({MENU} if menu is not None else set()) | ({GALLERY} if gallery is not None else set())
-        self._restore = None
+        self._restore: Callable[[], None] | None = None
         self.paused_seconds = 0.0  # time spent paused since take_paused_seconds() last read it
         try:
             self.enabled = sys.stdin is not None and sys.stdin.isatty()
@@ -56,9 +57,8 @@ class KeyCommands:
             self.enabled = False
         if self.enabled and os.name != "nt":
             try:
-                import termios
-                import tty
-
+                termios = import_module("termios")  # by name: the stubs omit termios on Windows
+                tty = import_module("tty")
                 fd = sys.stdin.fileno()
                 saved = termios.tcgetattr(fd)
                 tty.setcbreak(fd)
@@ -109,7 +109,7 @@ class KeyCommands:
         seconds, self.paused_seconds = self.paused_seconds, 0.0
         return seconds
 
-    def _save_keys(self, pressed: list[str], step: int, save: Callable[[int], None]) -> bool:
+    def _save_keys(self, pressed: list[str], step: int, save: Callable[[int], bool | None]) -> bool:
         """``s`` / ``q`` among ``pressed``: at most one save, so ``s`` then ``q`` does not write the
         same step twice. True when the run should stop."""
         if SAVE not in pressed and QUIT not in pressed:
@@ -138,7 +138,7 @@ class KeyCommands:
                 if count_time:
                     self.paused_seconds += time.time() - started
 
-    def _pause(self, step: int, save: Callable[[int], None]) -> bool:
+    def _pause(self, step: int, save: Callable[[int], bool | None]) -> bool:
         """Wait at this step until ``p`` again; True if ``q`` (with a successful save) ends the run."""
         logger.info(
             "Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s%s",
@@ -162,7 +162,7 @@ class KeyCommands:
         finally:
             self.paused_seconds += time.time() - started
 
-    def handle(self, step: int, save: Callable[[int], None]) -> bool:
+    def handle(self, step: int, save: Callable[[int], bool | None]) -> bool:
         """Act on pending keys at a step boundary; True when the run should stop."""
         pressed = self.poll()
         if not pressed:

@@ -27,6 +27,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from types import MethodType
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
@@ -130,7 +131,7 @@ class RMSNormGated(RMSNorm):
     def __init__(self, dim: int, eps: float):
         super().__init__(dim, eps, add=False)
 
-    def forward(self, x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:  # type: ignore[override]  # gated variant: second arg by design
         return super().forward(x) * F.silu(gate.to(x.dtype))
 
 
@@ -321,7 +322,7 @@ class Qwen35TextModel(nn.Module):
     def __init__(self, config: Qwen35TextConfig):
         super().__init__()
         self.config = config
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_tokens: nn.Module = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps, add=True)
         self.compute_dtype = torch.float32
@@ -338,7 +339,7 @@ class Qwen35TextModel(nn.Module):
         if isinstance(self.embed_tokens, nn.Embedding):
             x = F.embedding(input_ids, self.embed_tokens.weight).to(self.compute_dtype)
         else:
-            self.embed_tokens.out_dtype = self.compute_dtype
+            cast(Any, self.embed_tokens).out_dtype = self.compute_dtype
             x = self.embed_tokens(input_ids)
         cos, sin = self.rope(input_ids.shape[1], input_ids.device)
         for layer in self.layers:
@@ -405,11 +406,7 @@ def load_moss_image_text_encoder(
         raw, _ = load_comfy_int8_convrot_state_dict(str(path), device=torch.device("cpu"))
     else:
         raw = load_file(str(path))
-    state = {}
-    for key, value in raw.items():
-        target = _text_key(key)
-        if target is not None:
-            state[target] = value
+    state = {target: value for key, value in raw.items() if (target := _text_key(key)) is not None}
     del raw
     config = Qwen35TextConfig.from_state_dict(state)
 
@@ -422,7 +419,7 @@ def load_moss_image_text_encoder(
             config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item())
         )
         embed.weight.data.copy_(state.pop("embed_tokens.weight"))
-        embed.scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
+        cast(Any, embed).scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
         state.pop("embed_tokens.int8_convrot_groupsize")
         model.embed_tokens = embed
     if quantized:
@@ -441,7 +438,7 @@ def load_moss_image_text_encoder(
 
     for module in model.modules():
         if isinstance(module, nn.Linear) and not hasattr(module, "scale_weight"):
-            module.forward = MethodType(_upcast_linear_forward, module)
+            cast(Any, module).forward = MethodType(_upcast_linear_forward, module)
     for parameter in model.parameters():
         if parameter.is_floating_point():
             parameter.data = parameter.data.to(dtype)

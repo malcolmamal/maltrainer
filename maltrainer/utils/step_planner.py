@@ -48,10 +48,10 @@ def folder_counts(root: str | Path, kinds: Sequence[str] = ("image",)) -> list[t
     root = Path(root)
     if not root.is_dir():
         return []
-    kinds = set(kinds)
+    wanted = set(kinds)
     out = []
     for folder, _, files in walk_visible(root):
-        n = sum(1 for name in files if _media_kind(Path(folder) / name) in kinds)
+        n = sum(1 for name in files if _media_kind(Path(folder) / name) in wanted)
         if n:
             out.append((Path(os.path.relpath(folder, root)).as_posix(), n))
     return sorted(out)

@@ -3,6 +3,8 @@ LoRA (Low-Rank Adaptation) implementation for Z-Image transformers.
 """
 
 import logging
+from collections.abc import Mapping
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -63,7 +65,7 @@ class LoRANetwork(nn.Module):
         self.prefix = ""  # Can be set to "diffusion_model." for some loaders
 
         self.lora_layers = nn.ModuleDict()
-        self.name_map = {}  # Map safe_name to original dot_name
+        self.name_map: dict[str, str] = {}  # Map safe_name to original dot_name
         self._inject_lora()
 
     def _inject_lora(self):
@@ -94,6 +96,7 @@ class LoRANetwork(nn.Module):
         """Get LoRA state dict for saving in Kohya/AI-Toolkit format."""
         state_dict = {}
         for safe_name, lora_layer in self.lora_layers.items():
+            lora_layer = cast(LoRALayer, lora_layer)
             name = self.name_map[safe_name]
             full_name = f"{self.prefix}{name}"
             # Map lora_down -> lora_A, lora_up -> lora_B
@@ -102,11 +105,12 @@ class LoRANetwork(nn.Module):
             state_dict[f"{full_name}.alpha"] = torch.tensor(lora_layer.alpha)
         return state_dict
 
-    def load_state_dict(self, state_dict: dict):
+    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False):  # noqa: ARG002 - nn.Module's signature
         """Load LoRA weights from a state dict: kohya's lora_down / lora_up names or the lora_A /
         lora_B ones get_state_dict writes, by dot or safe name, with or without a prefix."""
         missing = []
         for safe_name, lora_layer in self.lora_layers.items():
+            lora_layer = cast(LoRALayer, lora_layer)
             keys = _layer_keys(state_dict, (self.name_map[safe_name], safe_name))
             if keys is None:
                 missing.append(self.name_map[safe_name])
@@ -130,7 +134,7 @@ class LoRANetwork(nn.Module):
 LORA_SUFFIXES = ((".lora_down.weight", ".lora_up.weight"), (".lora_A.weight", ".lora_B.weight"))
 
 
-def _layer_keys(state_dict: dict, names: tuple) -> tuple | None:
+def _layer_keys(state_dict: Mapping[str, Any], names: tuple) -> tuple | None:
     """(down, up, alpha) keys of the first of ``names`` in ``state_dict``: an exact key first, then
     one behind a prefix ending in "." or "_" ("diffusion_model.", "lora_unet_")."""
     for down, up in LORA_SUFFIXES:

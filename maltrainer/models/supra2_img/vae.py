@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import torch
 from diffusers import AutoencoderKL
@@ -30,5 +31,5 @@ def load_sd_vae(
 def encode_latents(vae: AutoencoderKL, pixels_01: torch.Tensor) -> torch.Tensor:
     """Encode RGB pixels in [0, 1] to the scaled latent the DiT was trained on."""
     pixels = pixels_01 * 2.0 - 1.0
-    posterior = vae.encode(pixels).latent_dist
+    posterior = cast(Any, vae).encode(pixels).latent_dist
     return posterior.mode() * VAE_SCALE

@@ -4,7 +4,7 @@ Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / F
 
 import itertools
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import torch
 
@@ -54,7 +54,8 @@ class Automagic3(torch.optim.Optimizer):
             "polarity_history": max(2, min(64, int(polarity_history))),
         }
         self.fused = fused  # set before super().__init__, which calls add_param_group per group
-        self._built, self._hook_handles = [], []
+        self._built: list[dict[str, Any]] = []
+        self._hook_handles: list[Any] = []
         super().__init__(params, defaults)
 
         # Multiplies every update's step size (not the learned rates): regularisation images train
@@ -65,7 +66,7 @@ class Automagic3(torch.optim.Optimizer):
         # (they are zeroed before the update, so without this count they would pass unseen).
         self._signal_sum: dict = {}
         self._signal_steps: dict = {}
-        self._nonfinite = None
+        self._nonfinite: torch.Tensor | None = None
 
         total = sum(p.numel() for g in self.param_groups for p in g["params"])
         logging.getLogger(__name__).info("Total training parameters: %s", f"{total:,}")
@@ -178,7 +179,7 @@ class Automagic3(torch.optim.Optimizer):
             dst.copy_(cls._stochastic_round(src_fp32, dst.dtype))
 
     def _make_accum_hook(self):
-        def _hook(p: torch.Tensor):
+        def _hook(p: Any):  # Any: _accum_grad is an attribute set on the parameter
             if p.grad is None:
                 return
             if hasattr(p, "_accum_grad"):
@@ -194,9 +195,7 @@ class Automagic3(torch.optim.Optimizer):
         state = self.state[p]
         state["step"] = 0
         state["lr"] = torch.tensor(
-            min(max(float(group["lr"]), group["min_lr"]), group["max_lr"]),
-            dtype=torch.float32,
-            device=p.device,
+            min(max(float(group["lr"]), group["min_lr"]), group["max_lr"]), dtype=torch.float32, device=p.device
         )
         H = group["polarity_history"]
         width = (p.numel() + 7) // 8

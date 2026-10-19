@@ -49,7 +49,8 @@ def _to_module_names(state_dict: dict[str, torch.Tensor]) -> tuple[dict[str, tor
     - ``<block>.comfy_attention.config``: a JSON hint naming the attention kernel ComfyUI's
       inference may use. Training runs plain SDPA, so it is dropped and only reported.
     """
-    out, attention = {}, {}
+    out: dict[str, torch.Tensor] = {}
+    attention: dict[str, int] = {}
     for key, value in state_dict.items():
         if key == "rope.bands":
             continue

@@ -11,7 +11,8 @@ weight (comfy/lora.py).
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import cast
 
 import torch
 from torch import nn
@@ -146,7 +147,7 @@ class MOSSImageLoRANetwork(nn.Module):
         return layer
 
     @staticmethod
-    def _wrap(module: nn.Module, loras: list[nn.Module], concat: bool = False) -> None:
+    def _wrap(module: nn.Module, loras: Sequence[nn.Module], concat: bool = False) -> None:
         original = module.forward
 
         def forward(x, _orig=original, _loras=loras):
@@ -172,7 +173,8 @@ class MOSSImageLoRANetwork(nn.Module):
 
     def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         out = {}
-        for safe, layer in self.lora_layers.items():
+        for safe, module in self.lora_layers.items():
+            layer = cast(LoRALayer, module)
             key = f"{self.prefix}{self.name_map[safe]}"
             down = layer.lora_down.weight.detach().cpu()
             up = layer.lora_up.weight.detach().cpu()

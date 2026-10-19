@@ -22,6 +22,7 @@ from __future__ import annotations
 import gc
 import logging
 from collections.abc import Callable, Sequence
+from typing import Any
 
 import torch
 from torch import nn
@@ -77,8 +78,7 @@ class WindowRotator:
         make_optimizer: Callable[[list[nn.Parameter], str], torch.optim.Optimizer],
         blocks: str = "blocks",
     ):
-        self.model = model
-        self.master = master
+        self.model, self.master = model, master
         self.device = torch.device(device)
         self.compute_dtype = compute_dtype
         self.make_optimizer = make_optimizer
@@ -102,7 +102,7 @@ class WindowRotator:
                 "%d block Linears are in no finetune window and stay frozen, e.g. %s", len(untrained), untrained[:3]
             )
         self.current: int | None = None
-        self.optimizer: torch.optim.Optimizer | None = None
+        self.optimizer: Any = None  # the active window's torch Optimizer
         self.optimizer_states: dict[int, dict] = {}  # frozen windows' optimizer state, on the CPU
 
     @property
@@ -131,7 +131,7 @@ class WindowRotator:
         name, keys = self.windows[index]
         params: list[nn.Parameter] = []
         for key in keys:
-            frozen = self.model.get_submodule(key[: -len(".weight")])
+            frozen: Any = self.model.get_submodule(key[: -len(".weight")])
             linear = nn.Linear(frozen.in_features, frozen.out_features, bias=False, device="meta")
             linear.weight = nn.Parameter(self.master[key].to(self.device, self.compute_dtype), requires_grad=True)
             if getattr(frozen, "bias", None) is not None:
@@ -157,7 +157,7 @@ class WindowRotator:
         _remove_hooks(self.optimizer)
         self.optimizer = None
         for key in keys:
-            linear = self.model.get_submodule(key[: -len(".weight")])
+            linear: Any = self.model.get_submodule(key[: -len(".weight")])
             weight = linear.weight.detach()
             linear.weight.grad = None
             self.master[key] = weight.to("cpu", torch.bfloat16, copy=True)  # before the lossy fp8 encode
@@ -181,7 +181,7 @@ class WindowRotator:
     def weight(self, key: str) -> torch.Tensor:
         """A rotating weight as trained so far, bf16 on the CPU (the active window read live)."""
         if self.current is not None and key in self.windows[self.current][1]:
-            return self.model.get_submodule(key[: -len(".weight")]).weight.detach().to("cpu", torch.bfloat16)
+            return self.model.get_parameter(key).detach().to("cpu", torch.bfloat16)
         return self.master[key]
 
     def keys(self) -> list[str]:

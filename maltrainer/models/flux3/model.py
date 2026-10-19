@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
+from typing import cast
 
 import torch
 import torch.nn.functional as F
@@ -257,7 +258,7 @@ class Flux3Transformer(nn.Module):
     def enable_gradient_checkpointing(self) -> None:
         self.gradient_checkpointing = True
 
-    def _run(self, block: Block, x, shift, scale, gate, pe):
+    def _run(self, block: nn.Module, x, shift, scale, gate, pe):
         if self.gradient_checkpointing and torch.is_grad_enabled():
             return checkpoint(block, x, shift, scale, gate, pe, use_reentrant=False)
         return block(x, shift, scale, gate, pe)
@@ -288,15 +289,14 @@ class Flux3Transformer(nn.Module):
         pe = rope_from_ids(torch.cat([img_ids, text_ids(txt.shape[1], device)]))
         n_img = H * W
         shift, scale, gate = self.early_stream_modulations["image"](vec_img)
-        for block in self.content_mode_blocks["image"]:
+        for block in cast("nn.ModuleList", self.content_mode_blocks["image"]):
             img = self._run(block, img, shift, scale, gate, pe[:, :, :n_img])
 
         # joint [image | text]: every row modulated by its own mode
         joint = torch.cat([img, txt], dim=1)
         img_mod = self.single_stream_modulations["image"](vec_img)
         txt_mod = self.single_stream_modulations["txt"](vec_zero)
-        n_txt = txt.shape[1]
-        pairs = zip(img_mod, txt_mod, strict=False)
+        n_txt, pairs = txt.shape[1], zip(img_mod, txt_mod, strict=False)
         shift, scale, gate = (torch.cat([i.expand(B, n_img, -1), t.expand(B, n_txt, -1)], dim=1) for i, t in pairs)
         for block in self.single_blocks:
             joint = self._run(block, joint, shift, scale, gate, pe)

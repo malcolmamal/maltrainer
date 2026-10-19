@@ -11,6 +11,7 @@ the fused weight (comfy/lora.py).
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import torch
 from torch import nn
@@ -106,7 +107,7 @@ class Flux3LoRANetwork(nn.Module):
                 if not selected(parts[0], targets):
                     continue
                 third = module.out_features // 3
-                layers = [self._add(part, module.in_features, third, rank, alpha) for part in parts]
+                layers: list[nn.Module] = [self._add(part, module.in_features, third, rank, alpha) for part in parts]
                 self._wrap(module, layers, concat=True)
             elif selected(name, targets):
                 self._wrap(module, [self._add(name, module.in_features, module.out_features, rank, alpha)])
@@ -159,7 +160,7 @@ class Flux3LoRANetwork(nn.Module):
 
     def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         out = {}
-        for safe, layer in self.lora_layers.items():
+        for safe, layer in cast("dict[str, LoRALayer]", self.lora_layers).items():
             key = f"{self.prefix}{self.name_map[safe]}"
             down = layer.lora_down.weight.detach().cpu()
             up = layer.lora_up.weight.detach().cpu()

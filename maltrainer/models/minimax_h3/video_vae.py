@@ -261,6 +261,9 @@ class MiniMaxH3VideoMidBlock3d(nn.Module):
 class MiniMaxH3VideoEncoderModel(nn.Module):
     """MiniMax H3 Video VAE Encoder."""
 
+    latents_mean: torch.Tensor
+    latents_std: torch.Tensor
+
     def __init__(
         self,
         in_channels: int = 3,
@@ -320,9 +323,7 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
         """Pixels shape: [B, 3, T, H, W] -> moments: [B, 48, T_latent, H//16, W//16]"""
         pixel_mean = pixels.new_tensor((0.485, 0.456, 0.406), dtype=torch.float32).view(1, 3, 1, 1, 1)
         pixel_std = pixels.new_tensor((0.229, 0.224, 0.225), dtype=torch.float32).view(1, 3, 1, 1, 1)
-        hidden_states = (pixels.float() - pixel_mean) / pixel_std
-        hidden_states = hidden_states.to(dtype=self.conv_in.weight.dtype)
-
+        hidden_states = ((pixels.float() - pixel_mean) / pixel_std).to(dtype=self.conv_in.weight.dtype)
         hidden_states = self.conv_in(hidden_states)
         for block in self.down_blocks:
             hidden_states = block(hidden_states)
@@ -339,7 +340,6 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
         """Encode RGB image tensor [B, 3, H, W] in [0, 1] to normalized latents [B, 24, 1, H//16, W//16]."""
         pixels = images.unsqueeze(2) if images.ndim == 4 else images  # [B, 3, 1, H, W]
-
         return self._normalize(self.encode_moments(pixels))
 
     def encode_video(self, frames: torch.Tensor) -> torch.Tensor:

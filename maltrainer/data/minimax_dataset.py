@@ -94,7 +94,7 @@ def resize_and_crop(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     resized_w = max(target_w, round(image.width * scale))
     resized_h = max(target_h, round(image.height * scale))
     if (resized_w, resized_h) != image.size:
-        image = image.resize((resized_w, resized_h), Image.LANCZOS)
+        image = image.resize((resized_w, resized_h), Image.Resampling.LANCZOS)
     left = (resized_w - target_w) // 2
     top = (resized_h - target_h) // 2
     return image.crop((left, top, left + target_w, top + target_h))
@@ -146,8 +146,8 @@ def _prefix_for(folder: Path, data_root: Path, templates: dict[Path, str | None]
         if current not in templates:
             path = current / PREFIX_FILE
             templates[current] = _read_text(path, one_line=True) if path.exists() else None
-        if templates[current] is not None:
-            return templates[current].replace("[folder]", folder.name)
+        if (template := templates[current]) is not None:
+            return template.replace("[folder]", folder.name)
         if current in (stop, current.parent):
             return ""
         current = current.parent
@@ -231,7 +231,7 @@ def load_image(path: Path, resolution: int, aspect_mode: str = "bucket") -> torc
     image = Image.open(path).convert("RGB")
     if aspect_mode == "stretch":
         side = align_to_32(resolution)
-        image = image.resize((side, side), Image.BICUBIC)
+        image = image.resize((side, side), Image.Resampling.BICUBIC)
     else:
         image = resize_and_crop(image, bucket_size(image.width, image.height, resolution))
     array = np.asarray(image, dtype=np.uint8)

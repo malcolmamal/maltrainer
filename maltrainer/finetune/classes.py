@@ -18,7 +18,7 @@ def class_caption(caption: str, classes: dict[str, str]) -> str | None:
         return None
     alternatives = "|".join(f"(?P<t{i}>{re.escape(trigger)})" for i, trigger in enumerate(triggers))
     pattern = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])", re.IGNORECASE)
-    out, count = pattern.subn(lambda match: classes[triggers[int(match.lastgroup[1:])]], caption)
+    out, count = pattern.subn(lambda match: classes[triggers[int((match.lastgroup or "t0")[1:])]], caption)
     return out if count else None
 
 

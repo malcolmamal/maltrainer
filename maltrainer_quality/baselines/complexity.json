@@ -7,7 +7,7 @@
   "maltrainer/models/minimax_h3/comfy_quant.py::load_comfy_quantized_state_dict": 17,
   "maltrainer/models/minimax_h3/lora.py::_inject_lora": 11,
   "maltrainer/models/minimax_h3/lora.py::load_assistant_adapter": 18,
-  "maltrainer/models/moss_image/text_encoder.py::load_moss_image_text_encoder": 13,
+  "maltrainer/models/moss_image/text_encoder.py::load_moss_image_text_encoder": 11,
   "maltrainer/models/qwen_image_2_1/lora.py::load_assistant_adapter": 11,
   "maltrainer/optimizers/automagic3.py::_update_param": 15,
   "maltrainer/utils/preview_menu.py::run_menu": 27,

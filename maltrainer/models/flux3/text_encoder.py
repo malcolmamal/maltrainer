@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
+from typing import Any, cast
 
 import torch
 from accelerate import init_empty_weights
@@ -76,7 +77,7 @@ def _text_key(key: str) -> str | None:
 
 
 class Flux3TextEncoder(nn.Module):
-    def __init__(self, model: nn.Module, tokenizer):
+    def __init__(self, model: Any, tokenizer):
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
@@ -130,9 +131,9 @@ def load_flux3_text_encoder(
         str(Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS), trust_remote_code=True
     )
 
-    config = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
-    for name, value in QWEN3VL_4B_TEXT.items():
-        setattr(config, name, value)
+    config: Any = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
+    for name, setting in QWEN3VL_4B_TEXT.items():
+        setattr(config, name, setting)
     config.num_hidden_layers = TAP_LAYERS[-1]
     config.use_cache = False
 
@@ -151,7 +152,7 @@ def load_flux3_text_encoder(
         state[target] = value
 
     with init_empty_weights(include_buffers=False):
-        model = Qwen3VLTextModel(config)
+        model: Any = Qwen3VLTextModel(config)
     model.norm = nn.Identity()
 
     if quantized and "embed_tokens.int8_convrot_groupsize" in state:
@@ -160,7 +161,7 @@ def load_flux3_text_encoder(
             config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item())
         )
         embed.weight.data.copy_(state.pop("embed_tokens.weight"))
-        embed.scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
+        cast("torch.Tensor", embed.scale_weight).data.copy_(state.pop("embed_tokens.scale_weight"))
         state.pop("embed_tokens.int8_convrot_groupsize")
         model.embed_tokens = embed
     if quantized:

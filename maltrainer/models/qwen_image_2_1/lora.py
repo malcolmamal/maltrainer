@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import torch
 from torch import nn
@@ -13,14 +14,7 @@ from torch import nn
 logger = logging.getLogger(__name__)
 
 # Default target linear modules in Qwen-Image-2.1 Transformer blocks
-DEFAULT_QWEN_IMAGE_2_1_TARGET_MODULES = [
-    "to_q",
-    "to_k",
-    "to_v",
-    "to_out.0",
-    "gate_up",
-    "img_mlp.out",
-]
+DEFAULT_QWEN_IMAGE_2_1_TARGET_MODULES = ["to_q", "to_k", "to_v", "to_out.0", "gate_up", "img_mlp.out"]
 
 
 class QwenImage21LoRALayer(nn.Module):
@@ -113,7 +107,7 @@ class QwenImage21LoRANetwork(nn.Module):
                 return base + delta
             return (base + delta).to(base.dtype)
 
-        module.forward = forward
+        module.forward = forward  # type: ignore[method-assign]  # monkeypatching the instance forward is the point; the stub types forward as a method
 
     def load_assistant_adapter(
         self,
@@ -206,7 +200,7 @@ class QwenImage21LoRANetwork(nn.Module):
         and kohya format (.lora_down / .lora_up).
         """
         state_dict = {}
-        for safe_name, lora_layer in self.lora_layers.items():
+        for safe_name, lora_layer in cast("dict[str, QwenImage21LoRALayer]", self.lora_layers).items():
             name = self.name_map[safe_name]
             full_name = f"{self.prefix}{name}"
 

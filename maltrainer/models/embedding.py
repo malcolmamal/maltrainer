@@ -2,7 +2,8 @@
 Textual Inversion embedding implementation for Z-Image.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
+from typing import Any
 
 import torch
 from torch import nn
@@ -14,7 +15,7 @@ class TextualInversionEmbedding(nn.Module):
     def __init__(
         self,
         tokenizer,
-        text_encoder: nn.Module,
+        text_encoder: Any,  # a transformers model: nn.Module hides its methods from mypy
         trigger_token: str = "sks",
         num_vectors: int = 1,
         init_text: str = "a photo",
@@ -93,7 +94,7 @@ class TextualInversionEmbedding(nn.Module):
             "embedding": embeddings,
         }
 
-    def load_state_dict(self, state_dict: dict):
+    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False):  # noqa: ARG002 - nn.Module's signature
         """Load embeddings from state dict."""
         embeddings = state_dict["embedding"]
         self.set_embeddings(embeddings)

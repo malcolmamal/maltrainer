@@ -57,7 +57,7 @@ class TemporalTimesteps(nn.Module):
 
     def forward(self, timestep: torch.Tensor) -> torch.Tensor:
         timestep = self.time_factor * timestep.float()
-        args = timestep[:, None] * self.freqs.to(timestep.device)[None]
+        args = timestep[:, None] * self.get_buffer("freqs").to(timestep.device)[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         return embedding.to(timestep.dtype)
 
