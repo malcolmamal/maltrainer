@@ -21,7 +21,7 @@
   "maltrainer/models/qwen_image_2_1/text_encoder.py": 206,
   "maltrainer/models/qwen_image_2_1/vae.py": 608,
   "maltrainer/models/supra2_img/model.py": 234,
-  "maltrainer/optimizers/automagic3.py": 441,
+  "maltrainer/optimizers/automagic3.py": 440,
   "maltrainer/utils/previews.py": 245,
   "scripts/inspect_lora_metadata.py": 250,
   "scripts/merge_loras.py": 304,

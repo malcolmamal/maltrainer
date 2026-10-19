@@ -14,7 +14,7 @@ include = ["*.py", "*.pyi", "**/pyproject.toml"]
 [tool.ruff.lint]
 # ruff's defaults plus import order. More families are added one at a time, each with its
 # fixes, so the gate passes on every commit.
-select = ["E4", "E501", "PTH", "BLE", "B", "RUF", "N", "UP", "PL", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
+select = ["E4", "E501", "PTH", "BLE", "B", "RUF", "N", "UP", "PL", "T20", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
 ignore = [
     # A named result before `return` documents what a model step produces.
     "RET504",
@@ -41,8 +41,15 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # A package's __init__ imports what it re-exports.
 "__init__.py" = ["F401"]
-# ComfyUI custom nodes: the folder name and INPUT_TYPES / IS_CHANGED(self) are ComfyUI's own API.
-"comfyui-zimage-embedding/**" = ["N999", "N802", "N804"]
+# Command-line programs report to the console with print. The library (maltrainer/) logs.
+"scripts/**" = ["T201"]
+"maltrainer_quality/**" = ["T201"]
+"train_*.py" = ["T201"]
+"compare_loras.py" = ["T201"]
+"check_weights.py" = ["T201"]
+"inspect_lora.py" = ["T201"]
+# ComfyUI custom nodes: the folder name and INPUT_TYPES / IS_CHANGED(self) are ComfyUI's own API; prints go to its console.
+"comfyui-zimage-embedding/**" = ["N999", "N802", "N804", "T201"]
 
 # The complexity gate (maltrainer_quality.complexity) runs C901 at this limit against its
 # baseline. C90 is not in `select`, so `ruff check` alone does not fail on the

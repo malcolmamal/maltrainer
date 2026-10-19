@@ -3,6 +3,7 @@ Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / F
 """
 
 import itertools
+import logging
 from typing import ClassVar
 
 import torch
@@ -41,7 +42,7 @@ class Automagic3(torch.optim.Optimizer):
         if min_lr > max_lr:
             raise ValueError(f"min_lr ({min_lr}) must be <= max_lr ({max_lr})")
         if lr > 1e-3:
-            print(f"Note: start lr {lr} is high; the controller will correct it (the pooled vote will walk it down).")
+            logging.getLogger(__name__).warning("start lr %s is high; the controller will correct it", lr)
         defaults = {
             "lr": lr,
             "min_lr": min_lr,
@@ -67,7 +68,7 @@ class Automagic3(torch.optim.Optimizer):
         self._nonfinite = None
 
         total = sum(p.numel() for g in self.param_groups for p in g["params"])
-        print(f"Total training parameters: {total:,}")
+        logging.getLogger(__name__).info("Total training parameters: %s", f"{total:,}")
 
     def add_param_group(self, param_group: dict) -> None:
         super().add_param_group(param_group)
@@ -96,9 +97,7 @@ class Automagic3(torch.optim.Optimizer):
     @staticmethod
     def _approx_sq_grad(row: torch.Tensor, col: torch.Tensor) -> torch.Tensor:
         # Adafactor's factored second moment.
-        r = (row / row.mean(dim=-1, keepdim=True)).rsqrt_().unsqueeze(-1)
-        c = col.unsqueeze(-2).rsqrt()
-        return torch.mul(r, c)
+        return torch.mul((row / row.mean(dim=-1, keepdim=True)).rsqrt_().unsqueeze(-1), col.unsqueeze(-2).rsqrt())
 
     @staticmethod
     def _sr_truncate(v_fp32: torch.Tensor, drop_bits: int) -> torch.Tensor:
