@@ -27,3 +27,4 @@ work/
 .coverage
 coverage.xml
 reports/
+.mypy_cache/

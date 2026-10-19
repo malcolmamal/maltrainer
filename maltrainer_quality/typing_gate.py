@@ -1,0 +1,76 @@
+"""Fail when mypy reports an error in a file the baseline does not list, or more than it lists.
+
+Typing is adopted file by file: the baseline maps each file that still has errors to how many, and
+that number may only go down (``--tighten`` lowers it and drops the files that came clean). Code
+written after the baseline was recorded is checked from the start. The configuration, including
+the reason for every ``ignore_missing_imports``, is in pyproject.toml.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import re
+import subprocess
+import sys
+from collections import Counter
+from collections.abc import Sequence
+from pathlib import Path
+
+from maltrainer_quality import ratchet
+
+TARGETS = ("maltrainer", "maltrainer_quality")
+BASELINE = Path("maltrainer_quality/baselines/types.json")
+ERROR = re.compile(r"^(?P<path>.+?):\d+(?::\d+)?: error: ")
+
+
+def mypy_output(root: Path) -> str:
+    if importlib.util.find_spec("mypy") is None:
+        raise RuntimeError(f"cannot run mypy: not installed for {sys.executable}")
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--no-pretty",
+            "--no-error-summary",
+            "--config-file",
+            "pyproject.toml",
+            *TARGETS,
+        ],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+    )
+    # 0: clean, 1: type errors. Anything else is mypy failing to run, which must not look like a clean tree.
+    if done.returncode not in (0, 1):
+        raise RuntimeError(f"mypy exited with {done.returncode}:\n{done.stdout.decode('utf-8', 'replace')}")
+    return done.stdout.decode("utf-8", "replace")
+
+
+def errors_per_file(output: str) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for line in output.splitlines():
+        matched = ERROR.match(line)
+        if matched is not None:
+            counts[Path(matched["path"]).as_posix()] += 1
+    return dict(sorted(counts.items()))
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=Path())
+    parser.add_argument("--tighten", action="store_true", help="lower loose baseline entries")
+    arguments = parser.parse_args(argv)
+    return ratchet.enforce(
+        errors_per_file(mypy_output(arguments.root)),
+        arguments.root / BASELINE,
+        tighten=arguments.tighten,
+        unit="type errors",
+        limit=0,
+        command="python -m maltrainer_quality.typing_gate",
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -78,6 +78,15 @@ testpaths = ["tests"]
 filterwarnings = ["error"]
 xfail_strict = true
 
+[tool.mypy]
+python_version = "3.10"
+# The first step is mypy's defaults: unannotated functions are not checked yet. The baseline in
+# maltrainer_quality/baselines/types.json lists the files that still have errors; see typing_gate.py.
+# accelerate, bitsandbytes, prodigyopt, safetensors' extras and similar ship no type information.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
 [tool.coverage.run]
 source = ["maltrainer", "maltrainer_quality"]
 branch = true

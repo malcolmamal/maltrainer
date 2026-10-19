@@ -339,8 +339,8 @@ python -m venv .venv
 .venv/Scripts/python -m maltrainer_quality      # or quality.bat / ./quality.sh, which pick .venv
 ```
 
-It runs lint and formatting (ruff), the complexity and file-length limits, the tests (pytest),
-and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can.
+It runs lint and formatting (ruff), the complexity and file-length limits, the type check (mypy),
+the tests (pytest), and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can.
 Every gate runs even after one fails; the failed ones are listed at the end. A tool that isn't
 installed in the interpreter you launched it with fails its gate.
 
@@ -352,6 +352,7 @@ entry:
 ```bash
 python -m maltrainer_quality.file_length --tighten
 python -m maltrainer_quality.complexity --tighten
+python -m maltrainer_quality.typing_gate --tighten
 ```
 
 `--tighten` only lowers entries or removes them. Never add an entry or raise one to make a change
