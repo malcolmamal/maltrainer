@@ -65,9 +65,13 @@ class FakeSpawner:
         self.stderr: list[bytes] = []
         self.returncode = 0
         self.hold = False
+        self.fail_first = 0  # how many of the next spawns raise, like a missing executable
 
     async def __call__(self, *args: str, **kwargs: Any) -> FakeProcess:
         self.calls.append((args, kwargs))
+        if self.fail_first > 0:
+            self.fail_first -= 1
+            raise FileNotFoundError(args[0])
         process = FakeProcess(self.stdout, self.stderr, self.returncode, self.hold)
         self.processes.append(process)
         return process

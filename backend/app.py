@@ -16,14 +16,24 @@ from typing import Any
 import yaml
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 
+from backend.schemas import (
+    DatasetInfo,
+    JobListResponse,
+    JobStatusResponse,
+    ModelInfo,
+    OptimizerInfo,
+    StartTrainRequest,
+    StartTrainResponse,
+    TrainPlan,
+)
 from maltrainer.data.walk import count_files, walk_visible
 
 DATASETS_ENV = "DATASETS_PATH"
 COMFYUI_MODELS_ENV = "COMFYUI_MODELS_PATH"
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
-PROGRESS_RE = re.compile(r"(?:Step:\s*)?(\d+)\s*/\s*(\d+)")
+# A step counter, not a date ("12/10/2025") or a path: no digit, "/" or "." touches either end.
+PROGRESS_RE = re.compile(r"(?:Step:\s*)?(?<![\d/.])(\d+)\s*/\s*(\d+)(?![\d/.])")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -250,98 +260,6 @@ MODELS: dict[str, ModelSpec] = {
 }
 
 
-class DatasetInfo(BaseModel):
-    name: str
-    path: str
-    image_count: int
-
-
-class OptimizerInfo(BaseModel):
-    name: str
-    label: str
-    default_lr: float
-    note: str
-
-
-class ModelInfo(BaseModel):
-    id: str
-    label: str
-    optimizers: list[OptimizerInfo]
-    default_optimizer: str
-    default_duration_mode: str
-    default_epochs: int
-    default_max_steps: int
-    native_max_steps: bool
-    sec_per_step: float
-    models_root: str | None
-    missing_files: list[str]
-    auto_steps: bool
-    target_epochs: int
-    min_auto_steps: int
-    max_auto_steps: int
-    resolution_note: str
-
-
-class StartTrainRequest(BaseModel):
-    dataset: str = Field(..., min_length=1)
-    model: str = "zimage"
-    optimizer: str | None = None
-    learning_rate: float | None = Field(None, gt=0)
-    duration_mode: str | None = Field(None, pattern="^(epochs|steps)$")
-    epochs: int | None = Field(None, ge=1, le=100000)
-    max_steps: int | None = Field(None, ge=1, le=10000000)
-    save_every: int | None = Field(None, ge=1)
-    trigger: str | None = None
-    dry_run: bool = False
-    dry_run_step_time: float = 0.025
-
-
-class TrainPlan(BaseModel):
-    model: str
-    dataset: str
-    optimizer: str
-    learning_rate: float
-    duration_mode: str
-    image_count: int
-    steps_per_epoch: int
-    epochs: int
-    total_steps: int
-    save_every: int
-    output_path: str
-    duration: str
-    auto_steps: bool
-    estimated_minutes: float | None
-    notes: list[str]
-    warnings: list[str]
-
-
-class StartTrainResponse(BaseModel):
-    job_id: str
-    dataset: str
-    output_path: str
-    config_path: str
-    command: list[str]
-
-
-class JobStatusResponse(BaseModel):
-    job_id: str
-    dataset: str
-    output_path: str
-    config_path: str
-    status: str
-    started_at: float
-    ended_at: float | None
-    exit_code: int | None
-    progress: dict[str, Any]
-    model: str = "zimage"
-    optimizer: str = ""
-    duration: str = ""
-
-
-class JobListResponse(BaseModel):
-    items: list[JobStatusResponse]
-
-
 @dataclass
 class TrainingJob:
     job_id: str
@@ -430,6 +348,8 @@ class TrainingJob:
             return
         self.reader_task = asyncio.create_task(self.start_readers())
         await self.process.wait()
+        # The last log lines come before the status that says the job is over.
+        await asyncio.wait({self.reader_task}, timeout=5)
         self.exit_code = self.process.returncode
         self.ended_at = time.time()
         self.status = "exited" if self.exit_code == 0 else "failed"
@@ -453,10 +373,11 @@ app = FastAPI(title="Maltrainer API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # The UI's own origin (it normally reaches us through its dev-server proxy, same origin): another
+    # web page open in the browser must not be able to start training here.
+    allow_origins=["http://localhost:3003", "http://127.0.0.1:3003"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 jobs: dict[str, TrainingJob] = {}
@@ -515,7 +436,7 @@ def resolve_model_files(spec: ModelSpec) -> tuple[dict[str, str], list[str]]:
 def load_template(spec: ModelSpec, dataset_name: str, optimizer: str | None = None) -> dict[str, Any]:
     template_path = Path(dict(spec.optimizer_templates).get(optimizer or "", spec.template))
     if not template_path.exists():
-        raise HTTPException(status_code=500, detail=f"Template not found: {spec.template}")
+        raise HTTPException(status_code=500, detail=f"Template not found: {template_path.as_posix()}")
     template_text = template_path.read_text(encoding="utf-8")
     template_text = template_text.replace("[person_to_train]", dataset_name)
     root = comfyui_models_root()
@@ -773,7 +694,13 @@ async def spawn_process(command: list[str]) -> asyncio.subprocess.Process:
 async def launch_job(job: TrainingJob) -> None:
     job.status = "running"
     job.started_at = time.time()
-    job.process = await spawn_process(job.command)
+    try:
+        job.process = await spawn_process(job.command)
+    except OSError:
+        logger.exception("Job %s could not start", job.job_id)
+        job.status, job.ended_at = "failed", time.time()
+        await job.broadcast({"type": "status", "status": "failed", "exit_code": None})
+        return
     logger.info("Job started: %s (%s)", job.job_id, job.dataset)
     job.monitor_task = asyncio.create_task(job.monitor())
 
@@ -788,7 +715,8 @@ async def launch_next_job() -> None:
             job = jobs.get(next_id)
             if job and job.status == "queued":
                 await launch_job(job)
-                return
+                if job.status == "running":
+                    return
 
 
 @app.get("/api/health")
@@ -803,7 +731,7 @@ async def list_datasets() -> list[DatasetInfo]:
         return []
     items: list[DatasetInfo] = []
     for entry in root.iterdir():
-        if entry.is_dir():
+        if entry.is_dir() and not entry.name.startswith("."):
             items.append(DatasetInfo(name=entry.name, path=str(entry), image_count=count_images(entry)))
     return sorted(items, key=lambda d: d.name.lower())
 
