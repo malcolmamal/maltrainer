@@ -12,9 +12,11 @@ src = [".", "scripts"]
 include = ["*.py", "*.pyi", "**/pyproject.toml"]
 
 [tool.ruff.lint]
-# ruff's defaults plus import order. More families are added one at a time, each with its
-# fixes, so the gate passes on every commit.
-select = ["E4", "E501", "PTH", "BLE", "B", "RUF", "N", "UP", "PL", "T20", "S", "E7", "E9", "F", "I", "W", "C4", "PIE", "ARG", "SIM", "RET", "ERA"]
+# Families, added one commit each so the gate passed on every commit. Every ignore below carries its
+# reason; the size rules (PLR0912, PLR0915) are covered by the complexity ratchet instead.
+select = [
+    "E", "W", "F", "I", "UP", "B", "C4", "PIE", "SIM", "RET", "ARG", "PTH", "BLE", "RUF", "N", "PL", "T20", "S", "ERA",
+]
 ignore = [
     # A named result before `return` documents what a model step produces.
     "RET504",
