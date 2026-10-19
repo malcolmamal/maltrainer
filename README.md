@@ -325,6 +325,7 @@ output/
 ## Documentation
 
 See `docs/` directory for detailed documentation:
+- [Finetuning walkthrough: setup, commands, troubleshooting](docs/finetune-tutorial.md)
 - [Qwen-Image 2.1 LoRA Training](docs/qwen-image-2.1-lora-training.md)
 - [Qwen-Image 2.1 Optimizer Benchmark: AdamW vs Prodigy vs Automagic3](docs/qwen-image-2.1-optimizer-benchmark.md)
 - [Textual Inversion and Z-Image Support](docs/textual-inversion-z-image.md)

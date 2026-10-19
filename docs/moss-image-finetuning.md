@@ -10,6 +10,9 @@ regularisation images and LoRA extraction. What is MOSS-Image's own (its default
 optimizer groups, checkpoint layout and fused q/k/v) is in
 `maltrainer/models/moss_image/finetune.py`.
 
+New to finetuning here? [finetune-tutorial.md](finetune-tutorial.md) walks through a run from
+install to the finished model, with every command and a troubleshooting table.
+
 ```bash
 python train_moss_image_finetune.py --config templates/moss_image_finetune_template.yaml
 python train_moss_image_finetune.py --config my_run.yaml --resume-from output/.../moss_image_ft_x_state
