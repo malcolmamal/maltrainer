@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
 from collections.abc import Callable
+from types import SimpleNamespace
 
 import pytest
 
 import train_krea2_lora
+from maltrainer.utils import keyboard
 
 from .fakes import ScriptedKeys, script_keys
 from .runs import run_lora
@@ -56,10 +59,17 @@ def test_q_saves_and_stops_without_a_final_file(
 
 
 def test_p_pauses_until_p_again_and_h_lists_the_keys(
-    workspace: Workspace, press: Callable[..., list[ScriptedKeys]], caplog: pytest.LogCaptureFixture
+    workspace: Workspace,
+    press: Callable[..., list[ScriptedKeys]],
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace.add_images(2)
     made = press([["p"], ["h", "p"]])
+    # The scripted pause lasts microseconds, and Windows' clock ticks every ~15 ms: a clock that moves on each
+    # reading makes the measured pause certain instead of depending on where the tick falls.
+    seconds = itertools.count(1000)
+    monkeypatch.setattr(keyboard, "time", SimpleNamespace(time=lambda: float(next(seconds)), sleep=lambda _s: None))
 
     with caplog.at_level(logging.INFO):
         run_lora(workspace.lora_config(train={"max_steps": 2}))
