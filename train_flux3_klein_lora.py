@@ -39,6 +39,7 @@ from maltrainer.models.flux3.loading import load_flux3_transformer
 from maltrainer.models.flux3.lora import Flux3LoRANetwork
 from maltrainer.models.flux3.text_encoder import load_flux3_text_encoder
 from maltrainer.models.flux3.vae import load_flux2_vae_encoder
+from maltrainer.optimizers.prodigy import build_prodigy
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
 from maltrainer.utils.logging_utils import setup_logging
@@ -237,27 +238,9 @@ class Flux3KleinLoRATrainer:
                 **kwargs,
             }
         elif name.startswith("prodigy"):
-            import inspect
-
-            from prodigyopt import Prodigy
-
-            requested = {
-                "lr": float(train_config.get("prodigy_lr", lr if lr >= 0.01 else 1.0)),
-                "betas": (float(train_config.get("adam_beta1", 0.9)), float(train_config.get("prodigy_beta2", 0.999))),
-                "beta3": train_config.get("prodigy_beta3"),
-                "weight_decay": weight_decay,
-                "eps": float(train_config.get("prodigy_eps", 1e-8)),
-                "d0": float(train_config.get("prodigy_d0", 1e-6)),
-                "d_coef": float(train_config.get("prodigy_d_coef", 1.0)),
-                "growth_rate": float(train_config.get("prodigy_growth_rate", float("inf"))),
-                "decouple": bool(train_config.get("prodigy_decouple", True)),
-                "use_bias_correction": bool(train_config.get("prodigy_use_bias_correction", False)),
-                "safeguard_warmup": bool(train_config.get("prodigy_safeguard_warmup", False)),
-                "slice_p": int(train_config.get("prodigy_slice_p", 1)),
-            }
-            supported = set(inspect.signature(Prodigy.__init__).parameters)
-            kwargs = {k: v for k, v in requested.items() if k in supported and v is not None}
-            self.optimizer = Prodigy(self.lora_network.trainable_parameters(), **kwargs)
+            self.optimizer, kwargs = build_prodigy(
+                self.lora_network.trainable_parameters(), train_config, lr, weight_decay
+            )
             self.run_metadata["optimizer_resolved"] = {"name": "prodigy", **kwargs}
         elif name in {"adamw8bit", "adam8bit"}:
             import bitsandbytes as bnb
@@ -477,6 +460,8 @@ class Flux3KleinLoRATrainer:
                 self.simulate()
                 return
             self.precache_dataset()
+            if not self.samples:
+                raise ValueError("No usable images: every file in the dataset failed to load")
             self.load_transformer_and_lora()
             self.setup_optimizer()
             self.train()

@@ -60,3 +60,15 @@ def test_the_real_prodigy_builds_from_a_config() -> None:
     assert type(optimizer).__name__ == "Prodigy"
     assert used["decouple"] is False and used["weight_decay"] == 0.01
     assert "beta3" not in used
+
+
+def test_a_setting_the_installed_release_lacks_is_logged_as_ignored(
+    fake_prodigy: type[FakeProdigy], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level("WARNING", logger="maltrainer.optimizers.prodigy"):
+        build_prodigy(_params(), {"prodigy_slice_p": 4, "prodigy_beta3": 0.9}, lr=1e-4, weight_decay=0.0)
+
+    assert "does not accept" in caplog.text
+    assert "slice_p" in caplog.text
+    assert "beta3" not in caplog.text
+    assert fake_prodigy.built["lr"] == 1.0

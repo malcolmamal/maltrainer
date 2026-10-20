@@ -83,3 +83,9 @@ def test_the_resolved_shift_is_recorded_and_logged_once_for_the_first_step(
     expected = round(krea2_shift(4), 6)
     assert trainer.run_metadata["resolved_sigma_shift"] == expected
     assert caplog.text.count("Timestep schedule: krea2_shift, sigma shift 1.605 at 4 image tokens") == 1
+
+
+@pytest.mark.parametrize("name", ["typo", "unifrom", "lognormal"])
+def test_an_unknown_timestep_distribution_is_refused_not_treated_as_uniform(workspace: Workspace, name: str) -> None:
+    with pytest.raises(ValueError, match=rf"train\.timestep_distribution must be krea2_shift, .*: '{name}'"):
+        _draw(workspace, timestep_distribution=name)

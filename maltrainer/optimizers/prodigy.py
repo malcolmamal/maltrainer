@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from collections.abc import Iterable
 from typing import Any
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 def build_prodigy(
@@ -14,10 +17,10 @@ def build_prodigy(
 ) -> tuple[torch.optim.Optimizer, dict[str, Any]]:
     """Prodigy over ``params`` with the ``prodigy_*`` settings of ``train_config``, and the settings used.
 
-    Only what the installed prodigyopt accepts is passed (its signature has changed between releases),
-    and settings that are None are left to its defaults. ``train.learning_rate`` is taken as Prodigy's
-    scale only when it is at least 0.01; below that, the trainer's usual small rates would starve it, so 1.0
-    is used unless ``train.prodigy_lr`` says otherwise.
+    Only what the installed prodigyopt accepts is passed (its signature has changed between releases; a
+    setting it lacks is logged as ignored), and settings that are None are left to its defaults.
+    ``train.learning_rate`` is taken as Prodigy's scale only when it is at least 0.01; below that, the
+    trainer's usual small rates would starve it, so 1.0 is used unless ``train.prodigy_lr`` says otherwise.
     """
     from prodigyopt import Prodigy
 
@@ -37,4 +40,7 @@ def build_prodigy(
     }
     supported = set(inspect.signature(Prodigy.__init__).parameters)
     kwargs = {k: v for k, v in requested.items() if k in supported and v is not None}
+    dropped = sorted(set(requested) - set(kwargs) - {"beta3"})
+    if dropped:
+        logger.warning("Installed prodigyopt does not accept %s; ignored.", dropped)
     return Prodigy(params, **kwargs), kwargs

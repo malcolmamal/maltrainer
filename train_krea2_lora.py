@@ -36,6 +36,7 @@ from maltrainer.models.krea2.loading import load_krea2_transformer
 from maltrainer.models.krea2.lora import Krea2LoRANetwork
 from maltrainer.models.krea2.text_encoder import load_krea2_text_encoder
 from maltrainer.models.krea2.vae import load_krea2_vae
+from maltrainer.optimizers.prodigy import build_prodigy
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
 from maltrainer.utils.keyboard import KeyCommands
@@ -266,30 +267,9 @@ class Krea2LoRATrainer:
                 **kwargs,
             }
         elif name.startswith("prodigy"):
-            import inspect
-
-            from prodigyopt import Prodigy
-
-            requested = {
-                "lr": float(train_config.get("prodigy_lr", lr if lr >= 0.01 else 1.0)),
-                "betas": (float(train_config.get("adam_beta1", 0.9)), float(train_config.get("prodigy_beta2", 0.999))),
-                "beta3": train_config.get("prodigy_beta3"),
-                "weight_decay": weight_decay,
-                "eps": float(train_config.get("prodigy_eps", 1e-8)),
-                "d0": float(train_config.get("prodigy_d0", 1e-6)),
-                "d_coef": float(train_config.get("prodigy_d_coef", 1.0)),
-                "growth_rate": float(train_config.get("prodigy_growth_rate", float("inf"))),
-                "decouple": bool(train_config.get("prodigy_decouple", True)),
-                "use_bias_correction": bool(train_config.get("prodigy_use_bias_correction", False)),
-                "safeguard_warmup": bool(train_config.get("prodigy_safeguard_warmup", False)),
-                "slice_p": int(train_config.get("prodigy_slice_p", 1)),
-            }
-            supported = set(inspect.signature(Prodigy.__init__).parameters)
-            kwargs = {k: v for k, v in requested.items() if k in supported and v is not None}
-            dropped = sorted(set(requested) - set(kwargs) - {"beta3"})
-            if dropped:
-                logger.warning("Installed prodigyopt does not accept %s; ignored.", dropped)
-            self.optimizer = Prodigy(self.lora_network.trainable_parameters(), **kwargs)
+            self.optimizer, kwargs = build_prodigy(
+                self.lora_network.trainable_parameters(), train_config, lr, weight_decay
+            )
             self.run_metadata["optimizer_resolved"] = {"name": "prodigy", **kwargs}
         elif name in {"adamw8bit", "adam8bit"}:
             import bitsandbytes as bnb
@@ -320,8 +300,12 @@ class Krea2LoRATrainer:
             mean = float(train_config.get("timestep_logit_mean", 0.0))
             std = float(train_config.get("timestep_logit_std", 1.0))
             base = torch.sigmoid(torch.randn(1, device=self.device) * std + mean)
-        else:  # uniform
+        elif distribution == "uniform":
             base = torch.rand(1, device=self.device)
+        else:
+            raise ValueError(
+                f"train.timestep_distribution must be krea2_shift, logit_normal, sigmoid or uniform: {distribution!r}"
+            )
         if distribution == "krea2_shift":
             shift = krea2_shift(image_tokens)
         elif distribution == "sigmoid":
@@ -552,6 +536,8 @@ class Krea2LoRATrainer:
                 self.simulate()
                 return
             self.precache_dataset()
+            if not self.samples:
+                raise ValueError("No usable images: every file in the dataset failed to load")
             self.load_transformer_and_lora()
             self.setup_optimizer()
             self.train()
