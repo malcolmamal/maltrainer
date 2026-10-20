@@ -3,11 +3,10 @@
 Run the quality gate before every commit: `.venv/Scripts/python -m maltrainer_quality` (see "Quality gates" in
 `README.md`). It must end with no failed gates.
 
-- **Limits:** 200 lines per Python or shell file, complexity 10 per function. Older code is listed in
-  `maltrainer_quality/baselines/` at its size then and may only shrink. After shrinking something, run the three
-  `--tighten` commands from the README.
-- **Never** add a baseline entry, raise one, or lower the coverage floor (`fail_under`) to make a change pass. Split the
-  file or function, or write the test.
+- **Limits (hard, no exceptions list):** 200 lines per Python or shell file, complexity 10 per function, no mypy errors
+  in the checked tree.
+- **Never** loosen a limit, add a `type: ignore` to dodge a real error, or lower the coverage floor (`fail_under`) to make
+  a change pass. Split the file or function, or write the test.
 - **Bugs:** write the failing test first and check it fails on the old code. In the commit message say which area is
   affected (LoRA or finetune, which model type). Anything that touches the MOSS-Image finetune
   (`train_moss_image_finetune.py`, `maltrainer/finetune/`, `maltrainer/models/moss_image/`) must be called out

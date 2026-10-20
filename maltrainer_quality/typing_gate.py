@@ -1,9 +1,6 @@
-"""Fail when mypy reports an error in a file the baseline does not list, or more than it lists.
+"""Fail when mypy reports an error anywhere in the checked tree.
 
-Typing is adopted file by file: the baseline maps each file that still has errors to how many, and
-that number may only go down (``--tighten`` lowers it and drops the files that came clean). Code
-written after the baseline was recorded is checked from the start. The configuration, including
-the reason for every ``ignore_missing_imports``, is in pyproject.toml.
+The configuration, including the reason for every ``ignore_missing_imports``, is in pyproject.toml.
 """
 
 from __future__ import annotations
@@ -17,8 +14,6 @@ from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
-from maltrainer_quality import ratchet
-
 # Directories and root-level files; globs are expanded against the root.
 TARGETS = (
     "maltrainer",
@@ -30,7 +25,6 @@ TARGETS = (
     "compare_loras.py",
     "inspect_lora.py",
 )
-BASELINE = Path("maltrainer_quality/baselines/types.json")
 ERROR = re.compile(r"^(?P<path>.+?):\d+(?::\d+)?: error: ")
 
 
@@ -80,16 +74,11 @@ def errors_per_file(output: str) -> dict[str, int]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path())
-    parser.add_argument("--tighten", action="store_true", help="lower loose baseline entries")
     arguments = parser.parse_args(argv)
-    return ratchet.enforce(
-        errors_per_file(mypy_output(arguments.root)),
-        arguments.root / BASELINE,
-        tighten=arguments.tighten,
-        unit="type errors",
-        limit=0,
-        command="python -m maltrainer_quality.typing_gate",
-    )
+    errors = errors_per_file(mypy_output(arguments.root))
+    for path, count in errors.items():
+        print(f"{path}: {count} type errors")
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

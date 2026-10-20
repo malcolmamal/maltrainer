@@ -347,20 +347,11 @@ the tests (pytest), and the coverage floor. `ruff format .` fixes formatting; `r
 Every gate runs even after one fails; the failed ones are listed at the end. A tool that isn't
 installed in the interpreter you launched it with fails its gate.
 
-**Limits:** at most 200 lines per Python or shell file, and complexity 10 per function. Code
-written before the gate existed is listed in `maltrainer_quality/baselines/` at its size then. A
-listed file or function may shrink but never grow. When one shrinks, the gate asks you to lower its
-entry:
-
-```bash
-python -m maltrainer_quality.file_length --tighten
-python -m maltrainer_quality.complexity --tighten
-python -m maltrainer_quality.typing_gate --tighten
-```
-
-`--tighten` only lowers entries or removes them. Never add an entry or raise one to make a change
-pass: split the file or the function instead. The coverage floor (`fail_under` in `pyproject.toml`)
-works the same way: raise it when tests land, and never lower it.
+**Limits:** at most 200 lines per Python or shell file, complexity 10 per function, and no mypy error
+anywhere in the checked tree. They are hard limits with no exceptions list: split the file or the function
+instead of working around the gate. The coverage floor (`fail_under` in `pyproject.toml`) is a floor on purpose
+below the measured value (CI reads a hair lower than Windows); raise it when tests land, and never lower it to
+make a change pass.
 
 **Dependencies.** `pyproject.toml` is the one list (runtime dependencies, the `cpu` / `cu130` PyTorch extras, the
 pinned dev tools). `uv.lock` pins everything for every platform and `requirements.lock` is its pip-installable runtime

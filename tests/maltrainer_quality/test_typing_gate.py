@@ -1,4 +1,4 @@
-"""The type check is a gate, so it must reject a type error in code the baseline does not list.
+"""The type check is a gate, so it must reject a type error in code anywhere in the tree.
 
 An invocation that mypy ignores, or an output format it changed, would otherwise turn the check
 off while every other gate stays green.
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from maltrainer_quality import ratchet, typing_gate
+from maltrainer_quality import typing_gate
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 CLEAN = "def double(value: int) -> int:\n    return value * 2\n"
@@ -37,31 +37,11 @@ def test_a_clean_tree_passes(project: Path) -> None:
     assert typing_gate.main(["--root", str(project)]) == 0
 
 
-def test_a_type_error_in_a_file_the_baseline_does_not_list_is_rejected(
-    project: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_a_type_error_is_rejected(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
     write(project, WRONG)
 
     assert typing_gate.main(["--root", str(project)]) == 1
-    assert capsys.readouterr().out.startswith("package/subject.py: 1 type errors (limit 0)")
-
-
-def test_a_baselined_file_may_stay_but_not_get_worse(project: Path) -> None:
-    write(project, WRONG)
-    ratchet.save(project / typing_gate.BASELINE, {"package/subject.py": 1})
-
-    assert typing_gate.main(["--root", str(project)]) == 0
-    write(project, WRONG + "\n\ndef triple(value: int) -> int:\n    return str(value)\n")
-    assert typing_gate.main(["--root", str(project)]) == 1
-
-
-def test_a_file_that_came_clean_makes_its_entry_loose_until_tightened(project: Path) -> None:
-    write(project, CLEAN)
-    ratchet.save(project / typing_gate.BASELINE, {"package/subject.py": 1})
-
-    assert typing_gate.main(["--root", str(project)]) == 1
-    assert typing_gate.main(["--root", str(project), "--tighten"]) == 0
-    assert ratchet.load(project / typing_gate.BASELINE) == {}
+    assert capsys.readouterr().out.startswith("package/subject.py: 1 type errors")
 
 
 def test_errors_are_counted_per_file_from_mypys_lines() -> None:

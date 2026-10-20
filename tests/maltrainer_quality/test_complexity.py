@@ -1,4 +1,4 @@
-"""The complexity limit is a gate, so it must reject complexity 11 in code the baseline does not list.
+"""The complexity limit is a gate, so it must reject complexity 11 in any function.
 
 A typo in the ruff invocation, or a C901 message ruff changed, would otherwise turn the limit off
 while every other gate stays green.
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from maltrainer_quality import complexity, ratchet
+from maltrainer_quality import complexity
 from maltrainer_quality.complexity import MAX_COMPLEXITY
 
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
@@ -46,15 +46,6 @@ def test_complexity_ten_is_accepted(tmp_path: Path) -> None:
 
     assert complexity.over_limit(root) == {}
     assert run_gate(root) == 0
-
-
-def test_a_baselined_function_may_stay_but_not_grow(tmp_path: Path) -> None:
-    root = a_project(tmp_path, subject=a_function_with_complexity(12))
-    ratchet.save(root / complexity.BASELINE, {"subject.py::classify": 12})
-
-    assert run_gate(root) == 0
-    (root / "subject.py").write_text(a_function_with_complexity(13), encoding="utf-8")
-    assert run_gate(root) == 1
 
 
 def test_functions_sharing_a_name_in_one_file_are_numbered_in_file_order(tmp_path: Path) -> None:

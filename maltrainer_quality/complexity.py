@@ -1,4 +1,4 @@
-"""Fail when a function's cyclomatic complexity exceeds MAX_COMPLEXITY, beyond what the baseline allows.
+"""Fail when a function's cyclomatic complexity exceeds MAX_COMPLEXITY.
 
 ruff's C901 measures it. A function is keyed as ``path::name``; a second function of the same
 name in the same file is ``path::name#2``, numbered in file order.
@@ -16,10 +16,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from maltrainer_quality import ratchet
-
 MAX_COMPLEXITY = 10
-BASELINE = Path("maltrainer_quality/baselines/complexity.json")
 MESSAGE = re.compile(r"^`(?P<name>.+)` is too complex \((?P<value>\d+) > \d+\)$")
 
 
@@ -70,16 +67,11 @@ def over_limit(root: Path) -> dict[str, int]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path())
-    parser.add_argument("--tighten", action="store_true", help="lower loose baseline entries")
     arguments = parser.parse_args(argv)
-    return ratchet.enforce(
-        over_limit(arguments.root),
-        arguments.root / BASELINE,
-        tighten=arguments.tighten,
-        unit="complexity",
-        limit=MAX_COMPLEXITY,
-        command="python -m maltrainer_quality.complexity",
-    )
+    over = over_limit(arguments.root)
+    for key, value in over.items():
+        print(f"{key}: {value} complexity (limit {MAX_COMPLEXITY})")
+    return 1 if over else 0
 
 
 if __name__ == "__main__":

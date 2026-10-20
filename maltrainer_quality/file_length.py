@@ -1,4 +1,4 @@
-"""Fail when a Python or shell file git would track exceeds MAX_LINES, beyond what the baseline allows."""
+"""Fail when a Python or shell file git would track has more than MAX_LINES lines."""
 
 from __future__ import annotations
 
@@ -7,10 +7,7 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from maltrainer_quality import ratchet
-
 MAX_LINES = 200
-BASELINE = Path("maltrainer_quality/baselines/file_length.json")
 
 
 def candidates(root: Path) -> tuple[str, ...]:
@@ -33,16 +30,11 @@ def over_limit(root: Path) -> dict[str, int]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path())
-    parser.add_argument("--tighten", action="store_true", help="lower loose baseline entries")
     arguments = parser.parse_args(argv)
-    return ratchet.enforce(
-        over_limit(arguments.root),
-        arguments.root / BASELINE,
-        tighten=arguments.tighten,
-        unit="lines",
-        limit=MAX_LINES,
-        command="python -m maltrainer_quality.file_length",
-    )
+    over = over_limit(arguments.root)
+    for name, lines in over.items():
+        print(f"{name}: {lines} lines (limit {MAX_LINES})")
+    return 1 if over else 0
 
 
 if __name__ == "__main__":
