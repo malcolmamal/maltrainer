@@ -365,9 +365,21 @@ python -m maltrainer_quality.requirements --write
 The gate fails when either lock is stale (`uv lock --check`, then a byte comparison with `uv export`) and when
 `pip-audit` finds a known vulnerability in `requirements.lock`; the audit needs network access, like `uv lock --check`.
 
+## Code layout
+
+A run goes from a thin `train_<model>_*.py` entry point to `maltrainer/trainers/<model>/` (that model's pipeline),
+which builds on `maltrainer/training/` (what every trainer shares) and `maltrainer/models/<model>/` (the network,
+VAE, text encoder, loaders and LoRA layers). `maltrainer/optimizers/`, `data/`, `finetune/` and `utils/` hold the
+rest; `backend/` and `frontend/` are the web UI, `scripts/` the command-line tools, `tests/` mirrors all of it.
+Every Python file is at most 200 lines, so a module's name tells you what is in it. See
+[docs/code-layout.md](docs/code-layout.md) for the map, and [docs/architecture.md](docs/architecture.md) for the
+C4 diagrams.
+
 ## Documentation
 
 See `docs/` directory for detailed documentation:
+- [Code layout: where things live](docs/code-layout.md)
+- [Architecture: C4 diagrams and description](docs/architecture.md)
 - [Finetuning walkthrough: setup, commands, troubleshooting](docs/finetune-tutorial.md)
 - [Krea 2 full finetuning on 32 GB (rotating windows)](docs/krea2-finetuning.md)
 - [MOSS-Image finetune in ComfyUI: 8-step setup and prompting](docs/moss-image-comfyui-prompting.md)
