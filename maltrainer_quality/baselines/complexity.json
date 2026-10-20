@@ -20,7 +20,7 @@
   "train_krea2_finetune.py::train": 20,
   "train_krea2_lora.py::train": 15,
   "train_minimax_h3_lora.py::precache_dataset": 29,
-  "train_minimax_h3_lora.py::setup_optimizer": 12,
+  "train_minimax_h3_lora.py::setup_optimizer": 11,
   "train_minimax_h3_lora.py::train": 12,
   "train_moss_image_finetune.py::train": 32,
   "train_moss_image_lora.py::precache_dataset": 24,
