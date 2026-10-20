@@ -43,13 +43,8 @@ from maltrainer.models.qwen_image_2_1.model import load_qwen_image_2_1_transform
 from maltrainer.models.qwen_image_2_1.text_encoder import load_qwen_image_2_1_text_encoder
 from maltrainer.models.qwen_image_2_1.vae import load_qwen_image_2_1_vae
 from maltrainer.utils.config import load_config
-from qwen_2_1_sweep_checkpoints import (
-    VAE_SCALE_FACTOR,
-    build_sigmas,
-    sample_latents,
-    sort_key,
-    swap_adapter,
-)
+from qwen_2_1_sweep_adapter import sort_key, swap_adapter
+from qwen_2_1_sweep_checkpoints import VAE_SCALE_FACTOR, build_sigmas, sample_latents
 
 # `prompt` is what the model sees. `checks` are yes/no questions a VLM judge asks about the
 # result to score prompt adherence -- phrased without the trigger word, which the judge has
