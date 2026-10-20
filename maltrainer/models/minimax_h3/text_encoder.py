@@ -15,6 +15,12 @@ from torch import nn
 from transformers import AutoTokenizer, PreTrainedTokenizerBase, Qwen3VLConfig, Qwen3VLModel
 
 from maltrainer.models.minimax_h3.comfy_quant import has_comfy_quantized_layers, load_comfy_quantized_state_dict
+from maltrainer.models.minimax_h3.text_encoder_config import (
+    describe_text_config as _describe_text_config,
+)
+from maltrainer.models.minimax_h3.text_encoder_config import (
+    text_encoder_key as _text_encoder_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,33 +48,6 @@ def _resolve_tokenizer_assets(explicit: str | Path | None) -> Path:
 # H3 conditions on the unnormalized hidden state after Qwen3-VL layer 50; the upstream
 # config declares the model's full depth.
 MINIMAX_H3_TEXT_LAYERS = 50
-
-
-def _describe_text_config(text_config: Any) -> str:
-    """Compact summary of the resolved text tower, for a startup sanity check.
-
-    Read defensively: transformers has reshuffled where RoPE settings live between
-    versions (rope_theta/rope_scaling vs. a merged rope_parameters dict), and a log line
-    must never be the thing that fails a training run.
-    """
-    fields = ["num_hidden_layers", "hidden_size", "num_attention_heads", "num_key_value_heads", "head_dim"]
-    parts = [f"{name}={getattr(text_config, name, '?')}" for name in fields]
-    rope = getattr(text_config, "rope_parameters", None)
-    if rope is None:
-        theta = getattr(text_config, "rope_theta", "?")
-        rope = {"rope_theta": theta, "rope_scaling": getattr(text_config, "rope_scaling", None)}
-    parts.append(f"rope={rope}")
-    return " ".join(parts)
-
-
-def _text_encoder_key(source_prefix: str) -> str:
-    if source_prefix.startswith("visual"):
-        return source_prefix
-    if source_prefix == "model":
-        return "language_model"
-    if source_prefix.startswith("model."):
-        return f"language_model.{source_prefix.removeprefix('model.')}"
-    return source_prefix
 
 
 class MiniMaxH3TextEncoder(nn.Module):
