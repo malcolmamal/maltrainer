@@ -1,8 +1,6 @@
 {
   "maltrainer/data/media.py::read_video_frames": 13,
   "maltrainer/data/qwen_dataset.py::_load_dataset": 13,
-  "maltrainer/models/minimax_h3/lora.py::_inject_lora": 11,
-  "maltrainer/models/minimax_h3/lora.py::load_assistant_adapter": 18,
   "maltrainer/models/moss_image/text_encoder.py::load_moss_image_text_encoder": 11,
   "maltrainer/optimizers/automagic3.py::_update_param": 15,
   "maltrainer/utils/preview_menu.py::run_menu": 27,
