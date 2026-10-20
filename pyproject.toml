@@ -201,12 +201,12 @@ no_implicit_reexport = true
 strict_equality = true
 
 [tool.coverage.run]
-source = ["maltrainer", "maltrainer_quality", "backend"]
+source = ["maltrainer", "maltrainer_quality", "backend", "train_moss_image_lora", "train_moss_image_finetune"]
 branch = true
 
 [tool.coverage.report]
 # A floor, not a target: raise it whenever tests land, never lower it.
-fail_under = 99.67
+fail_under = 99.68
 precision = 2
 show_missing = true
 skip_covered = true
