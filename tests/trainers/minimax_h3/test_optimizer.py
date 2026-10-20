@@ -87,12 +87,26 @@ def test_a_missing_library_falls_back_to_plain_adamw_with_a_warning(
     assert "not available" in caplog.text and "Falling back to AdamW" in caplog.text
 
 
-@pytest.mark.parametrize("name", ["adamw", "something-unknown"])
-def test_anything_else_is_torch_adamw(workspace: Workspace, name: str) -> None:
-    trainer = _built(workspace, optimizer=name, learning_rate=3e-3)
+def test_adamw_is_torch_adamw_with_the_configured_rate_and_decay(workspace: Workspace) -> None:
+    trainer = _built(workspace, optimizer="adamw", learning_rate=3e-3, weight_decay=0.2)
 
-    assert type(trainer.optimizer) is torch.optim.AdamW and trainer.optimizer.param_groups[0]["lr"] == 3e-3
-    assert len(trainer.optimizer.param_groups[0]["params"]) == 32
+    group = trainer.optimizer.param_groups[0]
+    assert type(trainer.optimizer) is torch.optim.AdamW and (group["lr"], group["weight_decay"]) == (3e-3, 0.2)
+    assert len(group["params"]) == 32
+    assert trainer.run_metadata["optimizer_resolved"] == {"name": "adamw", "lr": 3e-3}
+
+
+@pytest.mark.parametrize("name", ["something-unknown", "sgd", "adamww"])
+def test_an_unknown_optimizer_is_refused_not_replaced_by_adamw(workspace: Workspace, name: str) -> None:
+    with pytest.raises(ValueError, match=rf"Unknown train\.optimizer '{name}': use automagic3, prodigy, adamw8bit"):
+        _built(workspace, optimizer=name)
+
+
+@pytest.mark.parametrize("name", ["adamw8bit", "adam8bit"])
+def test_the_8_bit_optimizers_get_the_configured_decay(workspace: Workspace, name: str) -> None:
+    trainer = _built(workspace, optimizer=name, learning_rate=3e-3, weight_decay=0.0001)
+
+    assert trainer.optimizer.param_groups[0]["weight_decay"] == 0.0001
 
 
 @pytest.mark.parametrize("name", ["automagic3", "automagic", "automagic_v3"])

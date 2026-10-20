@@ -57,6 +57,7 @@ from maltrainer.models.minimax_h3.model import (
 )
 from maltrainer.models.minimax_h3.text_encoder import load_minimax_h3_text_encoder
 from maltrainer.models.minimax_h3.video_vae import load_minimax_h3_video_vae, video_latent_frames
+from maltrainer.optimizers.prodigy import build_prodigy
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import ParameterEMA
 from maltrainer.utils.logging_utils import setup_logging
@@ -745,73 +746,26 @@ class MiniMaxH3LoRATrainer:
                 import bitsandbytes as bnb
 
                 optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
-                self.optimizer: Any = optimizer_cls(params, lr=lr)
+                self.optimizer: Any = optimizer_cls(params, lr=lr, weight_decay=weight_decay)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
                 self.run_metadata["optimizer_resolved"] = {"name": optimizer_name, "lr": lr}
             except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
-                self.optimizer = AdamW(params, lr=lr)
+                self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
         elif optimizer_name.startswith("prodigy"):
             try:
-                import inspect
-
-                from prodigyopt import Prodigy
-
-                # Prodigy's `lr` is a multiplier on the step size it estimates, so it belongs
-                # near 1.0. A config that sets learning_rate to an AdamW-scale value (<0.01)
-                # clearly did not mean it as a multiplier, so fall back to 1.0 there; a value
-                # at or above 0.01 is taken at face value. train.prodigy_lr overrides either way.
+                # Prodigy's `lr` is a multiplier near 1.0: an AdamW-scale learning_rate (<0.01) cannot have meant
+                # that, so it falls back to 1.0 there; train.prodigy_lr overrides either way.
                 configured_lr = float(train_config.get("learning_rate", 1.0))
-                default_multiplier = configured_lr if configured_lr >= 0.01 else 1.0
-                requested = {
-                    "lr": float(train_config.get("prodigy_lr", default_multiplier)),
-                    "betas": (
-                        float(train_config.get("adam_beta1", 0.9)),
-                        float(train_config.get("prodigy_beta2", 0.99)),
-                    ),
-                    # EMA horizon for the d estimate. None -> prodigyopt uses sqrt(beta2).
-                    "beta3": train_config.get("prodigy_beta3"),
-                    "weight_decay": weight_decay,
-                    "eps": float(train_config.get("prodigy_eps", 1e-8)),
-                    # Starting step-size guess. Raising it shortens the ramp before Prodigy
-                    # finds its rate, at the risk of an early overshoot.
-                    "d0": float(train_config.get("prodigy_d0", 1e-6)),
-                    # The single most useful knob: multiplies the adapted rate. 1.0 is the
-                    # library default, ~2.0 the usual LoRA recommendation; higher trains
-                    # harder and starts trading likeness for texture damage.
-                    "d_coef": float(train_config.get("prodigy_d_coef", 2.0)),
-                    # Per-step ceiling on how fast d may grow (inf = uncapped). Values just
-                    # above 1 (e.g. 1.02) tame a d that spikes and then overshoots.
-                    "growth_rate": float(train_config.get("prodigy_growth_rate", float("inf"))),
-                    "decouple": bool(train_config.get("prodigy_decouple", True)),
-                    "use_bias_correction": bool(train_config.get("prodigy_use_bias_correction", True)),
-                    "safeguard_warmup": bool(
-                        train_config.get(
-                            "prodigy_safeguard_warmup",
-                            bool(train_config.get("learning_rate_warmup_steps", 0)),
-                        )
-                    ),
+                recipe = {  # this trainer's defaults (the shared ones suit the other LoRA trainers)
+                    "prodigy_beta2": 0.99,
+                    "prodigy_d_coef": 2.0,  # the most useful knob: ~2.0 is the usual LoRA recommendation
+                    "prodigy_use_bias_correction": True,
+                    "prodigy_safeguard_warmup": bool(train_config.get("learning_rate_warmup_steps", 0)),
+                    "prodigy_slice_p": None,
                 }
-                if train_config.get("prodigy_slice_p") is not None:
-                    requested["slice_p"] = int(train_config["prodigy_slice_p"])
-
-                # prodigyopt's signature varies across releases (slice_p and growth_rate are
-                # not in every version). Pass only what this install accepts instead of
-                # crashing on an unexpected keyword.
-                supported = set(inspect.signature(Prodigy.__init__).parameters)
-                kwargs = {k: v for k, v in requested.items() if k in supported and v is not None}
-                unsupported = sorted(set(requested) - set(kwargs) - {"beta3"})
-                if unsupported:
-                    logger.warning(
-                        "Installed prodigyopt does not accept %s; those settings are ignored.",
-                        unsupported,
-                    )
-
-                self.optimizer = Prodigy(params, **kwargs)
-                logger.info(
-                    "Using Prodigy: %s",
-                    ", ".join(f"{k}={v}" for k, v in sorted(kwargs.items())),
-                )
+                self.optimizer, kwargs = build_prodigy(params, train_config, configured_lr, weight_decay, recipe)
+                logger.info("Using Prodigy: %s", ", ".join(f"{k}={v}" for k, v in sorted(kwargs.items())))
                 self.run_metadata["optimizer_resolved"] = {"name": "prodigy", **kwargs}
                 if configured_lr < 0.01 and "prodigy_lr" not in train_config:
                     logger.info(
@@ -827,7 +781,7 @@ class MiniMaxH3LoRATrainer:
                     )
             except (ImportError, OSError, RuntimeError) as e:
                 logger.warning("Prodigy not available (%s). Falling back to AdamW.", e)
-                self.optimizer = AdamW(params, lr=lr)
+                self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
         elif optimizer_name in {"automagic3", "automagic", "automagic_v3"}:
             from maltrainer.optimizers import Automagic3
 
@@ -855,8 +809,13 @@ class MiniMaxH3LoRATrainer:
                 automagic_params["clip_threshold"],
             )
             self.run_metadata["optimizer_resolved"] = {"name": "automagic3", **automagic_params}
+        elif optimizer_name == "adamw":
+            self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
+            self.run_metadata["optimizer_resolved"] = {"name": "adamw", "lr": lr}
         else:
-            self.optimizer = AdamW(params, lr=lr)
+            raise ValueError(
+                f"Unknown train.optimizer {optimizer_name!r}: use automagic3, prodigy, adamw8bit, adam8bit or adamw"
+            )
 
         warmup_steps = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
         if warmup_steps > 0:
@@ -1005,7 +964,7 @@ class MiniMaxH3LoRATrainer:
         """Main MiniMax H3 LoRA training loop (~0.8s/step)."""
         train_config = self.config["train"]
         num_epochs = train_config.get("num_epochs", 10)
-        save_every = train_config.get("save_every", 500)
+        save_every = int(train_config.get("save_every", 500) or 0)
 
         self.lora_network, self.optimizer = self.accelerator.prepare(self.lora_network, self.optimizer)
 
@@ -1129,7 +1088,7 @@ class MiniMaxH3LoRATrainer:
                             detail,
                         )
 
-                    if global_step % save_every == 0:
+                    if save_every > 0 and global_step % save_every == 0 and global_step < total_steps:
                         self.save_checkpoint(global_step)
 
                 progress_bar.set_postfix(

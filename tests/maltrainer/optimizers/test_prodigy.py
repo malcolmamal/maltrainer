@@ -72,3 +72,26 @@ def test_a_setting_the_installed_release_lacks_is_logged_as_ignored(
     assert "slice_p" in caplog.text
     assert "beta3" not in caplog.text
     assert fake_prodigy.built["lr"] == 1.0
+
+
+def test_the_defaults_a_trainer_passes_replace_the_built_in_ones_and_a_given_key_still_wins(
+    fake_prodigy: type[FakeProdigy],
+) -> None:
+    defaults = {"prodigy_beta2": 0.99, "prodigy_slice_p": None}
+
+    _, used = build_prodigy(_params(), {"adam_beta1": 0.8}, lr=1e-4, weight_decay=0.0, defaults=defaults)
+    _, given = build_prodigy(_params(), {"prodigy_beta2": 0.9}, lr=1e-4, weight_decay=0.0, defaults=defaults)
+
+    assert used["betas"] == (0.8, 0.99)
+    assert given["betas"] == (0.9, 0.9)
+    assert fake_prodigy.built["betas"] == (0.9, 0.9)
+
+
+def test_a_none_default_drops_the_setting_unless_the_config_gives_it() -> None:
+    _, without = build_prodigy(_params(), {}, lr=1.0, weight_decay=0.0, defaults={"prodigy_slice_p": None})
+    _, given = build_prodigy(
+        _params(), {"prodigy_slice_p": 4}, lr=1.0, weight_decay=0.0, defaults={"prodigy_slice_p": None}
+    )
+
+    assert "slice_p" not in without
+    assert given["slice_p"] == 4
