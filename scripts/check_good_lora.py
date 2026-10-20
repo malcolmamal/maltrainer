@@ -1,4 +1,5 @@
 import logging
+from typing import Any, cast
 
 import torch
 from diffusers import ZImagePipeline
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def test_load(lora_path: str, prompt: str) -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    pipe = ZImagePipeline.from_pretrained("Tongyi-MAI/Z-Image", torch_dtype=torch.bfloat16).to(device)
+    pipe = cast(Any, ZImagePipeline).from_pretrained("Tongyi-MAI/Z-Image", torch_dtype=torch.bfloat16).to(device)
 
     logger.info(f"Loading LoRA from {lora_path}")
     try:

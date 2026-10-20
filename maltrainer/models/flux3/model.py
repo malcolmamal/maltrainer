@@ -205,7 +205,9 @@ class Block(nn.Module):
             q, k, v = self.q_proj(x_mod), self.k_proj(x_mod), self.v_proj(x_mod)
         mlp = self.mlp_in(x_mod)
 
-        heads = lambda t: t.view(B, N, self.num_heads, -1).transpose(1, 2)  # noqa: E731
+        def heads(t: torch.Tensor) -> torch.Tensor:
+            return t.view(B, N, self.num_heads, -1).transpose(1, 2)
+
         # QK-norm and RoPE in fp32, rounded once: the reference's rmsnorm_rope and ComfyUI's fused rms_rope
         q = apply_rope(self.norm.query_norm(heads(q).float()), pe).to(v.dtype)
         k = apply_rope(self.norm.key_norm(heads(k).float()), pe).to(v.dtype)
@@ -250,7 +252,6 @@ class Flux3Transformer(nn.Module):
         self.txt_mode_blocks = nn.ModuleList([block() for _ in range(config.depth)])
         self.single_blocks = nn.ModuleList([block() for _ in range(config.depth_single_blocks)])
         self.final_layer = nn.ModuleDict({"image": LastLayer(h, LATENT_CHANNELS)})
-
         self.gradient_checkpointing = False
         # Activation dtype: weights may be int8, so it cannot be read off a parameter.
         self.compute_dtype = torch.bfloat16
@@ -300,6 +301,5 @@ class Flux3Transformer(nn.Module):
         shift, scale, gate = (torch.cat([i.expand(B, n_img, -1), t.expand(B, n_txt, -1)], dim=1) for i, t in pairs)
         for block in self.single_blocks:
             joint = self._run(block, joint, shift, scale, gate, pe)
-
         out = self.final_layer["image"](joint[:, :n_img], vec_img)
         return cast(torch.Tensor, out.transpose(1, 2).reshape(B, LATENT_CHANNELS, H, W))

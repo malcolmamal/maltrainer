@@ -24,7 +24,7 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 from accelerate import Accelerator
@@ -245,7 +245,7 @@ class Flux3KleinLoRATrainer:
         elif name in {"adamw8bit", "adam8bit"}:
             import bitsandbytes as bnb
 
-            self.optimizer = bnb.optim.AdamW8bit(
+            self.optimizer = cast(Any, bnb.optim.AdamW8bit)(
                 self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay
             )
             self.run_metadata["optimizer_resolved"] = {"name": name, "lr": lr}

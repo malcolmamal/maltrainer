@@ -17,7 +17,7 @@ def load_sd_vae(
     weights_path: str | Path, config_path: str | Path, device: torch.device, dtype: torch.dtype
 ) -> AutoencoderKL:
     with Path(config_path).open(encoding="utf-8") as handle:
-        vae = AutoencoderKL.from_config(json.load(handle))
+        vae = cast(Any, AutoencoderKL).from_config(json.load(handle))
     state = load_file(str(weights_path), device="cpu")
     vae._fix_state_dict_keys_on_load(state)
     vae.load_state_dict(state, strict=True)

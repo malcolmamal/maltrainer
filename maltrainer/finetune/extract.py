@@ -108,7 +108,7 @@ def factor(
     return out
 
 
-def _check_same_tensors(base: safe_open, tuned: safe_open, base_map: dict[str, str], tuned_map: dict[str, str]) -> None:
+def _check_same_tensors(base: Any, tuned: Any, base_map: dict[str, str], tuned_map: dict[str, str]) -> None:
     """Both checkpoints hold the same tensors (names without their container prefix) in the same shapes."""
     if set(base_map) != set(tuned_map):
         only = sorted(set(base_map) ^ set(tuned_map))

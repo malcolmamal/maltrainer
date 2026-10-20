@@ -178,7 +178,7 @@ def load_minimax_h3_text_encoder(
     logger.info("H3 text tower: %s", _describe_text_config(text_config))
 
     with init_empty_weights(include_buffers=True):
-        model: Any = Qwen3VLModel(config)  # PreTrainedModel.to is typed as an unbound _Wrapped
+        model: Any = cast(Any, Qwen3VLModel)(config)  # PreTrainedModel.to is typed as an unbound _Wrapped
         model.language_model.norm = nn.Identity()
 
     if has_comfy_quantized_layers(text_encoder_path):

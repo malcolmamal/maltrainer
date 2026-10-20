@@ -442,7 +442,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 scales.append(self.reg_multiplier if key in self.reg_keys else 1.0)
                 if self.reg_keys and self.optimizer.fused:
                     set_step_scale(self.optimizer, scales[-1])  # the update happens inside this backward
-                (total_loss / accum if accum > 1 else total_loss).backward()
+                cast(Any, total_loss / accum if accum > 1 else total_loss).backward()
                 # Regularisation images count in the loss bands too; they are a fifth of the step.
                 monitor.record(loss.item(), float(self.last_sigma), prior_value)
                 micro += 1

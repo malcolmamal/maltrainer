@@ -41,7 +41,7 @@ import json
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -198,9 +198,9 @@ class YesNoJudge:
         path = snapshot_download(JUDGE_REPO, local_files_only=True)
         self.model = Qwen3VLForConditionalGeneration.from_pretrained(path, dtype=torch.bfloat16).to(device).eval()  # type: ignore[arg-type]  # @wraps stub types `self` as arg 1
         tokenizer = AutoTokenizer.from_pretrained(path)
-        self.processor = Qwen3VLProcessor(
-            image_processor=AutoImageProcessor.from_pretrained(PROCESSOR_DIR),
-            video_processor=AutoVideoProcessor.from_pretrained(PROCESSOR_DIR),
+        self.processor = cast(Any, Qwen3VLProcessor)(
+            image_processor=cast(Any, AutoImageProcessor).from_pretrained(PROCESSOR_DIR),
+            video_processor=cast(Any, AutoVideoProcessor).from_pretrained(PROCESSOR_DIR),
             tokenizer=tokenizer,
         )
         self.yes = [tokenizer.encode(t, add_special_tokens=False)[0] for t in ("Yes", " Yes", "yes")]

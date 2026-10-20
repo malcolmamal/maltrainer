@@ -29,7 +29,7 @@ import random
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 from tqdm import tqdm
@@ -273,7 +273,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
                         time.time() - started,
                     )
                 loss, _, sigma = self._training_step(order[pos], shift_logged)
-                loss.backward()  # fused: every trained weight steps here
+                cast(Any, loss).backward()  # fused: every trained weight steps here
                 self.rotator.optimizer.step()  # applies the window's rate votes
                 if self.always_optimizer is not None:
                     self.always_optimizer.step()

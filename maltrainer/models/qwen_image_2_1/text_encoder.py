@@ -162,7 +162,7 @@ def load_qwen_image_2_1_text_encoder(
     config.vision_config.out_hidden_size = 4096
 
     with init_empty_weights(include_buffers=True):
-        model = Qwen3VLModel(config)
+        model: Any = cast(Any, Qwen3VLModel)(config)
         model.language_model.norm = nn.Identity()
 
     logger.info("Loading INT8 ConvRot state dict for text encoder from %s...", text_encoder_path)
@@ -197,7 +197,7 @@ def load_qwen_image_2_1_text_encoder(
     model.language_model.rotary_emb = type(model.language_model.rotary_emb)(config.text_config, device=device)
 
     model.requires_grad_(False)
-    model.to(device=device)  # type: ignore[call-arg]  # transformers' wrapped .to breaks the stub
+    model.to(device=device)
     model.eval()
 
     logger.info("Loaded Qwen3-VL 8B Text Encoder successfully on %s", device)

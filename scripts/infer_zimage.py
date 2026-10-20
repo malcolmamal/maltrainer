@@ -21,7 +21,7 @@ import argparse
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import safetensors.torch as safetensors
 import torch
@@ -107,7 +107,7 @@ def main() -> None:
 
     # Load pipeline
     logger.info(f"Loading Z-Image pipeline from {args.model_id}")
-    pipeline = ZImagePipeline.from_pretrained(args.model_id, torch_dtype=torch.bfloat16)
+    pipeline = cast(Any, ZImagePipeline).from_pretrained(args.model_id, torch_dtype=torch.bfloat16)
     pipeline = pipeline.to(device)
 
     # Load LoRA if specified

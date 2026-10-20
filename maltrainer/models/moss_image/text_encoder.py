@@ -240,7 +240,7 @@ class GatedDeltaNet(nn.Module):
                 mixed, self.conv1d.weight.to(mixed.dtype), None, padding=self.conv1d.padding, groups=self.conv1d.groups
             )[:, :, :L]
         ).transpose(1, 2)
-        query, key, value = mixed.split([self.key_dim, self.key_dim, self.value_dim], dim=-1)
+        query, key, value = cast(Any, mixed).split([self.key_dim, self.key_dim, self.value_dim], dim=-1)
 
         beta = self.in_proj_b(x).sigmoid()
         g = -self.A_log.float().exp() * F.softplus(self.in_proj_a(x).float() + self.dt_bias.float())

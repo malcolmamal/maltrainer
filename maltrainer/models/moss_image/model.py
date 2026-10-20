@@ -112,7 +112,7 @@ def rope_from_ids(ids: torch.Tensor, head_dim: int) -> torch.Tensor:
 
 def apply_rope(x: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
     """Split-half RoPE on [B, N, H, D]: pairs (x[i], x[i + D/2]) (ComfyUI's rope_split_half)."""
-    x_ = x.to(pe.dtype).unflatten(-1, (2, -1)).movedim(-2, -1).unsqueeze(-2)
+    x_ = cast(Any, x.to(pe.dtype)).unflatten(-1, (2, -1)).movedim(-2, -1).unsqueeze(-2)
     out = pe[..., 0] * x_[..., 0] + pe[..., 1] * x_[..., 1]
     return cast(torch.Tensor, out.movedim(-1, -2).flatten(-2).type_as(x))
 

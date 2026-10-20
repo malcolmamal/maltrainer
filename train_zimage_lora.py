@@ -156,7 +156,7 @@ class ZImageLoRATrainer:
         tokenizer: Any = AutoTokenizer.from_pretrained(base_model_path, subfolder="tokenizer")
 
         # Load VAE
-        vae = AutoencoderKL.from_pretrained(
+        vae = cast(Any, AutoencoderKL).from_pretrained(
             base_model_path,
             subfolder="vae",
             torch_dtype=torch.float32,  # VAE always float32

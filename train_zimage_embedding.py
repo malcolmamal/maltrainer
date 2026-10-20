@@ -83,7 +83,7 @@ class ZImageEmbeddingTrainer:
         self.tokenizer: Any = AutoTokenizer.from_pretrained(model_path, subfolder="tokenizer")
 
         # Load VAE
-        self.vae: Any = AutoencoderKL.from_pretrained(
+        self.vae: Any = cast(Any, AutoencoderKL).from_pretrained(
             model_path,
             subfolder="vae",
             torch_dtype=torch.float32,  # VAE always float32

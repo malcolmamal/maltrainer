@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import torch
 from safetensors.torch import load_file
@@ -49,5 +50,5 @@ def load_flan_t5(
         raise RuntimeError(f"Flan-T5 load mismatch missing={missing} unexpected={unexpected}")
     model.to(device=device)  # type: ignore[call-arg]  # transformers' wrapped .to breaks the stub
     model.requires_grad_(False)
-    model.eval()
+    cast(Any, model).eval()
     return FlanT5Encoder(model, tokenizer, ctx_len=ctx_len)
