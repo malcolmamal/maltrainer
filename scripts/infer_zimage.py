@@ -32,7 +32,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def load_textual_inversion_embedding(pipeline: Any, embedding_path: str, token_string: str = "<*>") -> None:
+def load_textual_inversion_embedding(
+    pipeline: Any, embedding_path: str, token_string: str = "<*>", model_id: str = "Tongyi-MAI/Z-Image"
+) -> None:
     """Load textual inversion embedding and add to tokenizer/text_encoder."""
     logger.info(f"Loading textual inversion from {embedding_path}")
 
@@ -57,24 +59,22 @@ def load_textual_inversion_embedding(pipeline: Any, embedding_path: str, token_s
         raise ValueError(f"Could not find embedding vectors in {embedding_path}")
 
     # For Z-Image, we need to load Qwen components separately since the pipeline might not expose them properly
-    model_id = "Tongyi-MAI/Z-Image"
     tokenizer = Qwen2Tokenizer.from_pretrained(model_id, subfolder="tokenizer")
     text_encoder: Any = Qwen3ForCausalLM.from_pretrained(model_id, subfolder="text_encoder", torch_dtype=torch.bfloat16)
     text_encoder.to(pipeline.device)
 
-    # Add token if not present
-    if token_string not in tokenizer.get_vocab():
-        tokenizer.add_tokens([token_string])
+    # One token per vector, named as the trainer names them: the trigger, then trigger_1, trigger_2, ...
+    tokens = [token_string, *(f"{token_string}_{i}" for i in range(1, embedding_vectors.shape[0]))]
+    new = [token for token in tokens if token not in tokenizer.get_vocab()]
+    if new:
+        tokenizer.add_tokens(new)
         text_encoder.resize_token_embeddings(len(tokenizer))
 
-    # Get token id
-    token_id = tokenizer.convert_tokens_to_ids(token_string)
-
-    # Set the embedding
+    # Set each token's row
+    table = text_encoder.get_input_embeddings().weight
     with torch.no_grad():
-        text_encoder.get_input_embeddings().weight[token_id : token_id + embedding_vectors.shape[0]] = (
-            embedding_vectors.to(text_encoder.device, text_encoder.dtype)
-        )
+        for token, vector in zip(tokens, embedding_vectors, strict=True):
+            table[tokenizer.convert_tokens_to_ids(token)] = vector.to(text_encoder.device, text_encoder.dtype)
 
     logger.info(f"Loaded {embedding_vectors.shape[0]} embedding vectors for token '{token_string}'")
 
@@ -118,11 +118,12 @@ def main() -> None:
 
     # Load textual inversion if specified
     if args.embedding_path:
-        load_textual_inversion_embedding(pipeline, args.embedding_path, args.token_string)
+        load_textual_inversion_embedding(pipeline, args.embedding_path, args.token_string, args.model_id)
 
     # Generate images
     output_path = Path(args.output_path)
     output_dir, base, ext = output_path.parent, output_path.stem, output_path.suffix
+    output_dir.mkdir(parents=True, exist_ok=True)
     if not ext:
         ext = ".png"
 

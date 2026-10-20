@@ -47,7 +47,7 @@ def test_the_filled_config_names_the_dataset_and_the_model_files_found_anywhere_
     assert "[" not in (tmp_path / "output" / "krea2" / "alice" / "config.yaml").read_text(encoding="utf-8")
 
 
-def test_the_trainer_runs_with_the_config_from_the_repo_root_and_its_exit_code_is_returned(
+def test_the_trainer_runs_from_the_repo_root_with_an_absolute_config_and_its_exit_code_is_returned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, launch: Launch
 ) -> None:
     datasets, models = make_world(tmp_path, "moss_image")
@@ -62,7 +62,7 @@ def test_the_trainer_runs_with_the_config_from_the_repo_root_and_its_exit_code_i
                 sys.executable,
                 str(ROOT / "train_moss_image_lora.py"),
                 "--config",
-                str(Path("output/moss_image/alice/config.yaml")),
+                str((tmp_path / "output/moss_image/alice/config.yaml").resolve()),  # absolute: it runs from ROOT
             ],
             ROOT,
         )
@@ -130,3 +130,15 @@ def test_max_steps_wins_over_epochs_and_the_dry_run_flag_reaches_the_trainer(
 
     assert rendered_config(tmp_path)["train"]["max_steps"] == 300
     assert launch.commands[0][0][-1] == "--dry-run"
+
+
+@pytest.mark.usefixtures("launch")
+def test_a_relative_datasets_folder_is_made_absolute_for_the_trainer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    datasets, models = make_world(tmp_path, "moss_image")
+
+    run(monkeypatch, "moss_image", "alice", "--datasets", datasets.relative_to(tmp_path), "--comfyui-models", models)
+
+    written = (tmp_path / "output" / "moss_image" / "alice" / "config.yaml").read_text(encoding="utf-8")
+    assert f"path: {(datasets / 'alice').resolve()}" in written

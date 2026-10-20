@@ -121,8 +121,8 @@ def test_an_embedding_replaces_the_tokenizer_and_text_encoder_before_generating(
     seen: dict[str, Any] = {}
     real = infer.load_textual_inversion_embedding
 
-    def spy(pipe: Any, path: str, token: str) -> None:
-        real(pipe, path, token)
+    def spy(pipe: Any, path: str, token: str, model_id: str) -> None:
+        real(pipe, path, token, model_id)
         seen.update(tokens=len(pipe.tokenizer), token=pipe.tokenizer.convert_tokens_to_ids(token), path=path)
 
     monkeypatch.setattr(infer, "load_textual_inversion_embedding", spy)
@@ -152,3 +152,27 @@ def test_the_prompt_is_required(
         infer.main()
 
     assert stop.value.code == 2 and "the following arguments are required: --prompt" in capsys.readouterr().err
+
+
+def test_an_output_folder_that_does_not_exist_yet_is_created(
+    infer: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _run(infer, monkeypatch, "--prompt", "x", "--seed", 1, "--output_path", tmp_path / "new" / "deep" / "pic.png")
+
+    assert [p.name for p in (tmp_path / "new" / "deep").iterdir()] == [f"pic_{STAMP}.png"]
+
+
+def test_the_embedding_is_loaded_for_the_model_that_was_asked_for(
+    infer: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    save_file({"embedding": torch.ones(1, 8)}, str(tmp_path / "e.safetensors"))
+    asked: list[tuple[str, str]] = []
+    for name, build in (("Qwen2Tokenizer", tiny_tokenizer), ("Qwen3ForCausalLM", tiny_text_encoder)):
+        monkeypatch.setattr(infer, name, Loader(build, asked))
+
+    _run(
+        infer, monkeypatch, "--prompt", "x", "--seed", 1, "--model_id", "me/other",
+        "--embedding_path", tmp_path / "e.safetensors",
+    )  # fmt: skip
+
+    assert {model for model, _ in asked} == {"me/other"}

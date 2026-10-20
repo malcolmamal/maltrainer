@@ -98,7 +98,7 @@ def main() -> int:
         text = text.replace("[comfyui_models]", Path(args.comfyui_models).as_posix())
     config = yaml.safe_load(text)
 
-    dataset_path = Path(args.datasets) / args.dataset
+    dataset_path = (Path(args.datasets) / args.dataset).resolve()  # the trainer runs from ROOT, not from here
     if not dataset_path.is_dir():
         print(f"Dataset folder not found: {dataset_path}", file=sys.stderr)
         return 1
@@ -138,7 +138,10 @@ def main() -> int:
     rendered.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     print(f"Config written to {rendered}")
 
-    command = [sys.executable, str(ROOT / script), "--config", str(rendered)] + (["--dry-run"] if args.dry_run else [])
+    # absolute: the trainer runs from ROOT, so a path relative to where this was launched would not be found
+    command = [sys.executable, str(ROOT / script), "--config", str(rendered.resolve())] + (
+        ["--dry-run"] if args.dry_run else []
+    )
     return subprocess.call(command, cwd=ROOT)
 
 

@@ -112,3 +112,29 @@ def test_a_file_without_anything_that_looks_like_an_embedding_is_refused_before_
         infer.load_textual_inversion_embedding(_pipeline(), path)
 
     assert asked == []
+
+
+def test_an_embedding_of_several_vectors_adds_one_token_per_vector_named_as_the_trainer_names_them(
+    tmp_path: Path, infer: ModuleType, asked: list[tuple[str, str]]
+) -> None:
+    pipeline = _pipeline()
+    vectors = torch.arange(24, dtype=torch.float32).reshape(3, 8) / 8
+
+    infer.load_textual_inversion_embedding(pipeline, _file(tmp_path / "e.safetensors", embedding=vectors), "sks")
+
+    table = pipeline.text_encoder.get_input_embeddings().weight
+    ids = [pipeline.tokenizer.convert_tokens_to_ids(name) for name in ("sks", "sks_1", "sks_2")]
+    assert ids == [len(WORDS), len(WORDS) + 1, len(WORDS) + 2] and table.shape[0] == len(WORDS) + 3
+    for row, vector in zip(ids, vectors, strict=True):
+        assert torch.equal(table[row], vector.to(torch.bfloat16))
+    assert asked
+
+
+def test_the_chosen_model_is_the_one_the_tokenizer_and_encoder_come_from(
+    tmp_path: Path, infer: ModuleType, asked: list[tuple[str, str]]
+) -> None:
+    infer.load_textual_inversion_embedding(
+        _pipeline(), _file(tmp_path / "e.safetensors", embedding=VECTOR), model_id="me/my-zimage"
+    )
+
+    assert asked == [("me/my-zimage", "tokenizer"), ("me/my-zimage", "text_encoder")]
