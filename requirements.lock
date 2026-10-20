@@ -21,7 +21,7 @@ av==19.0.1 ; python_full_version >= '3.12'
     # via maltrainer
 bitsandbytes==0.50.2
     # via maltrainer
-certifi==2026.10.18
+certifi==2026.10.19
     # via
     #   httpcore
     #   httpx
