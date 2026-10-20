@@ -38,6 +38,7 @@ from maltrainer.models.krea2.finetune import DEFAULT_ALWAYS_ON, always_on_linear
 from maltrainer.models.krea2.loading import load_krea2_transformer
 from maltrainer.optimizers import Automagic3
 from maltrainer.utils.config import load_config, save_config_to_output
+from maltrainer.utils.fsutil import replace_directory
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.logging_utils import setup_logging
 from maltrainer.utils.lora_metadata import build_metadata
@@ -423,12 +424,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             },
             tmp / STATE_TRAINER,
         )
-        old = state_dir.with_name(state_dir.name + ".old")
-        shutil.rmtree(old, ignore_errors=True)
-        if state_dir.exists():
-            state_dir.rename(old)
-        tmp.rename(state_dir)
-        shutil.rmtree(old, ignore_errors=True)
+        replace_directory(tmp, state_dir)
         logger.info("Saved resume state (step %d) to %s (%.0fs)", self.global_step, state_dir, time.time() - started)
 
 

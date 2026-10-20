@@ -62,7 +62,7 @@ from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.optimizers import Automagic3
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import OffloadedParameterEMA
-from maltrainer.utils.fsutil import rename_with_retry
+from maltrainer.utils.fsutil import replace_directory
 from maltrainer.utils.gallery import Gallery
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.logging_utils import setup_logging
@@ -768,12 +768,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             },
             tmp / STATE_TRAINER,
         )
-        old = state_dir.with_name(state_dir.name + ".old")
-        shutil.rmtree(old, ignore_errors=True)
-        if state_dir.exists():
-            rename_with_retry(state_dir, old)
-        rename_with_retry(tmp, state_dir)
-        shutil.rmtree(old, ignore_errors=True)
+        replace_directory(tmp, state_dir)
         logger.info(
             "Saved resume state (step %d%s) to %s (%.0fs)",
             self.global_step,

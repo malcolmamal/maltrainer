@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -81,3 +82,26 @@ def test_only_the_latest_state_is_kept_and_save_state_false_writes_none(workspac
 
     run_finetune(workspace.finetune_config(train={"save_state": False}, output={"path": str(workspace.root / "bare")}))
     assert not (workspace.root / "bare" / "ft_state").exists()
+
+
+def test_a_refused_rename_of_the_finished_state_folder_is_retried_not_lost(
+    workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace.add_images(3)
+    real = Path.rename
+    refused: list[Path] = []
+
+    def refuse_once(self: Path, target: Path) -> Path:
+        if self.name.endswith("_state.tmp") and not refused:
+            refused.append(self)
+            raise PermissionError(5, "Access is denied")  # a virus scanner holding the new folder
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "rename", refuse_once)
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+    run_finetune(workspace.finetune_config(train={"max_steps": 2}))
+
+    assert len(refused) == 1
+    assert {path.name for path in _state(workspace).iterdir()} == STATE_FILES
+    assert _counters(workspace)["global_step"] == 2

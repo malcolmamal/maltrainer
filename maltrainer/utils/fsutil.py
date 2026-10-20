@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -34,3 +35,18 @@ def rename_with_retry(
                 "Renaming %s to %s was refused (%s); trying again in %.1f s", source, target, error, delay * attempt
             )
             (sleep or time.sleep)(delay * attempt)
+
+
+def replace_directory(finished: Path, target: Path) -> None:
+    """Put the finished folder in the place of ``target``, which stays whole until the new one is in.
+
+    The old ``target`` is moved to ``<target>.old``, the finished folder takes its place, and the old
+    one is deleted last, so a failure in between leaves a complete folder behind. Both renames are
+    retried (see ``rename_with_retry``).
+    """
+    old = target.with_name(target.name + ".old")
+    shutil.rmtree(old, ignore_errors=True)
+    if target.exists():
+        rename_with_retry(target, old)
+    rename_with_retry(finished, target)
+    shutil.rmtree(old, ignore_errors=True)

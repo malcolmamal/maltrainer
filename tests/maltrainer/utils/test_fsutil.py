@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from maltrainer.utils.fsutil import rename_with_retry
+from maltrainer.utils.fsutil import rename_with_retry, replace_directory
 
 
 def refuse_first(monkeypatch: pytest.MonkeyPatch, times: int) -> list[int]:
@@ -67,3 +67,50 @@ def test_an_error_that_is_not_a_permission_error_is_not_retried(tmp_path: Path) 
         rename_with_retry(tmp_path / "missing", tmp_path / "b", sleep=waits.append)
 
     assert waits == []
+
+
+def _folder(path: Path, content: str) -> Path:
+    path.mkdir(parents=True)
+    (path / "file.txt").write_text(content, encoding="utf-8")
+    return path
+
+
+def test_a_finished_folder_takes_the_place_of_the_old_one_and_nothing_is_left_over(tmp_path: Path) -> None:
+    target = _folder(tmp_path / "state", "old")
+    finished = _folder(tmp_path / "state.tmp", "new")
+
+    replace_directory(finished, target)
+
+    assert (target / "file.txt").read_text(encoding="utf-8") == "new"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["state"]
+
+
+def test_a_first_save_has_no_old_folder_to_move(tmp_path: Path) -> None:
+    finished = _folder(tmp_path / "state.tmp", "new")
+
+    replace_directory(finished, tmp_path / "state")
+
+    assert (tmp_path / "state" / "file.txt").read_text(encoding="utf-8") == "new"
+
+
+def test_a_leftover_old_folder_from_a_crashed_save_does_not_block_the_next(tmp_path: Path) -> None:
+    _folder(tmp_path / "state.old", "stale")
+    target = _folder(tmp_path / "state", "old")
+    finished = _folder(tmp_path / "state.tmp", "new")
+
+    replace_directory(finished, target)
+
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["state"]
+    assert (target / "file.txt").read_text(encoding="utf-8") == "new"
+
+
+def test_a_refused_rename_while_swapping_is_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    target = _folder(tmp_path / "state", "old")
+    finished = _folder(tmp_path / "state.tmp", "new")
+    calls = refuse_first(monkeypatch, 1)
+    monkeypatch.setattr("maltrainer.utils.fsutil.time.sleep", lambda _seconds: None)
+
+    replace_directory(finished, target)
+
+    assert (target / "file.txt").read_text(encoding="utf-8") == "new"
+    assert len(calls) == 3  # the move aside refused, the move aside again, the move in
