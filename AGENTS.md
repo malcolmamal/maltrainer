@@ -14,3 +14,16 @@ Run the quality gate before every commit: `.venv/Scripts/python -m maltrainer_qu
 - **Tests** run real trainer code on tiny CPU models; only loaders are faked. Keep them annotated like the product code.
 - Shared helpers live in `maltrainer/` (optimizers, finetune, data, utils); reuse them instead of copying between
   trainers.
+
+## Sentinel review (optional, local)
+
+Some machines have the Sentinel review skill installed under `work/sentinel/` (git-ignored, never committed).
+
+- **If `work/sentinel/SKILL.md` exists, obey it.** For every change it covers (bug fixes, behaviour-changing
+  refactors, API or configuration changes, tests meant to prove behaviour) run its review loop before calling the task
+  done, apply its P0 and in-scope P1 findings, rerun the affected checks, and give its attestation in the final
+  response. Use `work/sentinel/CHECKLIST.md` as the repository checklist, `work/sentinel/config.yaml` as the
+  configuration (instead of the skill's default `.sentinel/config.yaml`) and `work/sentinel/reviews/` for reports.
+  Do not create a root `.sentinel/` folder.
+- **If it is not there, do nothing about it:** no error, no warning, no mention, and do not try to install it. The
+  skill may be absent on other machines; the quality gate above is the requirement everywhere.
