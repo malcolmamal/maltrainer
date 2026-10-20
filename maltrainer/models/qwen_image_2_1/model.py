@@ -12,8 +12,10 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from accelerate import init_empty_weights
+from safetensors.torch import load_file
 from torch import nn
 
+from maltrainer.models.flux3.loading import is_int8_convrot
 from maltrainer.models.minimax_h3.int8_convrot import (
     enable_int8_convrot,
     load_comfy_int8_convrot_state_dict,
@@ -422,7 +424,10 @@ def load_qwen_image_2_1_transformer(
         raise FileNotFoundError(f"Transformer model file not found at {model_path}")
 
     logger.info("Loading Qwen-Image-2.1 Transformer from %s...", model_path)
-    int8_state_dict, num_quant = load_comfy_int8_convrot_state_dict(str(model_path), device=torch.device("cpu"))
+    if is_int8_convrot(model_path):
+        int8_state_dict, num_quant = load_comfy_int8_convrot_state_dict(str(model_path), device=torch.device("cpu"))
+    else:
+        int8_state_dict, num_quant = load_file(str(model_path), device="cpu"), 0
 
     with init_empty_weights(include_buffers=False):
         model = QwenImage21Transformer()

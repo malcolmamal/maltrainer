@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import torch
-from safetensors.torch import load_file, save_file
+from safetensors.torch import save_file
 
 from maltrainer.models.minimax_h3.int8_convrot import rotate_activation
 from maltrainer.models.qwen_image_2_1 import model as model_module
@@ -117,13 +117,10 @@ def test_a_quantized_tensor_for_a_module_the_model_lacks_is_rejected(tmp_path: P
         load_qwen_image_2_1_transformer(path, device=CPU)
 
 
-def test_a_checkpoint_the_state_dict_reader_reports_as_unquantized_loads_as_a_plain_model(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_plain_checkpoint_without_markers_loads_as_an_unquantized_model(tmp_path: Path) -> None:
     source = tiny_transformer(seed=7)
     path = tmp_path / "plain.safetensors"
     save_file(source.state_dict(), str(path))
-    monkeypatch.setattr(model_module, "load_comfy_int8_convrot_state_dict", lambda p, **_: (load_file(p), 0))
 
     model = load_qwen_image_2_1_transformer(path, device=CPU, dtype=torch.float32)
 
