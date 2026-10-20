@@ -73,8 +73,8 @@ def test_the_manifest_lists_prompts_seeds_runs_dataset_and_every_image(
         ("adamw", "final"),
         ("prodigy", "final"),
     }
-    assert {Path(r["path"]).as_posix() for r in records if r["run"] == "base"} == {"base/a_s3.png", "base/b_s3.png"}
-    assert {Path(r["path"]).as_posix() for r in records if (r["run"], r["step"]) == ("adamw", "5")} == {
+    assert {r["path"] for r in records if r["run"] == "base"} == {"base/a_s3.png", "base/b_s3.png"}
+    assert {r["path"] for r in records if (r["run"], r["step"]) == ("adamw", "5")} == {
         "adamw/5/a_s3.png",
         "adamw/5/b_s3.png",
     }

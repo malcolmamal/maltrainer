@@ -177,7 +177,7 @@ def main() -> None:
         array = (image[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8")
         Image.fromarray(array).save(path)
         records.append(
-            {"run": name, "step": step, "prompt": prompt_id, "seed": seed, "path": str(path.relative_to(outdir))}
+            {"run": name, "step": step, "prompt": prompt_id, "seed": seed, "path": path.relative_to(outdir).as_posix()}
         )
 
     manifest = {
