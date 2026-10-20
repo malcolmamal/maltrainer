@@ -81,6 +81,10 @@ def test_the_output_gate_is_a_sigmoid_of_a_projection_of_the_input() -> None:
 
     torch.testing.assert_close(attention(x), 0.5 * open_gate, atol=1e-5, rtol=1e-4)
 
+    attention.gate.bias.data.fill_(-60.0)
+
+    torch.testing.assert_close(attention(x), torch.zeros_like(open_gate), atol=1e-5, rtol=1e-4)
+
 
 def test_the_double_modulation_adds_its_offsets_to_the_vector_and_splits_it_in_six() -> None:
     modulation = DoubleSharedModulation(4)

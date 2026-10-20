@@ -52,12 +52,20 @@ def test_the_rope_axes_split_the_head_dim_into_a_wide_axis_and_two_equal_ones() 
     assert wide.axes_dim == [8, 12, 12]
 
 
+def test_the_default_config_splits_the_head_dim_into_rope_axes_32_48_48_and_has_12_9b_parameters() -> None:
+    with torch.device("meta"):
+        model = Krea2Transformer(Krea2Config())
+
+    assert model.axes_dim == [32, 48, 48]
+    assert 12.8e9 < sum(p.numel() for p in model.parameters()) < 13.0e9
+
+
 def test_the_velocity_has_the_shape_of_the_latent_and_the_compute_dtype() -> None:
     x, sigma, context = tiny_inputs()
 
     out = tiny_transformer()(x, sigma, context)
 
-    assert out.shape == x.shape and out.dtype == torch.float32
+    assert out.shape == x.shape and out.dtype == torch.float32 and torch.isfinite(out).all()
 
 
 def test_a_bf16_model_returns_bf16() -> None:
@@ -89,6 +97,20 @@ def test_the_output_depends_on_the_noise_level_and_the_prompt_but_not_on_text_le
     assert not torch.allclose(base, model(x, sigma.flip(0), context))
     assert not torch.allclose(base, model(x, sigma, context.flip(0)))
     assert model(x, sigma, tiny_inputs(length=5)[2]).shape == base.shape
+
+
+def test_image_tokens_are_position_aware_so_flipping_the_latent_changes_the_output() -> None:
+    model = tiny_transformer()
+    x, sigma, context = tiny_inputs()
+
+    assert not torch.allclose(model(x, sigma, context).flip(-1), model(x.flip(-1), sigma, context), atol=1e-4)
+
+
+@pytest.mark.parametrize("size", [4, 12])
+def test_the_forward_pass_accepts_other_resolutions(size: int) -> None:
+    x, sigma, context = tiny_inputs(batch=1, h=size, w=size)
+
+    assert tiny_transformer()(x, sigma, context).shape == (1, TINY.channels, size, size)
 
 
 def test_every_parameter_of_the_dit_receives_a_gradient() -> None:

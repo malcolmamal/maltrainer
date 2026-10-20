@@ -10,30 +10,6 @@ from maltrainer.models.krea2.lora import Krea2LoRANetwork
 from tests.maltrainer.models.krea2.tiny_model import tiny_inputs, tiny_transformer
 
 
-def test_a_fresh_network_leaves_the_model_output_unchanged() -> None:
-    model = tiny_transformer()
-    inputs = tiny_inputs()
-    before = model(*inputs)
-
-    network = Krea2LoRANetwork(model, rank=4, alpha=8.0, targets="all")
-
-    assert torch.equal(network(*inputs), before)
-
-
-def test_a_wrapped_linear_adds_exactly_up_of_down_of_its_input_times_alpha_over_rank() -> None:
-    model = tiny_transformer()
-    network = Krea2LoRANetwork(model, rank=2, alpha=6.0)
-    layer = network.lora_layers["blocks_0_mlp_gate"]
-    layer.lora_up.weight.data.normal_()
-    x = torch.randn(3, 32)
-    linear = model.blocks[0].mlp.gate
-
-    delta = linear(x) - torch.nn.functional.linear(x, linear.weight)
-
-    expected = layer.lora_up(layer.lora_down(x)) * 3.0
-    torch.testing.assert_close(delta, expected, atol=1e-6, rtol=1e-5)
-
-
 def test_disabled_runs_the_base_model_alone_and_restores_the_adapters_afterwards() -> None:
     model = tiny_transformer()
     inputs = tiny_inputs()
@@ -103,19 +79,6 @@ def test_one_param_group_holds_every_adapter_unless_splitting_by_family() -> Non
 
     assert single["name"] == "lora" and len(single["params"]) == 2 * 56
     assert split == {"attn": 2 * 10, "mlp": 2 * 6, "txtfusion": 2 * 33, "other": 2 * 7}
-
-
-def test_the_state_dict_holds_comfyuis_lora_a_lora_b_and_alpha_under_the_prefix() -> None:
-    network = Krea2LoRANetwork(tiny_transformer(), rank=2, alpha=6.0)
-    layer = network.lora_layers["blocks_1_attn_wo"]
-
-    state = network.get_state_dict()
-
-    key = "diffusion_model.blocks.1.attn.wo"
-    assert len(state) == 3 * 16
-    assert torch.equal(state[f"{key}.lora_A.weight"], layer.lora_down.weight.detach().to(torch.bfloat16))
-    assert state[f"{key}.lora_B.weight"].dtype == torch.bfloat16
-    assert state[f"{key}.alpha"].dtype == torch.float32 and state[f"{key}.alpha"].item() == 6.0
 
 
 def test_the_state_dict_keeps_the_training_dtype_when_no_save_dtype_is_given() -> None:

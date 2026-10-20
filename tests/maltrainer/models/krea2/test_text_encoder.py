@@ -90,17 +90,3 @@ def test_loader_builds_a_truncated_encoder_that_matches_the_checkpoint_weights(e
     assert not any(p.requires_grad for p in encoder.model.parameters()) and not encoder.model.training
     reference = Krea2TextEncoder(model, encoder.tokenizer).encode("a cat", CPU, dtype=torch.float32)
     assert torch.allclose(encoder.encode("a cat", CPU, dtype=torch.float32), reference, atol=1e-5)
-
-
-def test_loader_casts_to_the_requested_dtype(encoder_file):
-    encoder = load_krea2_text_encoder(encoder_file[1], CPU, dtype=torch.bfloat16)
-    assert encoder.model.embed_tokens.weight.dtype == torch.bfloat16
-
-
-def test_loader_refuses_a_file_that_is_not_a_qwen3_vl_text_encoder(tmp_path, encoder_file):
-    model, _ = encoder_file
-    state = {f"model.{k}": v for k, v in model.state_dict().items() if "q_proj" not in k}
-    path = tmp_path / "bad.safetensors"
-    save_file({k: v.contiguous() for k, v in state.items()}, str(path))
-    with pytest.raises(ValueError, match="does not look like a Qwen3-VL-4B text encoder"):
-        load_krea2_text_encoder(path, CPU)

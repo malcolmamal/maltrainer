@@ -167,5 +167,12 @@ def test_loader_refuses_a_file_missing_encoder_tensors(tmp_path):
     state = {k: v for k, v in seeded(Krea2VAE(dim=4)).state_dict().items() if k != "conv1.bias"}
     path = tmp_path / "bad.safetensors"
     save_file(state, str(path))
-    with pytest.raises(ValueError, match=r"not a Wan 2.1 VAE.*conv1\.bias"):
+    with pytest.raises(ValueError, match=r"is not a Wan 2\.1 VAE .*missing \['conv1\.bias'\]"):
+        load_krea2_vae(path, CPU)
+
+
+def test_a_file_without_the_encoder_is_read_at_the_default_width_and_refused(tmp_path):
+    path = tmp_path / "other.safetensors"
+    save_file({"unet.weight": torch.zeros(1)}, str(path))
+    with pytest.raises(ValueError, match=r"is not a Wan 2\.1 VAE"):
         load_krea2_vae(path, CPU)

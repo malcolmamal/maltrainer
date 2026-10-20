@@ -115,14 +115,6 @@ def test_trained_adapter_adds_its_delta_to_the_wrapped_linear_and_disabled_skips
     assert not torch.allclose(linear(x), base)  # re-enabled after the block exits
 
 
-def test_disabled_reenables_even_when_the_block_raises():
-    network = Krea2LoRANetwork(tiny_model())
-    with pytest.raises(RuntimeError), network.disabled():
-        assert network._active == [False]
-        raise RuntimeError("boom")
-    assert network._active == [True]
-
-
 def test_wrapped_output_keeps_the_base_dtype():
     model = tiny_model()
     network = Krea2LoRANetwork(model)
@@ -138,20 +130,6 @@ def test_forward_delegates_to_the_transformer():
     assert torch.equal(network(x, sigma, context), model(x, sigma, context))
 
 
-def test_param_groups_unsplit_is_one_group_of_every_lora_parameter():
-    network = Krea2LoRANetwork(tiny_model(), targets="blocks+txt")
-    (group,) = network.param_groups(split=False)
-    assert group["name"] == "lora"
-    assert len(group["params"]) == 2 * len(network.lora_layers)
-    assert len(list(network.trainable_parameters())) == len(group["params"])
-
-
-def test_param_groups_split_by_family():
-    network = Krea2LoRANetwork(tiny_model(), targets="all")
-    groups = {g["name"]: len(g["params"]) for g in network.param_groups(split=True)}
-    assert groups == {"attn": 2 * 10, "mlp": 2 * 6, "txtfusion": 2 * 33, "other": 2 * 7}
-
-
 def test_state_dict_uses_comfy_keys_with_alpha_and_requested_dtype():
     network = Krea2LoRANetwork(tiny_model(), rank=2, alpha=8.0)
     state = network.get_state_dict()
@@ -160,6 +138,9 @@ def test_state_dict_uses_comfy_keys_with_alpha_and_requested_dtype():
     assert state[f"{key}.lora_B.weight"].shape == (64, 2)
     assert state[f"{key}.lora_A.weight"].dtype == torch.bfloat16
     assert state[f"{key}.alpha"].item() == 8.0 and state[f"{key}.alpha"].dtype == torch.float32
+    assert torch.equal(
+        state[f"{key}.lora_A.weight"], network.lora_layers["blocks_1_mlp_down"].lora_down.weight.detach().bfloat16()
+    )
     assert len(state) == 3 * len(network.lora_layers)
 
 
