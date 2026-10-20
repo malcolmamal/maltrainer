@@ -5,7 +5,6 @@
   "maltrainer/models/krea2/model.py": 298,
   "maltrainer/models/krea2/vae.py": 204,
   "maltrainer/models/minimax_h3/comfy_quant.py": 277,
-  "maltrainer/models/minimax_h3/int8_convrot.py": 279,
   "maltrainer/models/minimax_h3/lora.py": 357,
   "maltrainer/models/minimax_h3/model.py": 424,
   "maltrainer/models/minimax_h3/text_encoder.py": 209,
