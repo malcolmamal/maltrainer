@@ -1,17 +1,18 @@
 """
 Qwen-Image-2.1 Diffusion Transformer (Single-stream DiT).
 Supports INT8 ConvRot quantized linear layers and native BF16 inference/training.
+
+The building blocks live in ``model_layers`` and ``model_blocks``, the schedule and RoPE maths in ``model_math``;
+every public name is re-exported here.
 """
 
 from __future__ import annotations
 
 import logging
-import math
 from pathlib import Path
 from typing import cast
 
 import torch
-import torch.nn.functional as F
 from accelerate import init_empty_weights
 from torch import nn
 
@@ -20,290 +21,43 @@ from maltrainer.models.minimax_h3.int8_convrot import (
     prepare_int8_convrot_modules,
 )
 from maltrainer.models.qwen_image_2_1.checkpoint import read_state_dict, to_keeping_scales
+from maltrainer.models.qwen_image_2_1.model_blocks import (
+    AdaLayerNormContinuous,
+    Attention,
+    TransformerBlock,
+)
+from maltrainer.models.qwen_image_2_1.model_layers import (
+    RMSNorm,
+    SwiGLUFeedForward,
+    TemporalTimesteps,
+    TextProjection,
+    TimestepEmbedder,
+    TimestepProjEmbeddings,
+    ZeroCenterRMSNorm,
+    apply_rotary_emb_qwen,
+)
+from maltrainer.models.qwen_image_2_1.model_math import apply_flow_shift, build_rope_frequencies, calculate_shift
 
 logger = logging.getLogger(__name__)
 
-
-def calculate_shift(
-    image_seq_len: int,
-    base_seq_len: int = 256,
-    max_seq_len: int = 8192,
-    base_shift: float = 0.5,
-    max_shift: float = 0.9,
-) -> float:
-    """Calculate dynamic shift value based on image token length."""
-    slope = (max_shift - base_shift) / (max_seq_len - base_seq_len)
-    mu = image_seq_len * slope + base_shift - slope * base_seq_len
-    return float(mu)
-
-
-def apply_flow_shift(t: torch.Tensor, mu: float = 0.5) -> torch.Tensor:
-    """Apply exponential flow shift mapping: t_shifted = (exp(mu) * t) / (1 + (exp(mu) - 1) * t)."""
-    shift = math.exp(mu)
-    if shift == 1.0:
-        return t
-    return (shift * t) / (1.0 + (shift - 1.0) * t)
-
-
-class TemporalTimesteps(nn.Module):
-    """Sinusoidal timestep embedding generator."""
-
-    def __init__(self, timestep_dim: int = 256, max_period: int = 10000, time_factor: float = 1000.0):
-        super().__init__()
-        self.timestep_dim = timestep_dim
-        self.time_factor = time_factor
-        half = timestep_dim // 2
-        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half)
-        self.register_buffer("freqs", freqs, persistent=False)
-
-    def forward(self, timestep: torch.Tensor) -> torch.Tensor:
-        timestep = self.time_factor * timestep.float()
-        args = timestep[:, None] * self.get_buffer("freqs").to(timestep.device)[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        return embedding.to(timestep.dtype)
-
-
-class TimestepEmbedder(nn.Module):
-    """Timestep MLP projection."""
-
-    def __init__(self, in_channels: int = 256, time_embed_dim: int = 4096):
-        super().__init__()
-        self.linear_1 = nn.Linear(in_channels, time_embed_dim, bias=False)
-        self.act = nn.SiLU()
-        self.linear_2 = nn.Linear(time_embed_dim, time_embed_dim, bias=False)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return cast(torch.Tensor, self.linear_2(self.act(self.linear_1(x))))
-
-
-class TimestepProjEmbeddings(nn.Module):
-    """Combined Timestep Projection and Embedding block."""
-
-    def __init__(self, embedding_dim: int = 4096):
-        super().__init__()
-        self.time_proj = TemporalTimesteps(timestep_dim=256)
-        self.timestep_embedder = TimestepEmbedder(in_channels=256, time_embed_dim=embedding_dim)
-
-    def forward(self, timestep: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
-        proj = self.time_proj(timestep)
-        return cast(torch.Tensor, self.timestep_embedder(proj.to(dtype=hidden_states.dtype)))
-
-
-class ZeroCenterRMSNorm(nn.Module):
-    """Zero-centered RMSNorm for text projection input."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.zeros(dim))
-        self.eps = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
-        rrms = torch.rsqrt(torch.mean(hidden_states**2, dim=-1, keepdim=True) + self.eps)
-        return (hidden_states * rrms * (self.weight.float() + 1.0)).to(input_dtype)
-
-
-class TextProjection(nn.Module):
-    """Text embedding projection layer."""
-
-    def __init__(self, context_in_dim: int = 4096, hidden_size: int = 4096, eps: float = 1e-6):
-        super().__init__()
-        self.text_norm = ZeroCenterRMSNorm(context_in_dim, eps=eps)
-        self.in_layer = nn.Linear(context_in_dim, hidden_size, bias=False)
-        self.act = nn.GELU(approximate="tanh")
-        self.out_layer = nn.Linear(hidden_size, hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.text_norm(hidden_states)
-        hidden_states = self.in_layer(hidden_states)
-        hidden_states = self.act(hidden_states)
-        return cast(torch.Tensor, self.out_layer(hidden_states))
-
-
-class SwiGLUFeedForward(nn.Module):
-    """SwiGLU MLP layer."""
-
-    def __init__(self, hidden_size: int = 4096, mlp_hidden_size: int = 12288):
-        super().__init__()
-        self.gate_up = nn.Linear(hidden_size, mlp_hidden_size * 2, bias=False)
-        self.out = nn.Linear(mlp_hidden_size, hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        gate, up = self.gate_up(hidden_states).chunk(2, dim=-1)
-        return cast(torch.Tensor, self.out(F.silu(gate) * up))
-
-
-class RMSNorm(nn.Module):
-    """RMSNorm for attention queries and keys."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        norm = F.normalize(x.float(), dim=-1, eps=self.eps).to(x.dtype)
-        return cast(torch.Tensor, norm * (self.weight.shape[-1] ** 0.5) * self.weight)
-
-
-def apply_rotary_emb_qwen(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
-    """Apply rotary position embedding."""
-    x_rotated = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
-    freqs_cis = freqs_cis.unsqueeze(1)  # [B, 1, S, D/2]
-    x_out = torch.view_as_real(x_rotated * freqs_cis).flatten(3)
-    return x_out.type_as(x)
-
-
-class Attention(nn.Module):
-    """Multi-head attention module with rotary embeddings and QK-norm."""
-
-    def __init__(self, dim: int = 4096, heads: int = 32, dim_head: int = 128, eps: float = 1e-6):
-        super().__init__()
-        self.heads = heads
-        self.dim_head = dim_head
-        self.to_q = nn.Linear(dim, dim, bias=False)
-        self.to_k = nn.Linear(dim, dim, bias=False)
-        self.to_v = nn.Linear(dim, dim, bias=False)
-        self.to_out = nn.ModuleList([nn.Linear(dim, dim, bias=False), nn.Identity()])
-        self.norm_q = RMSNorm(dim_head, eps=eps)
-        self.norm_k = RMSNorm(dim_head, eps=eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        rotary_emb: torch.Tensor | None = None,
-        attn_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        b, s, _ = hidden_states.shape
-        q = self.to_q(hidden_states).view(b, s, self.heads, self.dim_head)
-        k = self.to_k(hidden_states).view(b, s, self.heads, self.dim_head)
-        v = self.to_v(hidden_states).view(b, s, self.heads, self.dim_head)
-        q = self.norm_q(q)
-        k = self.norm_k(k)
-
-        if rotary_emb is not None:
-            q = apply_rotary_emb_qwen(q, rotary_emb)
-            k = apply_rotary_emb_qwen(k, rotary_emb)
-
-        q = q.transpose(1, 2)  # [B, H, S, D]
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-
-        out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
-        out = out.transpose(1, 2).reshape(b, s, -1)
-        out = self.to_out[0](out)
-        return cast(torch.Tensor, out)
-
-
-class TransformerBlock(nn.Module):
-    """Single-stream Qwen 2.1 Transformer block."""
-
-    def __init__(self, dim: int = 4096, heads: int = 32, dim_head: int = 128, mlp_ratio: int = 3, eps: float = 1e-6):
-        super().__init__()
-        self.img_norm1 = nn.LayerNorm(dim, elementwise_affine=False, eps=eps)
-        self.attn = Attention(dim=dim, heads=heads, dim_head=dim_head, eps=eps)
-        self.img_norm2 = nn.LayerNorm(dim, elementwise_affine=False, eps=eps)
-        self.img_mlp = SwiGLUFeedForward(hidden_size=dim, mlp_hidden_size=dim * mlp_ratio)
-
-    def _modulate(
-        self,
-        hidden_states: torch.Tensor,
-        mod_params: torch.Tensor,
-        target_token_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        scale, gate = mod_params.chunk(2, dim=-1)
-        if target_token_mask is None:
-            scale = scale.unsqueeze(1)
-            gate = gate.unsqueeze(1)
-        else:
-            real_s, zero_s = scale[:-1].unsqueeze(1), scale[-1:].unsqueeze(0)
-            scale = torch.where(target_token_mask.view(1, -1, 1), real_s, zero_s)
-            real_g, zero_g = gate[:-1].unsqueeze(1), gate[-1:].unsqueeze(0)
-            gate = torch.where(target_token_mask.view(1, -1, 1), real_g, zero_g)
-        return hidden_states * (1.0 + scale), gate
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        modulation: torch.Tensor,
-        rotary_emb: torch.Tensor | None = None,
-        attn_mask: torch.Tensor | None = None,
-        target_token_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        mod1, mod2 = modulation.chunk(2, dim=-1)
-        img_modulated, img_gate1 = self._modulate(self.img_norm1(hidden_states), mod1, target_token_mask)
-        attn_out = self.attn(img_modulated, rotary_emb=rotary_emb, attn_mask=attn_mask)
-        hidden_states = hidden_states + img_gate1.tanh() * attn_out
-
-        img_modulated2, img_gate2 = self._modulate(self.img_norm2(hidden_states), mod2, target_token_mask)
-        hidden_states = hidden_states + img_gate2.tanh() * self.img_mlp(img_modulated2)
-        return hidden_states
-
-
-class AdaLayerNormContinuous(nn.Module):
-    """Adaptive LayerNorm Continuous module."""
-
-    def __init__(self, embedding_dim: int = 4096, conditioning_embedding_dim: int = 4096, eps: float = 1e-6):
-        super().__init__()
-        self.silu = nn.SiLU()
-        self.linear = nn.Linear(conditioning_embedding_dim, embedding_dim, bias=False)
-        self.norm = nn.LayerNorm(embedding_dim, eps=eps, elementwise_affine=False, bias=False)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        conditioning_embedding: torch.Tensor,
-        target_token_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        scale = self.linear(self.silu(conditioning_embedding).to(hidden_states.dtype))
-        if target_token_mask is None:
-            scale = scale.unsqueeze(1)
-        else:
-            real_s, zero_s = scale[:-1].unsqueeze(1), scale[-1:].unsqueeze(0)
-            scale = torch.where(target_token_mask.view(1, -1, 1), real_s, zero_s)
-        return cast(torch.Tensor, self.norm(hidden_states) * (1.0 + scale))
-
-
-def build_rope_frequencies(
-    text_len: int,
-    latent_h: int,
-    latent_w: int,
-    axes_dim: tuple[int, int, int] = (16, 56, 56),
-    device: torch.device | None = None,
-) -> torch.Tensor:
-    """Build 3D RoPE complex frequencies for Qwen-Image-2.1 [text | image] sequence."""
-    img_tokens = latent_h * latent_w
-
-    pos_index = torch.arange(8192, device=device)
-    neg_index = torch.arange(1024, device=device).flip(0) * -1 - 1
-
-    def rope_p(idx: torch.Tensor, dim: int) -> torch.Tensor:
-        freqs = torch.outer(
-            idx,
-            1.0 / torch.pow(10000.0, torch.arange(0, dim, 2, device=device, dtype=torch.float32).div(dim)),
-        )
-        return torch.polar(torch.ones_like(freqs), freqs)
-
-    freqs = [torch.cat([rope_p(pos_index, dim), rope_p(neg_index, dim)], dim=0) for dim in axes_dim]
-
-    frame_idx = list(range(text_len)) + [text_len] * img_tokens
-    h_idx = list(range(text_len)) + [
-        h for h in range(-(latent_h - latent_h // 2), latent_h // 2) for _ in range(latent_w)
-    ]
-    w_idx = list(range(text_len)) + [
-        w for _ in range(latent_h) for w in range(-(latent_w - latent_w // 2), latent_w // 2)
-    ]
-
-    rotary_emb = torch.cat(
-        [
-            freqs[0][torch.tensor(frame_idx, device=device)],
-            freqs[1][torch.tensor(h_idx, device=device)],
-            freqs[2][torch.tensor(w_idx, device=device)],
-        ],
-        dim=-1,
-    )
-    return rotary_emb
+__all__ = [
+    "AdaLayerNormContinuous",
+    "Attention",
+    "QwenImage21Transformer",
+    "RMSNorm",
+    "SwiGLUFeedForward",
+    "TemporalTimesteps",
+    "TextProjection",
+    "TimestepEmbedder",
+    "TimestepProjEmbeddings",
+    "TransformerBlock",
+    "ZeroCenterRMSNorm",
+    "apply_flow_shift",
+    "apply_rotary_emb_qwen",
+    "build_rope_frequencies",
+    "calculate_shift",
+    "load_qwen_image_2_1_transformer",
+]
 
 
 class QwenImage21Transformer(nn.Module):

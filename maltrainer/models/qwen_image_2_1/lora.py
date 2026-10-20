@@ -12,35 +12,31 @@ from typing import Any, cast
 import torch
 from torch import nn
 
+from maltrainer.models.qwen_image_2_1.lora_assistant import build_assistant_layer, find_linear, read_adapter_pairs
+from maltrainer.models.qwen_image_2_1.lora_layer import QwenImage21LoRALayer
+
 logger = logging.getLogger(__name__)
 
 # Default target linear modules in Qwen-Image-2.1 Transformer blocks
 DEFAULT_QWEN_IMAGE_2_1_TARGET_MODULES = ["to_q", "to_k", "to_v", "to_out.0", "gate_up", "img_mlp.out"]
 
+__all__ = ["DEFAULT_QWEN_IMAGE_2_1_TARGET_MODULES", "QwenImage21LoRALayer", "QwenImage21LoRANetwork"]
 
-class QwenImage21LoRALayer(nn.Module):
-    """Single LoRA layer for Linear projection in Qwen-Image-2.1."""
 
-    def __init__(self, original_module: nn.Linear, rank: int, alpha: float):
-        super().__init__()
-        in_features = original_module.in_features
-        out_features = original_module.out_features
-
-        self.rank = rank
-        self.alpha = alpha
-        self.scale = alpha / rank
-
-        self.lora_down = nn.Linear(in_features, rank, bias=False)
-        self.lora_up = nn.Linear(rank, out_features, bias=False)
-
-        nn.init.kaiming_uniform_(self.lora_down.weight, a=5**0.5)
-        nn.init.zeros_(self.lora_up.weight)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.lora_down.weight.dtype
-        if x.is_floating_point() and x.dtype != target_dtype and not torch.is_autocast_enabled():
-            x = x.to(target_dtype)
-        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
+def _log_assistant(attached: int, skipped: list[str], rank: int, multiplier: float, path: str | Path) -> None:
+    if skipped:
+        logger.warning(
+            "Assistant adapter skipped %d module(s) not found in transformer: %s",
+            len(skipped),
+            skipped[:5],
+        )
+    logger.info(
+        "Attached frozen assistant adapter: %d modules, rank %d, multiplier %.2f (from %s)",
+        attached,
+        rank,
+        multiplier,
+        Path(path).name,
+    )
 
 
 class QwenImage21LoRANetwork(nn.Module):
@@ -114,21 +110,7 @@ class QwenImage21LoRANetwork(nn.Module):
         dtype: torch.dtype | None = None,
     ) -> int:
         """Attach a frozen assistant adapter live during training."""
-        from safetensors.torch import load_file
-
-        state = load_file(str(path))
-        pairs: dict[str, dict[str, torch.Tensor]] = {}
-        for key, value in state.items():
-            for suffix, slot in (
-                (".lora_A.weight", "down"),
-                (".lora_down.weight", "down"),
-                (".lora_B.weight", "up"),
-                (".lora_up.weight", "up"),
-                (".alpha", "alpha"),
-            ):
-                if key.endswith(suffix):
-                    pairs.setdefault(key[: -len(suffix)], {})[slot] = value
-                    break
+        pairs = read_adapter_pairs(path)
 
         if not hasattr(self, "assistant_layers"):
             self.assistant_layers = nn.ModuleDict()
@@ -138,44 +120,17 @@ class QwenImage21LoRANetwork(nn.Module):
             if "down" not in parts or "up" not in parts:
                 continue
             module_path = name[len(self.prefix) :] if name.startswith(self.prefix) else name
-            try:
-                module = self.transformer.get_submodule(module_path)
-            except AttributeError:
-                skipped.append(module_path)
-                continue
-            if not isinstance(module, nn.Linear):
+            module = find_linear(self.transformer, module_path)
+            if module is None:
                 skipped.append(module_path)
                 continue
 
-            down, up = parts["down"], parts["up"]
-            rank = down.shape[0]
-            alpha = float(parts["alpha"].item()) if "alpha" in parts else float(rank)
-            layer = QwenImage21LoRALayer(module, rank, alpha)
-            layer.lora_down.weight.data.copy_(down.to(layer.lora_down.weight.dtype))
-            layer.lora_up.weight.data.copy_(up.to(layer.lora_up.weight.dtype))
-            layer.scale = (alpha / rank) * multiplier
-            layer.requires_grad_(False)
-            layer.eval()
-            if dtype is not None or device is not None:
-                layer.to(device=device, dtype=dtype)
-
+            layer, rank = build_assistant_layer(module, parts, multiplier, device, dtype)
             self.assistant_layers[module_path.replace(".", "_")] = layer
             self._wrap_forward(module, layer)
             attached += 1
 
-        if skipped:
-            logger.warning(
-                "Assistant adapter skipped %d module(s) not found in transformer: %s",
-                len(skipped),
-                skipped[:5],
-            )
-        logger.info(
-            "Attached frozen assistant adapter: %d modules, rank %d, multiplier %.2f (from %s)",
-            attached,
-            rank,
-            multiplier,
-            Path(path).name,
-        )
+        _log_assistant(attached, skipped, rank, multiplier, path)
         return attached
 
     def set_lora_dtype(self, device: torch.device, dtype: torch.dtype) -> None:
