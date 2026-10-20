@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-import train_moss_image_finetune as finetune
 import train_moss_image_lora as lora
+from maltrainer.trainers.moss_image import finetune_checkpoint, finetune_loop
 from maltrainer.trainers.moss_image import previews as moss_previews
 
 from .fakes import capture_menu, script_keys
@@ -23,7 +23,7 @@ def press(monkeypatch: pytest.MonkeyPatch) -> Callable[[list[list[str]]], None]:
     """``press([[], ['s']])``: the keys pending at the 1st and the 2nd step boundary."""
 
     def pressing(script: list[list[str]]) -> None:
-        script_keys(monkeypatch, [finetune, lora], script)
+        script_keys(monkeypatch, [finetune_loop, lora], script)
 
     return pressing
 
@@ -62,7 +62,7 @@ def test_q_does_not_stop_on_a_save_that_failed(
     workspace: Workspace, press: Callable[..., None], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     workspace.add_images("p", 2)
-    real, calls = finetune.save_full_model, []
+    real, calls = finetune_checkpoint.save_full_model, []
 
     def flaky(*args: Any, **kwargs: Any) -> None:
         calls.append(1)
@@ -70,7 +70,7 @@ def test_q_does_not_stop_on_a_save_that_failed(
             raise OSError("disk full")
         real(*args, **kwargs)
 
-    monkeypatch.setattr(finetune, "save_full_model", flaky)
+    monkeypatch.setattr(finetune_checkpoint, "save_full_model", flaky)
     press([["q"]])
 
     with caplog.at_level(logging.ERROR):

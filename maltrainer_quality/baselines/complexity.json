@@ -13,6 +13,5 @@
   "scripts/merge_loras.py::main": 13,
   "scripts/qwen_2_1_bench_report.py::main": 14,
   "scripts/qwen_2_1_bench_score.py::main": 14,
-  "scripts/train_from_template.py::main": 13,
-  "train_moss_image_finetune.py::train": 32
+  "scripts/train_from_template.py::main": 13
 }

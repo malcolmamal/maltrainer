@@ -26,6 +26,5 @@
   "scripts/merge_loras.py": 304,
   "scripts/qwen_2_1_bench_report.py": 229,
   "scripts/qwen_2_1_bench_score.py": 375,
-  "scripts/qwen_2_1_sweep_checkpoints.py": 204,
-  "train_moss_image_finetune.py": 813
+  "scripts/qwen_2_1_sweep_checkpoints.py": 204
 }

@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 import train_moss_image_finetune as finetune
+from maltrainer.trainers.moss_image import finetune_checkpoint
 
 from .runs import run_finetune
 from .world import Workspace
@@ -83,7 +84,7 @@ def test_a_failed_numbered_save_removes_its_partial_file_and_training_goes_on(
     workspace: Workspace, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     trainer = _trained(workspace)
-    monkeypatch.setattr(finetune, "save_full_model", _failing_save(workspace.out / "ft_step_3.safetensors"))
+    monkeypatch.setattr(finetune_checkpoint, "save_full_model", _failing_save(workspace.out / "ft_step_3.safetensors"))
 
     with caplog.at_level(logging.ERROR):
         saved = trainer.save_checkpoint(3)
@@ -97,7 +98,7 @@ def test_a_failed_final_save_removes_its_partial_file_and_raises(
     workspace: Workspace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     trainer = _trained(workspace)
-    monkeypatch.setattr(finetune, "save_full_model", _failing_save(workspace.out / "ft_new.safetensors"))
+    monkeypatch.setattr(finetune_checkpoint, "save_full_model", _failing_save(workspace.out / "ft_new.safetensors"))
     monkeypatch.setattr(trainer, "_name", lambda: "ft_new")
 
     with pytest.raises(OSError, match=r"disk full"):

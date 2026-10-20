@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 import train_moss_image_finetune as finetune
+from maltrainer.trainers.moss_image import finetune_loop
 
 from .runs import cached_finetune, record_sample_order, run_finetune
 from .world import Workspace
@@ -125,13 +126,13 @@ def test_regularisation_images_step_at_the_reduced_size(
 ) -> None:
     order = record_sample_order(monkeypatch)
     scales: list[float] = []
-    original = finetune.set_step_scale
+    original = finetune_loop.set_step_scale
 
     def noting(optimizer: Any, scale: float) -> None:
         scales.append(scale)
         original(optimizer, scale)
 
-    monkeypatch.setattr(finetune, "set_step_scale", noting)
+    monkeypatch.setattr(finetune_loop, "set_step_scale", noting)
     config = _regularised(workspace, train={"automagic_fused": fused, "max_steps": 5, "reg_lr_multiplier": 0.25})
 
     trainer = run_finetune(config)

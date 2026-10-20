@@ -87,13 +87,13 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
     return fakes
 
 
-def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, *modules: object, commit: str = "abc1234") -> None:
+def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, commit: str = "abc1234") -> None:
     """The trainers' two slow environment calls, a full ``gc.collect()`` and ``git`` (twice), answered at once.
 
-    Only the trainers' own references are replaced, so the rest of the process keeps the real ``gc``.
+    Only the session module's reference is replaced (the trainers free memory through it), so the rest of the
+    process keeps the real ``gc``.
     """
-    for module in (session, *modules):
-        monkeypatch.setattr(module, "gc", SimpleNamespace(collect=lambda: 0))
+    monkeypatch.setattr(session, "gc", SimpleNamespace(collect=lambda: 0))
     monkeypatch.setattr(session, "git_commit", lambda: commit)
 
 

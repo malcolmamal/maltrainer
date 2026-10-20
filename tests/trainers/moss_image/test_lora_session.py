@@ -9,8 +9,8 @@ import pytest
 import torch
 from accelerate import Accelerator
 
-import train_moss_image_finetune as finetune
 import train_moss_image_lora as lora
+from maltrainer.trainers.moss_image import finetune_loop
 
 from .fakes import script_keys
 from .runs import prepared_lora, progress_lines, run_lora
@@ -60,7 +60,7 @@ def test_s_saves_a_numbered_lora_and_q_saves_and_stops(
     workspace: Workspace, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     workspace.add_images("p", 2)
-    script_keys(monkeypatch, [lora, finetune], [["s"], ["q"]])
+    script_keys(monkeypatch, [lora, finetune_loop], [["s"], ["q"]])
 
     with caplog.at_level(logging.INFO):
         run_lora(workspace.lora_config(train={"max_steps": 5}))
