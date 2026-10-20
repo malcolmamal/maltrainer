@@ -27,38 +27,13 @@ from typing import Any, cast
 import torch
 from torch import nn
 
+from maltrainer.finetune.rotation_util import _block_leaf, _remove_hooks, _to_cpu
 from maltrainer.models.comfy_fp8 import Fp8ScaledLinear, quantize_rows
 
 logger = logging.getLogger(__name__)
 
 # A window: (name, Linear-name prefixes inside a block). "attn." matches blocks.N.attn.wq etc.
 Window = tuple[str, tuple[str, ...]]
-
-
-def _block_leaf(key: str, blocks: str) -> str | None:
-    """``blocks.12.attn.wq.weight`` -> ``attn.wq`` (None outside the numbered blocks)."""
-    parts = key.split(".")
-    if len(parts) < 4 or parts[0] != blocks or not parts[1].isdigit() or parts[-1] != "weight":
-        return None
-    return ".".join(parts[2:-1])
-
-
-def _to_cpu(value: Any) -> Any:
-    if torch.is_tensor(value):
-        return value.detach().to("cpu", copy=True)
-    if isinstance(value, dict):
-        return {k: _to_cpu(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_to_cpu(v) for v in value]
-    return value
-
-
-def _remove_hooks(optimizer: Any) -> None:
-    """Fused optimizers (Automagic3) step from grad hooks; a frozen window's must not fire."""
-    for handle in getattr(optimizer, "_hook_handles", []):
-        handle.remove()
-    if hasattr(optimizer, "_hook_handles"):
-        optimizer._hook_handles = []
 
 
 class WindowRotator:
