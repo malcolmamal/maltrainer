@@ -58,7 +58,7 @@ class TimestepEmbedder(nn.Module):
         return emb
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
-        return self.mlp(self._sinusoidal(t))
+        return cast(torch.Tensor, self.mlp(self._sinusoidal(t)))
 
 
 class Attention(nn.Module):
@@ -95,7 +95,7 @@ class Attention(nn.Module):
 
         out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         out = out.transpose(1, 2).reshape(batch, length, channels)
-        return self.proj(out)
+        return cast(torch.Tensor, self.proj(out))
 
 
 class DiTBlock(nn.Module):
@@ -139,7 +139,7 @@ class FinalLayer(nn.Module):
 
     def forward(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         shift, scale = self.adaln(c).chunk(2, dim=1)
-        return self.linear(modulate(self.norm(x), shift, scale))
+        return cast(torch.Tensor, self.linear(modulate(self.norm(x), shift, scale)))
 
 
 class SupraDiT(nn.Module):
@@ -194,7 +194,7 @@ class SupraDiT(nn.Module):
             x = block(x, conditioning, ctx, ctx_mask)
         x = self.final(x, conditioning)
         x = x.view(batch, grid_h, grid_w, channels, patch, patch).permute(0, 3, 1, 4, 2, 5)
-        return x.reshape(batch, channels, grid_h * patch, grid_w * patch)
+        return cast(torch.Tensor, x.reshape(batch, channels, grid_h * patch, grid_w * patch))
 
 
 def load_supra2_img(

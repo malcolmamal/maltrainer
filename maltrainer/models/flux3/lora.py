@@ -78,7 +78,7 @@ class LoRALayer(nn.Module):
         dtype = self.lora_down.weight.dtype
         if x.dtype != dtype and not torch.is_autocast_enabled():
             x = x.to(dtype)
-        return self.lora_up(self.lora_down(x)) * self.scale
+        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
 
 
 class Flux3LoRANetwork(nn.Module):
@@ -141,7 +141,7 @@ class Flux3LoRANetwork(nn.Module):
         def forward(x: torch.Tensor, _orig: Any = original, _loras: Any = loras) -> torch.Tensor:
             base = _orig(x)
             delta = torch.cat([lora(x) for lora in _loras], dim=-1) if concat else _loras[0](x)
-            return (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta
+            return cast(torch.Tensor, (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta)
 
         module.forward = forward
 

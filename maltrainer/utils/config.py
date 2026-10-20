@@ -3,7 +3,7 @@ Configuration loading and validation utilities.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -17,7 +17,7 @@ def load_config(config_path: str) -> dict[str, Any]:
 
     with path.open("r", encoding="utf-8") as f:
         try:
-            return yaml.safe_load(f)
+            return cast(dict[str, Any], yaml.safe_load(f))
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML: {error}") from error
 

@@ -122,7 +122,7 @@ class Qwen3VLTextEncoder(nn.Module):
         if self.drop_idx > 0 and hidden_states.shape[1] > self.drop_idx:
             hidden_states = hidden_states[:, self.drop_idx :]
 
-        return hidden_states
+        return cast(torch.Tensor, hidden_states)
 
 
 def _map_te_key(k: str) -> str:

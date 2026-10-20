@@ -68,7 +68,7 @@ class LoRALayer(nn.Module):
         dtype = self.lora_down.weight.dtype
         if x.dtype != dtype and not torch.is_autocast_enabled():
             x = x.to(dtype)
-        return self.lora_up(self.lora_down(x)) * self.scale
+        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
 
 
 class Krea2LoRANetwork(nn.Module):
@@ -120,9 +120,9 @@ class Krea2LoRANetwork(nn.Module):
         def forward(x: torch.Tensor, _orig: Any = original, _lora: Any = lora, _active: Any = active) -> torch.Tensor:
             base = _orig(x)
             if not _active[0]:
-                return base
+                return cast(torch.Tensor, base)
             delta = _lora(x)
-            return (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta
+            return cast(torch.Tensor, (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta)
 
         module.forward = forward
 

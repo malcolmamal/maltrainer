@@ -5,6 +5,7 @@ MiniMax H3 Video VAE wrapper and encoding logic.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import torch
 from safetensors.torch import load_file
@@ -120,7 +121,6 @@ class MiniMaxH3VideoResnetBlock3d(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-
         self.norm1 = MiniMaxH3VideoGroupNorm(norm_num_groups, in_channels, eps=norm_eps, affine=True)
         self.conv1 = MiniMaxH3VideoCausalConv3d(
             in_channels,
@@ -179,7 +179,7 @@ class MiniMaxH3VideoDownsample3d(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.spatial_stride == 2:
             hidden_states = F.pad(hidden_states, (0, 1, 0, 1, 0, 0), mode=self.spatial_padding_mode)
-        return self.conv(hidden_states)
+        return cast(torch.Tensor, self.conv(hidden_states))
 
 
 class MiniMaxH3VideoDownBlock3d(nn.Module):
@@ -329,7 +329,7 @@ class MiniMaxH3VideoEncoderModel(nn.Module):
             hidden_states = block(hidden_states)
         hidden_states = F.silu(self.norm_out(hidden_states))
         hidden_states = self.conv_out(hidden_states)
-        return self.quant_conv(hidden_states)
+        return cast(torch.Tensor, self.quant_conv(hidden_states))
 
     def _normalize(self, moments: torch.Tensor) -> torch.Tensor:
         latent_mean = moments.chunk(2, dim=1)[0]  # posterior mean (deterministic)

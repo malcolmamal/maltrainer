@@ -5,7 +5,7 @@ Automagic v3 — Ostris's self-adjusting optimizer, vendored from AI-Toolkit / F
 import itertools
 import logging
 from collections.abc import Callable
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import torch
 
@@ -94,7 +94,7 @@ class Automagic3(torch.optim.Optimizer):
     @staticmethod
     def _rms(t: torch.Tensor) -> torch.Tensor:
         # Root-mean-square of a tensor; used to size the trust-region clip.
-        return t.norm(2) / (t.numel() ** 0.5)
+        return cast(torch.Tensor, t.norm(2) / (t.numel() ** 0.5))
 
     @staticmethod
     def _approx_sq_grad(row: torch.Tensor, col: torch.Tensor) -> torch.Tensor:

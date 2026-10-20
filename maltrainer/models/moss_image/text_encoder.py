@@ -143,7 +143,7 @@ class MLP(nn.Module):
         self.down_proj = nn.Linear(intermediate, hidden, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
+        return cast(torch.Tensor, self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x)))
 
 
 def chunk_gated_delta_rule(
@@ -254,7 +254,7 @@ class GatedDeltaNet(nn.Module):
 
         core = chunk_gated_delta_rule(query, key, value, g=g, beta=beta)
         core = self.norm(core.reshape(-1, self.value_head_dim), z.reshape(-1, self.value_head_dim))
-        return self.out_proj(core.reshape(B, L, -1))
+        return cast(torch.Tensor, self.out_proj(core.reshape(B, L, -1)))
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -297,7 +297,7 @@ class GatedAttention(nn.Module):
             v = v.repeat_interleave(rep, dim=1)
         out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         out = out.transpose(1, 2).reshape(B, L, -1)
-        return self.o_proj(out * gate.sigmoid())
+        return cast(torch.Tensor, self.o_proj(out * gate.sigmoid()))
 
 
 class DecoderLayer(nn.Module):
@@ -315,7 +315,7 @@ class DecoderLayer(nn.Module):
         h = self.input_layernorm(x)
         h = self.self_attn(h, cos, sin) if hasattr(self, "self_attn") else self.linear_attn(h)
         x = x + h
-        return x + self.mlp(self.post_attention_layernorm(x))
+        return cast(torch.Tensor, x + self.mlp(self.post_attention_layernorm(x)))
 
 
 class Qwen35TextModel(nn.Module):
@@ -344,7 +344,7 @@ class Qwen35TextModel(nn.Module):
         cos, sin = self.rope(input_ids.shape[1], input_ids.device)
         for layer in self.layers:
             x = layer(x, cos, sin)
-        return self.norm(x)
+        return cast(torch.Tensor, self.norm(x))
 
 
 # ---------------------------------------------------------------- encoder
@@ -360,13 +360,13 @@ class MOSSImageTextEncoder(nn.Module):
         ids = self.tokenizer(TEMPLATE.format(prompt.strip()), add_special_tokens=False).input_ids
         if len(ids) > MAX_SEQUENCE_LENGTH:
             logger.warning("Prompt is %d tokens; truncated to %d.", len(ids), MAX_SEQUENCE_LENGTH)
-        return ids[:MAX_SEQUENCE_LENGTH]
+        return cast(list[Any], ids[:MAX_SEQUENCE_LENGTH])
 
     @torch.no_grad()
     def encode(self, prompt: str, device: torch.device, dtype: torch.dtype = torch.bfloat16) -> torch.Tensor:
         """One prompt -> (L, 4096) conditioning at its true length."""
         input_ids = torch.tensor([self.token_ids(prompt)], device=device)
-        return self.model(input_ids)[0].to(dtype)
+        return cast(torch.Tensor, self.model(input_ids)[0].to(dtype))
 
 
 def _upcast_linear_forward(module: nn.Linear, x: torch.Tensor) -> torch.Tensor:

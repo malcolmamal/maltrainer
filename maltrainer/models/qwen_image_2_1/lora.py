@@ -40,7 +40,7 @@ class QwenImage21LoRALayer(nn.Module):
         target_dtype = self.lora_down.weight.dtype
         if x.is_floating_point() and x.dtype != target_dtype and not torch.is_autocast_enabled():
             x = x.to(target_dtype)
-        return self.lora_up(self.lora_down(x)) * self.scale
+        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
 
 
 class QwenImage21LoRANetwork(nn.Module):
@@ -101,8 +101,8 @@ class QwenImage21LoRANetwork(nn.Module):
             base = _orig(x)
             delta = _lora(x)
             if delta.dtype == base.dtype:
-                return base + delta
-            return (base + delta).to(base.dtype)
+                return cast(torch.Tensor, base + delta)
+            return cast(torch.Tensor, (base + delta).to(base.dtype))
 
         module.forward = forward  # type: ignore[method-assign, assignment]  # monkeypatching the instance forward is the point; the stub types forward as a method
 

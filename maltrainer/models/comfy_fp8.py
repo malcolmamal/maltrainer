@@ -20,7 +20,7 @@ import json
 import logging
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
@@ -175,7 +175,7 @@ class Fp8ScaledLinear(nn.Module):
             self.bias = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return _Fp8LinearFunction.apply(x, self.weight, self.weight_scale, self.bias, self.compute_dtype)
+        return cast(Tensor, _Fp8LinearFunction.apply(x, self.weight, self.weight_scale, self.bias, self.compute_dtype))
 
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, fp8 scaled"

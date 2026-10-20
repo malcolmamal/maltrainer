@@ -3,7 +3,7 @@ Textual Inversion embedding implementation for Z-Image.
 """
 
 from collections.abc import Iterator, Mapping
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -57,7 +57,7 @@ class TextualInversionEmbedding(nn.Module):
         # Get token IDs
         token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
-        return token_ids
+        return cast(list[int], token_ids)
 
     def _initialize_embeddings(self) -> None:
         """Initialize new embeddings with init_text embeddings."""
@@ -106,4 +106,4 @@ class TextualInversionEmbedding(nn.Module):
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """The embedding vectors of ``input_ids``, the trigger's learned ones included."""
-        return self.text_encoder.get_input_embeddings()(input_ids)
+        return cast(torch.Tensor, self.text_encoder.get_input_embeddings()(input_ids))

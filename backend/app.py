@@ -11,7 +11,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -442,7 +442,7 @@ def load_template(spec: ModelSpec, dataset_name: str, optimizer: str | None = No
     root = comfyui_models_root()
     if root is not None:
         template_text = template_text.replace("[comfyui_models]", root.as_posix())
-    return yaml.safe_load(template_text)
+    return cast(dict[str, Any], yaml.safe_load(template_text))
 
 
 def count_images(path: Path) -> int:

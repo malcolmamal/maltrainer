@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
+from typing import cast
 
 import torch
 from torch import nn
@@ -136,7 +137,7 @@ class ResidualUnit(nn.Module):
         pad = (x.shape[-1] - y.shape[-1]) // 2
         if pad > 0:
             x = x[..., pad:-pad]
-        return y + x
+        return cast(torch.Tensor, y + x)
 
 
 class EncoderBlock(nn.Module):
@@ -151,7 +152,7 @@ class EncoderBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.block(x)
+        return cast(torch.Tensor, self.block(x))
 
 
 class DacEncoder(nn.Module):
@@ -165,7 +166,7 @@ class DacEncoder(nn.Module):
         self.block = nn.Sequential(*block)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.block(x)
+        return cast(torch.Tensor, self.block(x))
 
 
 class GeGluMlp(nn.Module):
@@ -178,7 +179,7 @@ class GeGluMlp(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.norm(x)
-        return self.w2(F.gelu(self.w0(x), approximate="tanh") * self.w1(x))
+        return cast(torch.Tensor, self.w2(F.gelu(self.w0(x), approximate="tanh") * self.w1(x)))
 
 
 class CausalAttention(nn.Module):
@@ -201,7 +202,7 @@ class CausalAttention(nn.Module):
         x = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         # mean over heads, then pool the width down to the latent width
         x = F.adaptive_avg_pool1d(x.mean(dim=1), self.out_dim)
-        return self.proj(x)
+        return cast(torch.Tensor, self.proj(x))
 
 
 class AttnProjection(nn.Module):
@@ -216,7 +217,7 @@ class AttnProjection(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.proj(self.norm3(x)) + self.attn(self.norm1(x))
-        return x + self.mlp(self.norm2(x))
+        return cast(torch.Tensor, x + self.mlp(self.norm2(x)))
 
 
 class MiniMaxH3AudioEncoder(nn.Module):
@@ -245,7 +246,7 @@ class MiniMaxH3AudioEncoder(nn.Module):
         x = self.pre_block(x.transpose(1, 2)).transpose(1, 2)
         z = self.mean_proj(x)
         z = (z - self.get_buffer("latents_mean").view(1, -1, 1)) / self.get_buffer("latents_std").view(1, -1, 1)
-        return z.reshape(b, s, z.shape[1], z.shape[2]).permute(0, 2, 1, 3)
+        return cast(torch.Tensor, z.reshape(b, s, z.shape[1], z.shape[2]).permute(0, 2, 1, 3))
 
 
 def _fold_weight_norm(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
@@ -275,7 +276,6 @@ def load_minimax_h3_audio_encoder(path: str | Path, device: torch.device) -> Min
     if any(key.endswith(".weight_g") for key in state):
         state = _fold_weight_norm(state)
     state = {key: value.float() for key, value in state.items() if key.startswith(_ENCODER_PREFIXES)}
-
     model = MiniMaxH3AudioEncoder()
     has_stats = "latents_mean" in state and "latents_std" in state
     info = model.load_state_dict(state, strict=False)

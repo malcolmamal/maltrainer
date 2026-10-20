@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -74,11 +74,8 @@ def get_timestep_embedding(
     half_dim = embedding_dim // 2
     exponent = -math.log(max_period) * torch.arange(start=0, end=half_dim, dtype=torch.float32, device=timesteps.device)
     exponent = exponent / (half_dim - downscale_freq_shift)
-
     emb = scale * (timesteps[:, None].float() * torch.exp(exponent)[None, :])
-
     emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
-
     if flip_sin_to_cos:
         emb = torch.cat([emb[:, half_dim:], emb[:, :half_dim]], dim=-1)
 
@@ -131,7 +128,7 @@ class MiniMaxH3TimeEmbedder(nn.Module):
             downscale_freq_shift=0,
         )
         embedding = embedding.to(self.proj_in.weight.dtype)
-        return self.proj_out(F.silu(self.proj_in(embedding)))
+        return cast(torch.Tensor, self.proj_out(F.silu(self.proj_in(embedding))))
 
 
 class MiniMaxH3AdaLNProjection(nn.Module):
@@ -144,7 +141,7 @@ class MiniMaxH3AdaLNProjection(nn.Module):
         compute_dtype = getattr(self.linear, "scale_weight", self.linear.weight).dtype
         activated = F.silu(timestep_embedding) if self.apply_silu else timestep_embedding
         activated = activated.to(compute_dtype)
-        return self.linear(activated)
+        return cast(torch.Tensor, self.linear(activated))
 
 
 class MiniMaxH3Attention(nn.Module):
@@ -187,7 +184,7 @@ class MiniMaxH3Attention(nn.Module):
             is_causal=False,
         )
         hidden_states = hidden_states.transpose(1, 2).flatten(2, 3).to(query.dtype)
-        return self.out_proj(hidden_states)
+        return cast(torch.Tensor, self.out_proj(hidden_states))
 
 
 class MiniMaxH3FeedForward(nn.Module):
@@ -198,7 +195,7 @@ class MiniMaxH3FeedForward(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         gate, value = self.fc1(hidden_states).chunk(2, dim=-1)
-        return self.fc2(F.silu(gate) * value)
+        return cast(torch.Tensor, self.fc2(F.silu(gate) * value))
 
 
 class MiniMaxH3TokenRefinerBlock(nn.Module):
@@ -216,7 +213,7 @@ class MiniMaxH3TokenRefinerBlock(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(self.norm1(hidden_states))
-        return hidden_states + self.mlp(self.norm2(hidden_states))
+        return cast(torch.Tensor, hidden_states + self.mlp(self.norm2(hidden_states)))
 
 
 class MiniMaxH3TokenRefiner(nn.Module):
@@ -231,7 +228,7 @@ class MiniMaxH3TokenRefiner(nn.Module):
                 hidden_states = checkpoint(block, hidden_states, use_reentrant=False)
             else:
                 hidden_states = block(hidden_states)
-        return self.final_norm(hidden_states)
+        return cast(torch.Tensor, self.final_norm(hidden_states))
 
 
 class MiniMaxH3TransformerBlock(nn.Module):
@@ -281,7 +278,7 @@ class MiniMaxH3TransformerBlock(nn.Module):
         norm_hidden_states = norm_hidden_states * (1.0 + scale_mlp.index_select(0, adaln_indices))
         norm_hidden_states = norm_hidden_states + shift_mlp.index_select(0, adaln_indices)
         feed_forward = self.mlp(norm_hidden_states)
-        return hidden_states + gate_mlp.index_select(0, adaln_indices) * feed_forward
+        return cast(torch.Tensor, hidden_states + gate_mlp.index_select(0, adaln_indices) * feed_forward)
 
 
 class MiniMaxH3FinalLayer(nn.Module):
@@ -370,7 +367,7 @@ class MiniMaxH3Transformer(nn.Module):
 
     def _time_embedding(self, timestep: torch.Tensor) -> torch.Tensor:
         if self.time_embedder is not None:
-            return self.time_embedder(timestep)
+            return cast(torch.Tensor, self.time_embedder(timestep))
         table = self.get_buffer("adaln_t_table").float()
         position = timestep.to(device=table.device, dtype=torch.float32).clamp(0.0, 1.0) * (table.shape[0] - 1)
         lower = position.floor().long()
@@ -421,4 +418,7 @@ class MiniMaxH3Transformer(nn.Module):
             else:
                 hidden_states = block(hidden_states, timestep_embedding, adaln_indices, rotary_emb, attention_mask)
 
-        return self.final_layer(hidden_states, timestep_embedding, timestep_indices, video_indices, audio_indices)
+        output: MiniMaxH3TransformerOutput = self.final_layer(
+            hidden_states, timestep_embedding, timestep_indices, video_indices, audio_indices
+        )
+        return output

@@ -38,7 +38,7 @@ class LoRALayer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through LoRA layer."""
-        return self.lora_up(self.lora_down(x)) * self.scale
+        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
 
     def set_alpha(self, alpha: float) -> None:
         """Update alpha and scaling factor."""
@@ -88,7 +88,7 @@ class LoRANetwork(nn.Module):
                     orig_fwd: Callable[[torch.Tensor], torch.Tensor], lora: nn.Module
                 ) -> Callable[[torch.Tensor], torch.Tensor]:
                     def forward(x: torch.Tensor) -> torch.Tensor:
-                        return orig_fwd(x) + lora(x)
+                        return cast(torch.Tensor, orig_fwd(x) + lora(x))
 
                     return forward
 

@@ -161,7 +161,7 @@ class RMSNorm3d(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         norm = F.normalize(x.float(), dim=1, eps=self.eps).to(x.dtype)
         gamma = self.gamma.view(1, -1, 1, 1)
-        return norm * (self.gamma.shape[0] ** 0.5) * gamma
+        return cast(torch.Tensor, norm * (self.gamma.shape[0] ** 0.5) * gamma)
 
 
 class RMSNormAttn(nn.Module):
@@ -173,7 +173,7 @@ class RMSNormAttn(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         norm = F.normalize(x.float(), dim=1, eps=self.eps).to(x.dtype)
         gamma = self.gamma.view(1, -1, 1, 1)
-        return norm * (self.gamma.shape[0] ** 0.5) * gamma
+        return cast(torch.Tensor, norm * (self.gamma.shape[0] ** 0.5) * gamma)
 
 
 class CausalConv3d(nn.Module):
@@ -207,7 +207,7 @@ class ResBlock(nn.Module):
             self.shortcut = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.shortcut(x) + self.residual(x)
+        return cast(torch.Tensor, self.shortcut(x) + self.residual(x))
 
 
 class Resample2D(nn.Module):
@@ -226,7 +226,7 @@ class Resample2D(nn.Module):
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.resample(x)
+        return cast(torch.Tensor, self.resample(x))
 
 
 class Resample3D(nn.Module):
@@ -247,7 +247,7 @@ class Resample3D(nn.Module):
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.resample(x)
+        return cast(torch.Tensor, self.resample(x))
 
 
 class VAEAttention(nn.Module):
@@ -267,7 +267,7 @@ class VAEAttention(nn.Module):
         v = v.transpose(1, 2)
         attn = F.scaled_dot_product_attention(q, k, v)
         attn = attn.transpose(1, 2).view(b, c, h, w)
-        return x + self.proj(attn)
+        return cast(torch.Tensor, x + self.proj(attn))
 
 
 class AvgDown3D(nn.Module):
@@ -483,7 +483,7 @@ class Qwen21VAEDecoder(nn.Module):
         for stage in self.upsamples:
             x = stage(x)
         x = self.head(x)
-        return x
+        return cast(torch.Tensor, x)
 
 
 class QwenImage21VAE(nn.Module):
@@ -555,7 +555,7 @@ class QwenImage21VAE(nn.Module):
         rgb = out[:, :3]
         # Rescale from [-1, 1] to [0, 1]
         rgb = ((rgb + 1.0) / 2.0).clamp(0.0, 1.0)
-        return rgb
+        return cast(torch.Tensor, rgb)
 
 
 def load_qwen_image_2_1_vae(

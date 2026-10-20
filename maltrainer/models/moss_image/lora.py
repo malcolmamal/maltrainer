@@ -153,7 +153,7 @@ class MOSSImageLoRANetwork(nn.Module):
         def forward(x: torch.Tensor, _orig: Any = original, _loras: Sequence[nn.Module] = loras) -> torch.Tensor:
             base = _orig(x)
             delta = torch.cat([lora(x) for lora in _loras], dim=-1) if concat else _loras[0](x)
-            return (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta
+            return cast(torch.Tensor, (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta)
 
         module.forward = forward
 

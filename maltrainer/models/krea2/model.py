@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import cast
 
 import torch
 import torch.nn.functional as F
@@ -99,7 +100,7 @@ class SwiGLU(nn.Module):
         self.down = nn.Linear(mlpdim, features, bias=bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.down(F.silu(self.gate(x)) * self.up(x))
+        return cast(torch.Tensor, self.down(F.silu(self.gate(x)) * self.up(x)))
 
 
 class Attention(nn.Module):
@@ -134,7 +135,7 @@ class Attention(nn.Module):
             v = v.repeat_interleave(rep, dim=1)
         out = F.scaled_dot_product_attention(q, k.to(q.dtype), v.to(q.dtype), attn_mask=mask)
         out = out.transpose(1, 2).reshape(b, seq, -1)
-        return self.wo(out * torch.sigmoid(gate.to(out.dtype)))
+        return cast(torch.Tensor, self.wo(out * torch.sigmoid(gate.to(out.dtype))))
 
 
 class DoubleSharedModulation(nn.Module):
@@ -166,7 +167,7 @@ class TextFusionBlock(nn.Module):
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         x = x + self.attn(self.prenorm(x), mask=mask)
-        return x + self.mlp(self.postnorm(x))
+        return cast(torch.Tensor, x + self.mlp(self.postnorm(x)))
 
 
 class TextFusionTransformer(nn.Module):
@@ -208,7 +209,7 @@ class SingleStreamBlock(nn.Module):
     def forward(self, x: torch.Tensor, vec: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
         prescale, preshift, pregate, postscale, postshift, postgate = self.mod(vec)
         x = x + pregate * self.attn((1 + prescale) * self.prenorm(x) + preshift, freqs)
-        return x + postgate * self.mlp((1 + postscale) * self.postnorm(x) + postshift)
+        return cast(torch.Tensor, x + postgate * self.mlp((1 + postscale) * self.postnorm(x) + postshift))
 
 
 class LastLayer(nn.Module):
@@ -220,7 +221,7 @@ class LastLayer(nn.Module):
 
     def forward(self, x: torch.Tensor, tvec: torch.Tensor) -> torch.Tensor:
         scale, shift = self.modulation(tvec)
-        return self.linear((1 + scale) * self.norm(x) + shift)
+        return cast(torch.Tensor, self.linear((1 + scale) * self.norm(x) + shift))
 
 
 class Krea2Transformer(nn.Module):
@@ -280,7 +281,6 @@ class Krea2Transformer(nn.Module):
 
         t = self.tmlp(timestep_embedding(sigma, self.config.tdim).unsqueeze(1).to(dtype))
         tvec = self.tproj(t)
-
         context = self.txtmlp(self.txtfusion(context.to(dtype)))
         txtlen = context.shape[1]
 

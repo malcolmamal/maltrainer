@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
@@ -114,7 +114,7 @@ def apply_rope(x: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
     """Split-half RoPE on [B, N, H, D]: pairs (x[i], x[i + D/2]) (ComfyUI's rope_split_half)."""
     x_ = x.to(pe.dtype).unflatten(-1, (2, -1)).movedim(-2, -1).unsqueeze(-2)
     out = pe[..., 0] * x_[..., 0] + pe[..., 1] * x_[..., 1]
-    return out.movedim(-1, -2).flatten(-2).type_as(x)
+    return cast(torch.Tensor, out.movedim(-1, -2).flatten(-2).type_as(x))
 
 
 def situ(hidden: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
@@ -164,7 +164,7 @@ class TextBlock(nn.Module):
         q, k, v = self.qkv(self.norm1(x)).chunk(3, dim=-1)
         x = x + self.proj(attention(q, k, v, self.q_norm, self.k_norm, pe, self.num_heads))
         y = self.norm2(x)
-        return x + self.ffn_down(situ(self.ffn_up(y), self.ffn_gate(y)))
+        return cast(torch.Tensor, x + self.ffn_down(situ(self.ffn_up(y), self.ffn_gate(y))))
 
 
 class TextEmbedder(nn.Module):
@@ -200,7 +200,7 @@ class Block(nn.Module):
         x = x + self.proj["o"](attention(q, k, v, self.q_norm, self.k_norm, pe, self.num_heads)) * gate_a
         y = self.norm2(x) * (1 + scale_f) + shift_f
         hidden, gate = self.proj["ffn_up_gate"](y).chunk(2, dim=-1)
-        return x + self.proj["ffn_down"](situ(hidden, gate)) * gate_f
+        return cast(torch.Tensor, x + self.proj["ffn_down"](situ(hidden, gate)) * gate_f)
 
 
 class MOSSImageTransformer(nn.Module):
@@ -262,4 +262,4 @@ class MOSSImageTransformer(nn.Module):
 
         out = self.final_norm_video(joint[:, :n_img]) * (1 + head_scale) + head_shift
         out = self.final_linear_video(out)
-        return out.transpose(1, 2).reshape(B, LATENT_CHANNELS, H, W)
+        return cast(torch.Tensor, out.transpose(1, 2).reshape(B, LATENT_CHANNELS, H, W))

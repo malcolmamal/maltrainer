@@ -41,7 +41,7 @@ class MiniMaxH3LoRALayer(nn.Module):
         target_dtype = self.lora_down.weight.dtype
         if x.is_floating_point() and x.dtype != target_dtype and not torch.is_autocast_enabled():
             x = x.to(target_dtype)
-        return self.lora_up(self.lora_down(x)) * self.scale
+        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
 
 
 class GridAdaLNLoRA(nn.Module):
@@ -175,10 +175,10 @@ class MiniMaxH3LoRANetwork(nn.Module):
             base = _orig(x)
             delta = _lora(x)
             if delta.dtype == base.dtype:
-                return base + delta
+                return cast(torch.Tensor, base + delta)
             # Sum in the delta's (higher) precision, then round once, so a small fp32
             # update is not truncated before it is even added.
-            return (base + delta).to(base.dtype)
+            return cast(torch.Tensor, (base + delta).to(base.dtype))
 
         cast(Any, module).forward = forward
 

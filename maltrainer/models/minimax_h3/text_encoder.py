@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 from accelerate import init_empty_weights
@@ -145,7 +145,7 @@ class MiniMaxH3TextEncoder(nn.Module):
 
         res = hidden_states.to(dtype=dtype)
         self._prompt_cache[cache_key] = res
-        return res
+        return cast(torch.Tensor, res)
 
 
 def load_minimax_h3_text_encoder(

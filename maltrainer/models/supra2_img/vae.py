@@ -24,7 +24,7 @@ def load_sd_vae(
     vae.to(device=device, dtype=dtype)
     vae.requires_grad_(False)
     vae.eval()
-    return vae
+    return cast(AutoencoderKL, vae)
 
 
 @torch.no_grad()
@@ -32,4 +32,4 @@ def encode_latents(vae: AutoencoderKL, pixels_01: torch.Tensor) -> torch.Tensor:
     """Encode RGB pixels in [0, 1] to the scaled latent the DiT was trained on."""
     pixels = pixels_01 * 2.0 - 1.0
     posterior = cast(Any, vae).encode(pixels).latent_dist
-    return posterior.mode() * VAE_SCALE
+    return cast(torch.Tensor, posterior.mode() * VAE_SCALE)

@@ -35,7 +35,7 @@ class SupraLoRALayer(nn.Module):
         nn.init.zeros_(self.lora_up.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.lora_up(self.lora_down(x)) * self.scale
+        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
 
 
 class SupraLoRANetwork(nn.Module):
@@ -81,7 +81,7 @@ class SupraLoRANetwork(nn.Module):
         original_forward = module.forward
 
         def forward(x: torch.Tensor, _orig: Any = original_forward, _lora: Any = lora) -> torch.Tensor:
-            return _orig(x) + _lora(x)
+            return cast(torch.Tensor, _orig(x) + _lora(x))
 
         module.forward = forward  # type: ignore[method-assign, assignment]  # monkeypatching the instance forward is the point; the stub types forward as a method
 

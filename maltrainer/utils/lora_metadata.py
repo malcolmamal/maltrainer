@@ -24,7 +24,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ def extract_config(metadata: dict[str, str]) -> dict[str, Any] | None:
     if not blob:
         return None
     try:
-        return json.loads(blob)
+        return cast(dict[str, Any] | None, json.loads(blob))
     except json.JSONDecodeError as error:
         logger.warning("Embedded config is not valid JSON: %s", error)
         return None

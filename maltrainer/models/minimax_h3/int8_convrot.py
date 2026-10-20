@@ -129,7 +129,6 @@ class _Int8ConvRotFunction(torch.autograd.Function):
     def backward(ctx: Any, grad_output: _T) -> tuple[_T | None, ...]:
         weight, scale = ctx.saved_tensors
         precision = ctx.grad_precision
-
         if precision == "int8":
             folded = grad_output.reshape(-1, grad_output.shape[-1]).float() * scale.reshape(1, -1)
             quantized, grad_scale = _quantize_rows(folded)
@@ -179,8 +178,9 @@ class _TransientInt8ConvRotFunction(torch.autograd.Function):
 def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tensor:
     group_size = int(cast(torch.Tensor, module.int8_convrot_groupsize).item())
     operation = _Int8ConvRotFunction if inputs.is_cuda and hasattr(torch, "_int_mm") else _TransientInt8ConvRotFunction
-    grad_precision = getattr(module, "int8_convrot_grad_precision", DEFAULT_GRAD_PRECISION)
-    return operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size, grad_precision)
+    precision = getattr(module, "int8_convrot_grad_precision", DEFAULT_GRAD_PRECISION)
+    y: torch.Tensor = operation.apply(inputs, module.weight, module.scale_weight, module.bias, group_size, precision)
+    return y
 
 
 def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.device) -> tuple[dict[str, _T], int]:

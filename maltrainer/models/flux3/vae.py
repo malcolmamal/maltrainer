@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
@@ -52,7 +52,7 @@ class ResnetBlock(nn.Module):
         h = self.conv2(F.silu(self.norm2(h)))
         if hasattr(self, "nin_shortcut"):
             x = self.nin_shortcut(x)
-        return x + h
+        return cast(torch.Tensor, x + h)
 
 
 class AttnBlock(nn.Module):
@@ -69,7 +69,7 @@ class AttnBlock(nn.Module):
         B, C, H, W = h.shape
         q, k, v = (t.view(B, 1, C, H * W).transpose(2, 3) for t in (self.q(h), self.k(h), self.v(h)))
         out = F.scaled_dot_product_attention(q, k, v).transpose(2, 3).reshape(B, C, H, W)
-        return x + self.proj_out(out)
+        return cast(torch.Tensor, x + self.proj_out(out))
 
 
 class Upsample(nn.Module):
@@ -78,7 +78,7 @@ class Upsample(nn.Module):
         self.conv = nn.Conv2d(channels, channels, 3, padding=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.conv(F.interpolate(x, scale_factor=2.0, mode="nearest"))
+        return cast(torch.Tensor, self.conv(F.interpolate(x, scale_factor=2.0, mode="nearest")))
 
 
 class Downsample(nn.Module):
@@ -87,7 +87,7 @@ class Downsample(nn.Module):
         self.conv = nn.Conv2d(channels, channels, 3, stride=2, padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.conv(F.pad(x, (0, 1, 0, 1)))
+        return cast(torch.Tensor, self.conv(F.pad(x, (0, 1, 0, 1))))
 
 
 class Encoder(nn.Module):
@@ -124,7 +124,7 @@ class Encoder(nn.Module):
             if hasattr(down, "downsample"):
                 h = down.downsample(h)
         h = self.mid.block_2(self.mid.attn_1(self.mid.block_1(h)))
-        return self.conv_out(F.silu(self.norm_out(h)))
+        return cast(torch.Tensor, self.conv_out(F.silu(self.norm_out(h))))
 
 
 class Decoder(nn.Module):
@@ -160,7 +160,7 @@ class Decoder(nn.Module):
                 h = block(h)
             if hasattr(self.up[level], "upsample"):
                 h = self.up[level].upsample(h)
-        return self.conv_out(F.silu(self.norm_out(h)))
+        return cast(torch.Tensor, self.conv_out(F.silu(self.norm_out(h))))
 
 
 class Flux2VAEDecoder(nn.Module):
@@ -182,7 +182,7 @@ class Flux2VAEDecoder(nn.Module):
         B, C, h, w = z.shape
         z = z.view(B, C // 4, 2, 2, h, w).permute(0, 1, 4, 2, 5, 3).reshape(B, C // 4, 2 * h, 2 * w)
         image = self.decoder(self.post_quant_conv(z))
-        return ((image.float() + 1.0) / 2.0).clamp_(0.0, 1.0)
+        return cast(torch.Tensor, ((image.float() + 1.0) / 2.0).clamp_(0.0, 1.0))
 
 
 class Flux2VAEEncoder(nn.Module):

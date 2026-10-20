@@ -22,7 +22,7 @@ from __future__ import annotations
 import gc
 import logging
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -118,7 +118,7 @@ class WindowRotator:
         parent = self.model.get_submodule(parent_path)
         old = getattr(parent, attribute)
         setattr(parent, attribute, module)
-        return old
+        return cast(nn.Module, old)
 
     # ------------------------------------------------------------------ rotation
 

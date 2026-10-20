@@ -158,7 +158,7 @@ class MLPEmbedder(nn.Module):
         self.out_layer = nn.Linear(hidden_dim, hidden_dim, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.out_layer(self.silu(self.in_layer(x)))
+        return cast(torch.Tensor, self.out_layer(self.silu(self.in_layer(x))))
 
 
 class Modulation(nn.Module):
@@ -213,7 +213,7 @@ class Block(nn.Module):
         out = self.attn_out(attn.transpose(1, 2).reshape(B, N, -1))
         gate_mlp, up = mlp.chunk(2, dim=-1)
         out = out + self.mlp_out(F.silu(gate_mlp) * up)
-        return x + out * gate
+        return cast(torch.Tensor, x + out * gate)
 
 
 class LastLayer(nn.Module):
@@ -225,7 +225,7 @@ class LastLayer(nn.Module):
 
     def forward(self, x: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
         shift, scale = self.adaLN_modulation(vec[:, None, :]).chunk(2, dim=-1)
-        return self.linear(self.norm_final(x) * (1 + scale) + shift)
+        return cast(torch.Tensor, self.linear(self.norm_final(x) * (1 + scale) + shift))
 
 
 class Flux3Transformer(nn.Module):
@@ -260,8 +260,8 @@ class Flux3Transformer(nn.Module):
 
     def _run(self, block: nn.Module, x: Tensor, shift: Tensor, scale: Tensor, gate: Tensor, pe: Tensor) -> Tensor:
         if self.gradient_checkpointing and torch.is_grad_enabled():
-            return checkpoint(block, x, shift, scale, gate, pe, use_reentrant=False)
-        return block(x, shift, scale, gate, pe)
+            return cast(Tensor, checkpoint(block, x, shift, scale, gate, pe, use_reentrant=False))
+        return cast(Tensor, block(x, shift, scale, gate, pe))
 
     def forward(self, x: torch.Tensor, sigma: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
         """x [B, 128, H, W] noisy latent, sigma [B] in [0, 1], context [B, L, 20480] -> v [B, 128, H, W]."""
@@ -302,4 +302,4 @@ class Flux3Transformer(nn.Module):
             joint = self._run(block, joint, shift, scale, gate, pe)
 
         out = self.final_layer["image"](joint[:, :n_img], vec_img)
-        return out.transpose(1, 2).reshape(B, LATENT_CHANNELS, H, W)
+        return cast(torch.Tensor, out.transpose(1, 2).reshape(B, LATENT_CHANNELS, H, W))

@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
+from typing import cast
 
 import torch
 import torch.nn.functional as F
@@ -72,7 +73,7 @@ class TimestepEmbedder(nn.Module):
         self.linear_2 = nn.Linear(time_embed_dim, time_embed_dim, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.linear_2(self.act(self.linear_1(x)))
+        return cast(torch.Tensor, self.linear_2(self.act(self.linear_1(x))))
 
 
 class TimestepProjEmbeddings(nn.Module):
@@ -85,7 +86,7 @@ class TimestepProjEmbeddings(nn.Module):
 
     def forward(self, timestep: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         proj = self.time_proj(timestep)
-        return self.timestep_embedder(proj.to(dtype=hidden_states.dtype))
+        return cast(torch.Tensor, self.timestep_embedder(proj.to(dtype=hidden_states.dtype)))
 
 
 class ZeroCenterRMSNorm(nn.Module):
@@ -117,7 +118,7 @@ class TextProjection(nn.Module):
         hidden_states = self.text_norm(hidden_states)
         hidden_states = self.in_layer(hidden_states)
         hidden_states = self.act(hidden_states)
-        return self.out_layer(hidden_states)
+        return cast(torch.Tensor, self.out_layer(hidden_states))
 
 
 class SwiGLUFeedForward(nn.Module):
@@ -130,7 +131,7 @@ class SwiGLUFeedForward(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         gate, up = self.gate_up(hidden_states).chunk(2, dim=-1)
-        return self.out(F.silu(gate) * up)
+        return cast(torch.Tensor, self.out(F.silu(gate) * up))
 
 
 class RMSNorm(nn.Module):
@@ -143,7 +144,7 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         norm = F.normalize(x.float(), dim=-1, eps=self.eps).to(x.dtype)
-        return norm * (self.weight.shape[-1] ** 0.5) * self.weight
+        return cast(torch.Tensor, norm * (self.weight.shape[-1] ** 0.5) * self.weight)
 
 
 def apply_rotary_emb_qwen(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
@@ -178,7 +179,6 @@ class Attention(nn.Module):
         q = self.to_q(hidden_states).view(b, s, self.heads, self.dim_head)
         k = self.to_k(hidden_states).view(b, s, self.heads, self.dim_head)
         v = self.to_v(hidden_states).view(b, s, self.heads, self.dim_head)
-
         q = self.norm_q(q)
         k = self.norm_k(k)
 
@@ -193,7 +193,7 @@ class Attention(nn.Module):
         out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         out = out.transpose(1, 2).reshape(b, s, -1)
         out = self.to_out[0](out)
-        return out
+        return cast(torch.Tensor, out)
 
 
 class TransformerBlock(nn.Module):
@@ -262,7 +262,7 @@ class AdaLayerNormContinuous(nn.Module):
         else:
             real_s, zero_s = scale[:-1].unsqueeze(1), scale[-1:].unsqueeze(0)
             scale = torch.where(target_token_mask.view(1, -1, 1), real_s, zero_s)
-        return self.norm(hidden_states) * (1.0 + scale)
+        return cast(torch.Tensor, self.norm(hidden_states) * (1.0 + scale))
 
 
 def build_rope_frequencies(
@@ -407,7 +407,7 @@ class QwenImage21Transformer(nn.Module):
         hidden = self.norm_out(hidden, temb, target_token_mask)
         pred = self.proj_out(hidden)
         img_pred = pred[:, text_len:]
-        return img_pred
+        return cast(torch.Tensor, img_pred)
 
 
 def load_qwen_image_2_1_transformer(

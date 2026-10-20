@@ -17,6 +17,7 @@ from __future__ import annotations
 import itertools
 import logging
 from pathlib import Path
+from typing import cast
 
 import torch
 import torch.nn.functional as F
@@ -24,7 +25,6 @@ from safetensors.torch import load_file
 from torch import nn
 
 logger = logging.getLogger(__name__)
-
 # comfy/latent_formats.py Wan21
 LATENTS_MEAN = (
     -0.7571,
@@ -87,7 +87,7 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gamma = self.gamma.reshape(-1, 1, 1).to(x.dtype)
-        return F.normalize(x, dim=1) * self.scale * gamma
+        return cast(torch.Tensor, F.normalize(x, dim=1) * self.scale * gamma)
 
 
 class ResidualBlock(nn.Module):
@@ -105,7 +105,7 @@ class ResidualBlock(nn.Module):
         self.shortcut = CausalConv2d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.residual(x) + self.shortcut(x)
+        return cast(torch.Tensor, self.residual(x) + self.shortcut(x))
 
 
 class AttentionBlock(nn.Module):
@@ -120,7 +120,7 @@ class AttentionBlock(nn.Module):
         q, k, v = self.to_qkv(self.norm(x)).chunk(3, dim=1)
         q, k, v = (t.reshape(b, 1, c, h * w).transpose(-1, -2) for t in (q, k, v))
         out = F.scaled_dot_product_attention(q, k, v).transpose(-1, -2).reshape(b, c, h, w)
-        return self.proj(out) + x
+        return cast(torch.Tensor, self.proj(out) + x)
 
 
 class Resample(nn.Module):
@@ -132,7 +132,7 @@ class Resample(nn.Module):
         self.temporal = temporal
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.resample(x)
+        return cast(torch.Tensor, self.resample(x))
 
 
 class WanImageEncoder(nn.Module):
@@ -162,7 +162,7 @@ class WanImageEncoder(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.head(self.middle(self.downsamples(self.conv1(x))))
+        return cast(torch.Tensor, self.head(self.middle(self.downsamples(self.conv1(x)))))
 
 
 class Krea2VAE(nn.Module):
@@ -181,7 +181,7 @@ class Krea2VAE(nn.Module):
         dtype = self.conv1.weight.dtype
         x = (images * 2.0 - 1.0).to(dtype)
         mu = self.conv1(self.encoder(x)).chunk(2, dim=1)[0].float()
-        return (mu - self.latents_mean.to(mu.device)) / self.latents_std.to(mu.device)
+        return cast(torch.Tensor, (mu - self.latents_mean.to(mu.device)) / self.latents_std.to(mu.device))
 
 
 def load_krea2_vae(path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32) -> Krea2VAE:

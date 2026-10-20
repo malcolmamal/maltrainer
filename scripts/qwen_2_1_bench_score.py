@@ -41,6 +41,7 @@ import json
 import os
 from collections import defaultdict
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import torch
@@ -58,7 +59,7 @@ CLIP_STD = np.array([0.26862954, 0.26130258, 0.27577711], dtype=np.float32)
 
 
 def l2(v: np.ndarray) -> np.ndarray:
-    return v / (np.linalg.norm(v, axis=-1, keepdims=True) + 1e-12)
+    return cast(np.ndarray, v / (np.linalg.norm(v, axis=-1, keepdims=True) + 1e-12))
 
 
 def free() -> None:
@@ -101,7 +102,7 @@ class ClipVisionH:
         )
         left, top = (image.width - 224) // 2, (image.height - 224) // 2
         array = np.asarray(image.crop((left, top, left + 224, top + 224)), dtype=np.float32) / 255.0
-        return ((array - CLIP_MEAN) / CLIP_STD).transpose(2, 0, 1)
+        return cast(np.ndarray, ((array - CLIP_MEAN) / CLIP_STD).transpose(2, 0, 1))
 
     def __call__(self, images: list[Image.Image]) -> np.ndarray:
         out = []
@@ -151,7 +152,6 @@ class FaceEmbedder:
                 face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
                 out.append(l2(face.normed_embedding.astype(np.float32)))
             return out
-
         crops, index = [], []
         for i, image in enumerate(images):
             rgb = np.asarray(image.convert("RGB"))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from importlib import import_module
+from typing import cast
 
 
 def read_key() -> str:
@@ -25,4 +26,4 @@ def read_key() -> str:
             if sys.stdin.read(1) != "[":
                 return "esc"
             return {"A": "up", "B": "down", "C": "right", "D": "left"}.get(sys.stdin.read(1), "")
-    return {"\r": "enter", "\n": "enter", "\x1b": "esc", " ": "space"}.get(char, char.lower())
+    return cast(str, {"\r": "enter", "\n": "enter", "\x1b": "esc", " ": "space"}.get(char, char.lower()))

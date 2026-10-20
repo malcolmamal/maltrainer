@@ -528,7 +528,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
 
     def _predict(self, noisy: torch.Tensor, sigma: torch.Tensor, caption: str) -> torch.Tensor:
         context = self.text_cache[caption].to(self.device, self.dtype).unsqueeze(0)
-        return self.transformer(noisy.to(self.dtype), sigma, context)
+        return cast(torch.Tensor, self.transformer(noisy.to(self.dtype), sigma, context))
 
     def _setup_prior(self) -> None:
         """Record (or, on resume, reload) the original model's predictions for the prior term."""
