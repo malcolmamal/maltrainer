@@ -74,3 +74,17 @@ def test_a_saved_adapter_loads_back_into_a_fresh_network_with_identical_output(
 
     expected = source.transformer.transformer_blocks[0].attn.to_q(x)
     torch.testing.assert_close(target.transformer.transformer_blocks[0].attn.to_q(x), expected)
+
+
+@pytest.mark.parametrize("save_dtype", [None, torch.float32])
+def test_a_saved_state_is_a_copy_the_training_can_not_change(save_dtype: torch.dtype | None) -> None:
+    network = _network()
+    layer = next(iter(network.lora_layers.values()))
+    layer.lora_up.weight.data.fill_(0.25)
+    name = next(iter(network.name_map.values()))
+    key = f"{network.prefix}{name}.lora_B.weight"
+
+    saved = network.get_state_dict(save_dtype=save_dtype)[key]
+    layer.lora_up.weight.data.fill_(9.0)
+
+    assert saved.eq(0.25).all()

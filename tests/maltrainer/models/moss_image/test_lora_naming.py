@@ -150,3 +150,16 @@ def test_set_lora_dtype_converts_every_adapter(make_model: Maker) -> None:
     network.set_lora_dtype(torch.device("cpu"), torch.bfloat16)
 
     assert {p.dtype for p in network.trainable_parameters()} == {torch.bfloat16}
+
+
+@pytest.mark.parametrize("save_dtype", [None, torch.float32])
+def test_a_saved_state_is_a_copy_the_training_can_not_change(make_model: Maker, save_dtype: torch.dtype | None) -> None:
+    network = MOSSImageLoRANetwork(make_model(), rank=2)
+    layer = network.lora_layers["layers_0_proj_q"]
+    layer.lora_up.weight.data.fill_(0.25)
+    key = "diffusion_model.layers.0.proj.q.lora_B.weight"
+
+    saved = network.get_state_dict(save_dtype)[key]
+    layer.lora_up.weight.data.fill_(9.0)
+
+    assert saved.eq(0.25).all()

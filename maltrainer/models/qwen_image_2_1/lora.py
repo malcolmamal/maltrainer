@@ -133,7 +133,7 @@ class QwenImage21LoRANetwork(nn.Module):
         if not hasattr(self, "assistant_layers"):
             self.assistant_layers = nn.ModuleDict()
 
-        attached, skipped = 0, []
+        attached, skipped, rank = 0, [], 0
         for name, parts in sorted(pairs.items()):
             if "down" not in parts or "up" not in parts:
                 continue
@@ -202,8 +202,8 @@ class QwenImage21LoRANetwork(nn.Module):
             full_name = f"{self.prefix}{name}"
 
             def _store(tensor: torch.Tensor) -> torch.Tensor:
-                tensor = tensor.detach().cpu()
-                return tensor if save_dtype is None else tensor.to(save_dtype)
+                # copy=True: .cpu() and .to(same dtype) return the live weight itself, which training changes
+                return tensor.detach().to("cpu", save_dtype or tensor.dtype, copy=True)
 
             if format_type == "kohya":
                 state_dict[f"{full_name}.lora_down.weight"] = _store(lora_layer.lora_down.weight)

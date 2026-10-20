@@ -176,10 +176,10 @@ class MOSSImageLoRANetwork(nn.Module):
         for safe, module in self.lora_layers.items():
             layer = cast(LoRALayer, module)
             key = f"{self.prefix}{self.name_map[safe]}"
-            down = layer.lora_down.weight.detach().cpu()
-            up = layer.lora_up.weight.detach().cpu()
-            out[f"{key}.lora_A.weight"] = down if save_dtype is None else down.to(save_dtype)
-            out[f"{key}.lora_B.weight"] = up if save_dtype is None else up.to(save_dtype)
+            # copy=True: .cpu() and .to(same dtype) return the live weight itself, which training changes
+            down, up = layer.lora_down.weight.detach(), layer.lora_up.weight.detach()
+            out[f"{key}.lora_A.weight"] = down.to("cpu", save_dtype or down.dtype, copy=True)
+            out[f"{key}.lora_B.weight"] = up.to("cpu", save_dtype or up.dtype, copy=True)
             out[f"{key}.alpha"] = torch.tensor(float(layer.alpha), dtype=torch.float32)
         return out
 
