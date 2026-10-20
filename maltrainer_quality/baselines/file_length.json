@@ -31,6 +31,5 @@
   "train_krea2_finetune.py": 446,
   "train_moss_image_finetune.py": 813,
   "train_moss_image_lora.py": 812,
-  "train_zimage_embedding.py": 641,
-  "train_zimage_lora.py": 1102
+  "train_zimage_embedding.py": 641
 }

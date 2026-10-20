@@ -145,7 +145,8 @@ def _tokenizer(fakes: Fakes) -> Any:
 
 
 def install_fakes(monkeypatch: pytest.MonkeyPatch, lora: object, embedding: object) -> Fakes:
-    """Put the loaders in the LoRA and the embedding trainer's namespaces; ``fakes`` is shared by both."""
+    """Put the loaders where the LoRA trainer's model module and the embedding trainer import them; ``fakes`` is
+    shared by both."""
     fakes = Fakes()
     loaders = {
         "transformer": Loader("transformer", fakes, lambda: make_transformer(fakes)),

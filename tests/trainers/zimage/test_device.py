@@ -22,6 +22,11 @@ def _module(kind: str) -> Any:
     return lora if kind == "lora" else embedding
 
 
+def _device_logger(kind: str) -> str:
+    """Where the trainer's device lines come from (the LoRA trainer reports through the shared session)."""
+    return "maltrainer.training.session" if kind == "lora" else embedding.__name__
+
+
 def _trainer(ws: Workspace, kind: str) -> Any:
     if kind == "lora":
         return lora.ZImageLoRATrainer(ws.lora_config())
@@ -36,7 +41,7 @@ def test_a_trainer_on_a_cuda_machine_logs_the_gpu_name_and_its_memory(
     monkeypatch.setattr(torch.cuda, "get_device_name", lambda _device: "Tiny GPU")
     monkeypatch.setattr(torch.cuda, "get_device_properties", lambda _device: SimpleNamespace(total_memory=2 * 1024**3))
 
-    with caplog.at_level(logging.INFO, logger=_module(kind).__name__):
+    with caplog.at_level(logging.INFO, logger=_device_logger(kind)):
         trainer = _trainer(workspace, kind)
 
     assert trainer.device == torch.device("cuda")
@@ -47,7 +52,7 @@ def test_a_trainer_on_a_cuda_machine_logs_the_gpu_name_and_its_memory(
 def test_a_trainer_on_a_cpu_logs_only_the_device(
     workspace: Workspace, caplog: pytest.LogCaptureFixture, kind: str
 ) -> None:
-    with caplog.at_level(logging.INFO, logger=_module(kind).__name__):
+    with caplog.at_level(logging.INFO, logger=_device_logger(kind)):
         trainer = _trainer(workspace, kind)
 
     assert trainer.device == torch.device("cpu") and trainer.dtype == torch.float32
@@ -72,7 +77,7 @@ def test_a_process_that_is_not_the_main_one_logs_no_device_prints_no_banner_and_
 ) -> None:
     workspace.add_images(2)
     monkeypatch.setattr(_module(kind), "Accelerator", Worker)
-    with caplog.at_level(logging.INFO, logger=_module(kind).__name__):
+    with caplog.at_level(logging.INFO, logger=_device_logger(kind)):
         trainer = _trainer(workspace, kind)
     assert trainer.is_main_process is False and "Training on device" not in caplog.text
 

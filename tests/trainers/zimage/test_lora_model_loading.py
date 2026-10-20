@@ -6,6 +6,7 @@ import pytest
 import torch
 
 import train_zimage_lora as lora
+from maltrainer.trainers.zimage import model as zimage_model
 
 from .fakes import Fakes
 from .tiny import build_transformer
@@ -89,7 +90,7 @@ def test_merging_adds_each_pair_scaled_by_alpha_over_rank_and_skips_the_rest(wor
     trainer.transformer = build_transformer()
     base = named_weights(build_transformer())
 
-    merged = trainer._merge_lora_into_transformer(adapter)
+    merged = zimage_model.merge_lora(trainer.transformer, adapter)
 
     after = named_weights(trainer.transformer)
     assert merged == 3
@@ -109,7 +110,7 @@ def test_the_merge_weight_scales_the_added_delta(workspace: Workspace) -> None:
     trainer.transformer = build_transformer()
     base = named_weights(build_transformer())
 
-    trainer._merge_lora_into_transformer(adapter, merge_weight=0.5)
+    zimage_model.merge_lora(trainer.transformer, adapter, merge_weight=0.5)
 
     assert torch.allclose(
         trainer.transformer.state_dict()[f"{V}.weight"], base[f"{V}.weight"] + _delta(adapter, V) * 0.5
@@ -117,19 +118,16 @@ def test_the_merge_weight_scales_the_added_delta(workspace: Workspace) -> None:
 
 
 def test_an_existing_path_is_used_as_it_is_and_a_hub_path_is_downloaded(workspace: Workspace, fakes: Fakes) -> None:
-    trainer = lora.ZImageLoRATrainer(workspace.lora_config())
     local = workspace.root / "a" / "b" / "c.safetensors"
     local.parent.mkdir(parents=True)
     local.touch()
 
-    assert trainer._resolve_hf_path(str(local)) == str(local)
-    assert trainer._resolve_hf_path("org/repo/file.safetensors") == "file.safetensors"
-    assert trainer._resolve_hf_path("org/repo/sub/dir/file.safetensors") == "sub/dir/file.safetensors"
+    assert zimage_model.resolve_hf_path(str(local)) == str(local)
+    assert zimage_model.resolve_hf_path("org/repo/file.safetensors") == "file.safetensors"
+    assert zimage_model.resolve_hf_path("org/repo/sub/dir/file.safetensors") == "sub/dir/file.safetensors"
     assert fakes.downloads == [("org/repo", "file.safetensors"), ("org/repo", "sub/dir/file.safetensors")]
 
 
-def test_a_path_that_is_neither_local_nor_a_hub_file_is_refused(workspace: Workspace) -> None:
-    trainer = lora.ZImageLoRATrainer(workspace.lora_config())
-
+def test_a_path_that_is_neither_local_nor_a_hub_file_is_refused() -> None:
     with pytest.raises(ValueError, match=r"Adapter path org/repo is not a valid local path or hub path\."):
-        trainer._resolve_hf_path("org/repo")
+        zimage_model.resolve_hf_path("org/repo")

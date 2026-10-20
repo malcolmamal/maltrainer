@@ -13,7 +13,7 @@ import torch
 from accelerate.state import AcceleratorState, GradientState
 
 import train_zimage_embedding
-import train_zimage_lora
+from maltrainer.trainers.zimage import model as zimage_model
 
 from .fakes import Fakes, install_fakes
 from .world import Workspace
@@ -46,4 +46,4 @@ def workspace(tmp_path: Path) -> Workspace:
 
 @pytest.fixture(autouse=True)
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
-    return install_fakes(monkeypatch, train_zimage_lora, train_zimage_embedding)
+    return install_fakes(monkeypatch, zimage_model, train_zimage_embedding)
