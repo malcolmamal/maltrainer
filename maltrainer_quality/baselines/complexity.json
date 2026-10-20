@@ -1,5 +1,4 @@
 {
   "maltrainer/models/moss_image/text_encoder.py::load_moss_image_text_encoder": 11,
-  "maltrainer/optimizers/automagic3.py::_update_param": 15,
-  "maltrainer/utils/preview_menu.py::run_menu": 27
+  "maltrainer/optimizers/automagic3.py::_update_param": 15
 }

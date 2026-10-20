@@ -1,6 +1,5 @@
 {
   "maltrainer/models/moss_image/model.py": 265,
   "maltrainer/models/moss_image/text_encoder.py": 454,
-  "maltrainer/optimizers/automagic3.py": 439,
-  "maltrainer/utils/previews.py": 245
+  "maltrainer/optimizers/automagic3.py": 439
 }
