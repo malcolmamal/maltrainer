@@ -29,6 +29,7 @@ from safetensors.torch import save_file
 from torch import nn
 
 from maltrainer.finetune.rotation import Window, WindowRotator
+from maltrainer.models.comfy_fp8 import Fp8ScaledLinear
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +62,10 @@ def always_on_linears(model: nn.Module, modules: Sequence[str]) -> list[tuple[st
     for module_name in modules:
         root = model.get_submodule(module_name)
         for name, module in root.named_modules():
+            fp8 = isinstance(module, nn.Linear) and module.weight.dtype in (torch.float8_e4m3fn, torch.float8_e5m2)
+            if fp8 or isinstance(module, Fp8ScaledLinear):  # the loader swaps fp8 Linears for Fp8ScaledLinear
+                raise ValueError(f"{module_name}.{name} is fp8; always-on modules must be bf16")
             if isinstance(module, nn.Linear):
-                if module.weight.dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
-                    raise ValueError(f"{module_name}.{name} is fp8; always-on modules must be bf16")
                 module.weight.requires_grad_(True)
                 out.append((f"{module_name}.{name}.weight", cast(nn.Parameter, module.weight)))
     return out
