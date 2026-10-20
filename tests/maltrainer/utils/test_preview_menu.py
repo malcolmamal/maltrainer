@@ -147,3 +147,12 @@ def test_the_windows_console_is_switched_to_ansi_first(tmp_path: Path, console: 
     _run(_previews(tmp_path), ["enter"])
 
     assert console == [""]
+
+
+def test_the_menu_writes_to_the_stdout_of_the_moment_it_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    redirected = io.StringIO()
+    monkeypatch.setattr(preview_menu.sys, "stdout", redirected)
+
+    run_menu(_previews(tmp_path), ("raw",), _keys("esc"))
+
+    assert "Preview settings: cancelled" in redirected.getvalue()

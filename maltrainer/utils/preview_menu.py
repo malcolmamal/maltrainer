@@ -38,9 +38,11 @@ def run_menu(
     row_labels: Sequence[str],
     read_key: Callable[[], str],
     ready: Callable[[str], bool] = lambda _prompt: True,
-    out: TextIO = sys.stdout,
+    out: TextIO | None = None,
 ) -> list[str]:
-    """Show the menu until Enter (apply) or Esc (cancel); returns the applied changes."""
+    """Show the menu until Enter (apply) or Esc (cancel); returns the applied changes. ``out``: the
+    stdout of the moment it runs, not the one bound at import (a redirected console must be honoured)."""
+    out = sys.stdout if out is None else out
     every = previews.every
     rows = {label: previews.rows.get(label, True) for label in row_labels}
     enabled = set(previews.enabled_prompts)
