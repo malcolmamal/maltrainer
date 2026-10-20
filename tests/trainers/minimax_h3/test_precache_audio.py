@@ -7,13 +7,13 @@ import logging
 import pytest
 import torch
 
-import train_minimax_h3_lora as h3
+from maltrainer.trainers.minimax_h3 import audio as audio_parts
 
 from .fakes import Fakes
 from .runs import cached
 from .world import Workspace
 
-LOGGER = "train_minimax_h3_lora"
+LOGGER = "maltrainer.trainers.minimax_h3"  # its caching modules log under it
 
 
 def test_a_long_recording_keeps_one_window_in_first_mode_and_tiles_in_split_mode(workspace: Workspace) -> None:
@@ -101,7 +101,7 @@ def test_a_missing_dependency_while_reading_a_recording_is_not_swallowed(
     def no_av(_path: object) -> None:
         raise ImportError("Video and audio training items need PyAV")
 
-    monkeypatch.setattr(h3, "read_audio", no_av)
+    monkeypatch.setattr(audio_parts, "read_audio", no_av)
 
     with pytest.raises(ImportError, match="need PyAV"):
         cached(workspace.config())

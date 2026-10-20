@@ -10,13 +10,14 @@ import pytest
 import torch
 
 import train_minimax_h3_lora as h3
+from maltrainer.trainers.minimax_h3 import audio as audio_parts
 
 from .fakes import Fakes
 from .media import write_clip
 from .runs import cached
 from .world import Workspace
 
-LOGGER = "train_minimax_h3_lora"
+LOGGER = "maltrainer.trainers.minimax_h3"  # its caching modules log under it
 
 
 def _keys(trainer: h3.MiniMaxH3LoRATrainer) -> list[str]:
@@ -58,13 +59,13 @@ def test_the_soundtrack_is_decoded_once_however_many_windows_the_clip_splits_int
 ) -> None:
     workspace.add_clip(frames=44, seconds=1.9)
     reads: list[Path] = []
-    real = h3.read_audio
+    real = audio_parts.read_audio
 
     def counting(path: Path) -> Any:
         reads.append(path)
         return real(path)
 
-    monkeypatch.setattr(h3, "read_audio", counting)
+    monkeypatch.setattr(audio_parts, "read_audio", counting)
 
     cached(workspace.config(dataset={"long_media": "split"}))
 
@@ -97,7 +98,7 @@ def test_a_stem_ending_in_mute_skips_the_soundtrack_without_decoding_it(
     workspace: Workspace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     workspace.add_clip("scene_mute", seconds=0.3)
-    monkeypatch.setattr(h3, "read_audio", lambda _path: pytest.fail("a muted clip's audio must not be read"))
+    monkeypatch.setattr(audio_parts, "read_audio", lambda _path: pytest.fail("a muted clip's audio must not be read"))
 
     trainer = cached(workspace.config())
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-import train_minimax_h3_lora as h3
+from maltrainer.models.minimax_h3 import packing
 
 from .steps import SHIFT, Calls, make_trainer, sample_of, step
 from .world import Workspace
@@ -35,9 +35,9 @@ def test_video_and_audio_are_conditioned_on_one_minus_their_coupled_sigmas(
 
     sigma = torch.tensor([parts["sigma"]])
     timestep = calls.args[0][3]
-    torch.testing.assert_close(timestep, torch.cat([1.0 - sigma, 1.0 - h3.remap_sigma(sigma)]))
+    torch.testing.assert_close(timestep, torch.cat([1.0 - sigma, 1.0 - packing.remap_sigma(sigma)]))
     torch.manual_seed(4)
-    expected = h3.apply_flow_shift(torch.sigmoid(torch.randn(1)).clamp(0.001, 0.999), SHIFT)
+    expected = packing.apply_flow_shift(torch.sigmoid(torch.randn(1)).clamp(0.001, 0.999), SHIFT)
     assert parts["sigma"] == pytest.approx(expected.item())
 
 
@@ -61,15 +61,15 @@ def test_the_video_loss_is_the_mse_to_the_clean_latent_minus_the_noise(
     loss, parts = step(trainer, "image")
     latents = sample_of(trainer, "image").video
     torch.manual_seed(4)
-    sigma = h3.apply_flow_shift(torch.sigmoid(torch.randn(1)).clamp(0.001, 0.999), SHIFT)
+    sigma = packing.apply_flow_shift(torch.sigmoid(torch.randn(1)).clamp(0.001, 0.999), SHIFT)
     noise = torch.randn_like(latents)
     noisy = (1.0 - sigma.view(1, 1, 1, 1, 1)) * latents + sigma.view(1, 1, 1, 1, 1) * noise
 
     video, audio, text, timestep, layout = calls.args[0]
-    torch.testing.assert_close(video, h3.patchify_video(noisy))
+    torch.testing.assert_close(video, packing.patchify_video(noisy))
     with torch.no_grad():
         output = trainer._forward(video, audio, text, timestep, layout)
-    expected = torch.nn.functional.mse_loss(output.video, h3.patchify_video(latents - noise))
+    expected = torch.nn.functional.mse_loss(output.video, packing.patchify_video(latents - noise))
     torch.testing.assert_close(loss, expected)
     assert parts["video"] == pytest.approx(expected.item())
 

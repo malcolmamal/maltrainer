@@ -17,14 +17,15 @@ from maltrainer.utils.lora_metadata import git_commit
 logger = logging.getLogger(__name__)
 
 
-def start_metadata(model_type: str) -> dict[str, object]:
-    """What every checkpoint of the run records about how it was made."""
-    return {
-        "model_type": model_type,
+def start_metadata(model_type: str | None) -> dict[str, object]:
+    """What every checkpoint of the run records about how it was made (MiniMax H3 records no model type: the
+    metadata's defaults are its labels)."""
+    started: dict[str, object] = {
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "git_commit": git_commit(),
         "torch_version": torch.__version__,
     }
+    return started if model_type is None else {"model_type": model_type, **started}
 
 
 def make_accelerator(config: dict[str, Any]) -> Accelerator:

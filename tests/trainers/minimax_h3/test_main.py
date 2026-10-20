@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 import train_minimax_h3_lora as h3
+from maltrainer.trainers.minimax_h3 import dry_run as dry_run_module
 
 from .fakes import Fakes
 from .runs import run_h3
@@ -91,7 +92,7 @@ def test_a_dry_run_over_an_empty_folder_still_counts_one_sample(workspace: Works
 def test_a_dry_run_waits_the_step_time_between_steps(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
     workspace.add_images(2)
     waits: list[float] = []
-    monkeypatch.setattr(h3.time, "sleep", waits.append)
+    monkeypatch.setattr(dry_run_module.time, "sleep", waits.append)
     _command(monkeypatch, workspace, workspace.config(), "--dry-run")
 
     h3.main()

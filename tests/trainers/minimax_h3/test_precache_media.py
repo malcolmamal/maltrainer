@@ -8,6 +8,7 @@ import torch
 import train_minimax_h3_lora as h3
 from maltrainer.data.media import read_audio
 from maltrainer.data.minimax_dataset import load_image, slice_audio
+from maltrainer.models.minimax_h3 import packing
 
 from .fakes import Fakes
 from .media import write_image
@@ -55,7 +56,7 @@ def test_a_clip_soundtrack_and_a_recording_become_channel_major_audio_rows(works
     wav = read_audio(workspace.data / "voices" / "voice.wav")
     assert wav is not None
     expected = fakes.audio.encode(torch.from_numpy(slice_audio(wav, 0, 22)).unsqueeze(0))
-    torch.testing.assert_close(voice.audio, h3.pack_audio_rows(expected))
+    torch.testing.assert_close(voice.audio, packing.pack_audio_rows(expected))
 
 
 def test_an_audio_item_gets_a_zeros_video_placeholder_sized_by_the_placeholder_resolution(

@@ -14,6 +14,9 @@ import torch
 from maltrainer.models.minimax_h3.audio_vae import MiniMaxH3AudioEncoder
 from maltrainer.models.minimax_h3.model import MiniMaxH3TransformerConfig
 from maltrainer.models.minimax_h3.video_vae import MiniMaxH3VideoEncoderModel
+from maltrainer.trainers.minimax_h3 import audio as audio_parts
+from maltrainer.trainers.minimax_h3 import data, model, visual
+from maltrainer.training import session
 from tests.maltrainer.models.minimax_h3.h3_audio import tiny_audio_encoder
 from tests.maltrainer.models.minimax_h3.h3_tiny import TEXT_DIM, tiny_config, tiny_transformer
 
@@ -75,8 +78,8 @@ def _gen() -> torch.Generator:
     return torch.Generator().manual_seed(5)
 
 
-def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
-    """Replace the loaders ``module`` imported, and the full-size transformer config, with tiny ones."""
+def install_fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
+    """Replace the loaders the trainer's parts import, and the full-size transformer config, with tiny ones."""
     fakes = Fakes(video=tiny_video_vae(), audio=tiny_audio_encoder(monkeypatch))
 
     def video(_path: str, device: torch.device) -> MiniMaxH3VideoEncoderModel:
@@ -100,15 +103,15 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
         fakes.configs.append(tiny_config(audio_in_channels=AUDIO_CHANNELS, in_channels=VIDEO_CHANNELS, **options))
         return fakes.configs[-1]
 
-    monkeypatch.setattr(module, "load_minimax_h3_video_vae", video)
-    monkeypatch.setattr(module, "load_minimax_h3_audio_encoder", audio)
-    monkeypatch.setattr(module, "load_minimax_h3_text_encoder", text)
-    monkeypatch.setattr(module, "load_comfy_int8_convrot_state_dict", state)
-    monkeypatch.setattr(module, "MiniMaxH3TransformerConfig", config)
+    monkeypatch.setattr(visual, "load_minimax_h3_video_vae", video)
+    monkeypatch.setattr(audio_parts, "load_minimax_h3_audio_encoder", audio)
+    monkeypatch.setattr(data, "load_minimax_h3_text_encoder", text)
+    monkeypatch.setattr(model, "load_comfy_int8_convrot_state_dict", state)
+    monkeypatch.setattr(model, "MiniMaxH3TransformerConfig", config)
     return fakes
 
 
-def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, module: object, commit: str = "abc1234") -> None:
+def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, commit: str = "abc1234") -> None:
     """The trainer's two slow environment calls, a full ``gc.collect()`` and ``git``, answered at once."""
-    monkeypatch.setattr(module, "gc", SimpleNamespace(collect=lambda: 0))
-    monkeypatch.setattr(module, "git_commit", lambda: commit)
+    monkeypatch.setattr(session, "gc", SimpleNamespace(collect=lambda: 0))
+    monkeypatch.setattr(session, "git_commit", lambda: commit)

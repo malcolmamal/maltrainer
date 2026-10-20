@@ -58,10 +58,67 @@ def build_lora_optimizer(
     return AdamW(network.trainable_parameters(), lr=lr, weight_decay=weight_decay), {"name": "adamw", "lr": lr}
 
 
+def linear_warmup(optimizer: Any, steps: int, from_zero: bool = False) -> Any:
+    """The rate ramps linearly up to the configured one over ``steps`` steps, starting at 1 / steps (at 0 with
+    ``from_zero``); None when ``steps`` is 0."""
+    if steps <= 0:
+        return None
+    if from_zero:
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min(1.0, float(step) / float(max(1, steps))))
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min((step + 1) / steps, 1.0))
+
+
 def warmup_scheduler(optimizer: Any, train_config: dict[str, Any]) -> Any:
     """A linear warmup over ``train.learning_rate_warmup_steps`` (None when it is 0)."""
     warmup = int(train_config.get("learning_rate_warmup_steps", 0) or 0)
     if warmup <= 0:
         return None
     logger.info("Learning-rate warmup over %d steps.", warmup)
-    return torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min((step + 1) / warmup, 1.0))
+    return linear_warmup(optimizer, warmup)
+
+
+def eight_bit_or_adamw(
+    params: list[torch.nn.Parameter], name: str, lr: float, weight_decay: float
+) -> tuple[Any, dict[str, object] | None]:
+    """bitsandbytes' AdamW8bit / Adam8bit, or AdamW when it cannot be used (then nothing is resolved)."""
+    try:
+        import bitsandbytes as bnb
+
+        bnb_optim: Any = bnb.optim
+        optimizer_cls = bnb_optim.AdamW8bit if name == "adamw8bit" else bnb_optim.Adam8bit
+        optimizer = optimizer_cls(params, lr=lr, weight_decay=weight_decay)
+        logger.info("Using 8-bit optimizer: %s (lr=%.2e)", name, lr)
+        return optimizer, {"name": name, "lr": lr}
+    except (ImportError, OSError, RuntimeError) as e:
+        logger.warning("Bitsandbytes not available (%s). Falling back to AdamW.", e)
+        return AdamW(params, lr=lr, weight_decay=weight_decay), None
+
+
+def automagic_one_group(
+    params: list[torch.nn.Parameter], train_config: dict[str, Any], weight_decay: float
+) -> tuple[Any, dict[str, object]]:
+    """Automagic3 over one group of parameters; each option is ``automagic_<key>`` or the bare ``<key>``."""
+    from maltrainer.optimizers import Automagic3
+
+    def option(key: str, default: float) -> Any:
+        return train_config.get(f"automagic_{key}", train_config.get(key, default))
+
+    kwargs: dict[str, Any] = {
+        "lr": float(train_config.get("learning_rate", 1e-6)),
+        "min_lr": float(option("min_lr", 1e-8)),
+        "max_lr": float(option("max_lr", 1e3)),
+        "beta2": float(option("beta2", 0.999)),
+        "eps": float(option("eps", 1e-30)),
+        "clip_threshold": float(option("clip_threshold", 1.0)),
+        "weight_decay": weight_decay,
+        "polarity_history": int(option("polarity_history", 8)),
+        "fused": bool(train_config.get("automagic_fused", False)),
+    }
+    optimizer = Automagic3(params, **kwargs)
+    logger.info(
+        "Using Automagic3 optimizer: start_lr=%.2e, history=%d, clip_threshold=%.2f",
+        kwargs["lr"],
+        kwargs["polarity_history"],
+        kwargs["clip_threshold"],
+    )
+    return optimizer, {"name": "automagic3", **kwargs}

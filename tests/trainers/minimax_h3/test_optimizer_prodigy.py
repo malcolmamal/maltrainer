@@ -13,7 +13,7 @@ import torch
 from .runs import prepared
 from .world import Workspace
 
-LOGGER = "train_minimax_h3_lora"
+LOGGER = "maltrainer.trainers.minimax_h3.optimizer"
 
 
 def _built(ws: Workspace, lora: dict[str, Any] | None = None, **train: Any) -> Any:

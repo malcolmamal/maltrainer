@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 import train_minimax_h3_lora as h3
+from maltrainer.trainers.minimax_h3 import sample as sample_module
 
 from .runs import prepared, progress_lines, run_h3
 from .world import Workspace
@@ -19,7 +20,7 @@ def _noting(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     seen: list[str] = []
     original = h3.MiniMaxH3LoRATrainer._training_step
 
-    def noting(self: h3.MiniMaxH3LoRATrainer, sample: h3.H3Sample, flow_shift: float) -> Any:
+    def noting(self: h3.MiniMaxH3LoRATrainer, sample: sample_module.H3Sample, flow_shift: float) -> Any:
         seen.append(Path(sample.key).name)
         return original(self, sample, flow_shift)
 
@@ -101,7 +102,7 @@ def test_the_first_step_logs_the_resolved_sigma_shift_and_latent_size_once(
 ) -> None:
     workspace.add_images(2)
 
-    with caplog.at_level("INFO", logger="train_minimax_h3_lora"):
+    with caplog.at_level("INFO", logger="maltrainer.trainers.minimax_h3.loop"):
         trainer = run_h3(workspace.config())
 
     assert trainer.run_metadata["latent_size"] == "2x2" and trainer.run_metadata["resolved_sigma_shift"] == 1.604837

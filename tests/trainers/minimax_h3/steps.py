@@ -8,6 +8,7 @@ import pytest
 import torch
 
 import train_minimax_h3_lora as h3
+from maltrainer.trainers.minimax_h3 import sample as sample_module
 
 from .runs import prepared
 from .world import Workspace
@@ -36,7 +37,7 @@ def make_trainer(ws: Workspace, **train: Any) -> h3.MiniMaxH3LoRATrainer:
     return prepared(ws.config(train=train))
 
 
-def sample_of(trainer: h3.MiniMaxH3LoRATrainer, kind: str) -> h3.H3Sample:
+def sample_of(trainer: h3.MiniMaxH3LoRATrainer, kind: str) -> sample_module.H3Sample:
     return next(s for s in trainer.samples if s.kind == kind)
 
 
