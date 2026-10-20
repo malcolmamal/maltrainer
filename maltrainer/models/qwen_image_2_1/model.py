@@ -12,15 +12,13 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from accelerate import init_empty_weights
-from safetensors.torch import load_file
 from torch import nn
 
-from maltrainer.models.flux3.loading import is_int8_convrot
 from maltrainer.models.minimax_h3.int8_convrot import (
     enable_int8_convrot,
-    load_comfy_int8_convrot_state_dict,
     prepare_int8_convrot_modules,
 )
+from maltrainer.models.qwen_image_2_1.checkpoint import read_state_dict, to_keeping_scales
 
 logger = logging.getLogger(__name__)
 
@@ -424,10 +422,7 @@ def load_qwen_image_2_1_transformer(
         raise FileNotFoundError(f"Transformer model file not found at {model_path}")
 
     logger.info("Loading Qwen-Image-2.1 Transformer from %s...", model_path)
-    if is_int8_convrot(model_path):
-        int8_state_dict, num_quant = load_comfy_int8_convrot_state_dict(str(model_path), device=torch.device("cpu"))
-    else:
-        int8_state_dict, num_quant = load_file(str(model_path), device="cpu"), 0
+    int8_state_dict, num_quant = read_state_dict(str(model_path))
 
     with init_empty_weights(include_buffers=False):
         model = QwenImage21Transformer()
@@ -442,10 +437,7 @@ def load_qwen_image_2_1_transformer(
         enable_int8_convrot(model, grad_precision=grad_precision)
 
     model.requires_grad_(False)
-    scales = {name: module.scale_weight for name, module in model.named_modules() if hasattr(module, "scale_weight")}
-    model.to(device=device, dtype=dtype)
-    for name, scale in scales.items():  # the cast would round the float32 quantization scales to ``dtype``
-        model.get_submodule(name).scale_weight = scale.to(device)
+    to_keeping_scales(model, device, dtype)
     model.eval()
     logger.info("Loaded Qwen-Image-2.1 Transformer successfully on %s in %s", device, dtype)
     return model
