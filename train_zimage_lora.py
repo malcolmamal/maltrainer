@@ -138,6 +138,7 @@ class ZImageLoRATrainer:
             torch_dtype=self.dtype,
         )
         transformer.enable_gradient_checkpointing()
+        self.transformer = transformer
 
         # Merge training adapter (for Z-Image Turbo) if provided
         if assistant_lora_path:
@@ -171,7 +172,6 @@ class ZImageLoRATrainer:
         text_encoder.to(self.device)
         vae.to(self.device)
 
-        self.transformer = transformer
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
         self.vae = vae
@@ -211,7 +211,7 @@ class ZImageLoRATrainer:
         )
 
         default_caption = dataset_config.get("default_caption", "")
-        trigger = dataset_config.get("trigger", "").strip()
+        trigger = (dataset_config.get("trigger") or "").strip()
 
         if default_caption:
             # Smart replacement: if caption is empty or just the trigger, use default_caption
@@ -708,7 +708,7 @@ class ZImageLoRATrainer:
             1.458650827407837,
         ]
         num_epochs = train_config.get("num_epochs", 10)
-        save_every = train_config.get("save_every", 500)
+        save_every = int(train_config.get("save_every", 500) or 0)
 
         # Log device and model info right before training
         if self.is_main_process:
@@ -871,7 +871,7 @@ class ZImageLoRATrainer:
 
                     # If it's still a list (some models return [tensor]), take the first element
                     if isinstance(model_pred, (list, tuple)):
-                        model_pred = model_pred[0]
+                        model_pred = torch.stack(list(model_pred)) if model_pred[0].ndim == 4 else model_pred[0]
 
                     # Squeeze the frame dimension if it exists
                     if len(model_pred.shape) == 5:
@@ -1002,7 +1002,7 @@ class ZImageLoRATrainer:
                     )
 
                     # Save checkpoint
-                    if global_step % save_every == 0:
+                    if save_every > 0 and global_step % save_every == 0:
                         self.save_checkpoint(global_step)
 
                 # Update progress bar

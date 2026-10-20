@@ -385,7 +385,7 @@ class ZImageEmbeddingTrainer:
         """Main training loop."""
         train_config = self.config["train"]
         num_epochs = train_config.get("num_epochs", 10)
-        save_every = train_config.get("save_every", 500)
+        save_every = int(train_config.get("save_every", 500) or 0)
 
         # Log device and model info
         if self.is_main_process:
@@ -502,7 +502,7 @@ class ZImageEmbeddingTrainer:
 
                     # If it's still a list (some models return [tensor]), take the first element
                     if isinstance(model_pred, (list, tuple)):
-                        model_pred = model_pred[0]
+                        model_pred = torch.stack(list(model_pred)) if model_pred[0].ndim == 4 else model_pred[0]
 
                     # Squeeze the frame dimension if it exists
                     if len(model_pred.shape) == 5:
@@ -542,7 +542,7 @@ class ZImageEmbeddingTrainer:
                     global_step += 1
 
                     # Save checkpoint
-                    if global_step % save_every == 0:
+                    if save_every > 0 and global_step % save_every == 0:
                         self.save_checkpoint(global_step)
 
                 # Update progress bar logs
