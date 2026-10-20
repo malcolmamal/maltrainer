@@ -442,7 +442,10 @@ def load_qwen_image_2_1_transformer(
         enable_int8_convrot(model, grad_precision=grad_precision)
 
     model.requires_grad_(False)
+    scales = {name: module.scale_weight for name, module in model.named_modules() if hasattr(module, "scale_weight")}
     model.to(device=device, dtype=dtype)
+    for name, scale in scales.items():  # the cast would round the float32 quantization scales to ``dtype``
+        model.get_submodule(name).scale_weight = scale.to(device)
     model.eval()
     logger.info("Loaded Qwen-Image-2.1 Transformer successfully on %s in %s", device, dtype)
     return model

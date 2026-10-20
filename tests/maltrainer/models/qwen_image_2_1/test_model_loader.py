@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import torch
-from safetensors.torch import save_file
+from safetensors.torch import load_file, save_file
 
 from maltrainer.models.minimax_h3.int8_convrot import rotate_activation
 from maltrainer.models.qwen_image_2_1 import model as model_module
@@ -127,3 +127,14 @@ def test_a_plain_checkpoint_without_markers_loads_as_an_unquantized_model(tmp_pa
     torch.testing.assert_close(model.img_in.weight, source.img_in.weight)
     assert not hasattr(model.img_in, "scale_weight")
     assert not any(p.requires_grad for p in model.parameters())
+
+
+def test_quantization_scales_stay_float32_when_the_model_is_cast_to_bfloat16(tmp_path: Path) -> None:
+    path, _, _ = _checkpoint(tmp_path)
+    stored = load_file(str(path))["img_in.weight_scale"].float().reshape(-1, 1)
+    assert (stored.to(torch.bfloat16).float() != stored).any()  # the test only means something if bf16 would round them
+
+    model = load_qwen_image_2_1_transformer(path, device=CPU, dtype=torch.bfloat16)
+
+    assert model.img_in.scale_weight.dtype == torch.float32
+    assert torch.equal(model.img_in.scale_weight, stored)
