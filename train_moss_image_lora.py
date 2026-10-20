@@ -496,7 +496,7 @@ class MOSSImageLoRATrainer:
         elif name in {"adamw8bit", "adam8bit"}:
             import bitsandbytes as bnb
 
-            self.optimizer = cast(Any, bnb.optim.AdamW8bit)(
+            self.optimizer = cast(Any, bnb.optim).AdamW8bit(
                 self.lora_network.trainable_parameters(), lr=lr, weight_decay=weight_decay
             )
             self.run_metadata["optimizer_resolved"] = {"name": name, "lr": lr}

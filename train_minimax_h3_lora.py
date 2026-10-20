@@ -209,7 +209,6 @@ class MiniMaxH3LoRATrainer:
         }
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
-
         self.samples: list[H3Sample] = []
         self._layout_cache: dict[tuple[Any, ...], dict[str, torch.Tensor]] = {}
         self.text_cache: dict[str, torch.Tensor] = {}
@@ -745,7 +744,8 @@ class MiniMaxH3LoRATrainer:
             try:
                 import bitsandbytes as bnb
 
-                optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
+                bnb_optim: Any = bnb.optim
+                optimizer_cls = bnb_optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb_optim.Adam8bit
                 self.optimizer: Any = optimizer_cls(params, lr=lr, weight_decay=weight_decay)
                 logger.info("Using 8-bit optimizer: %s (lr=%.2e)", optimizer_name, lr)
                 self.run_metadata["optimizer_resolved"] = {"name": optimizer_name, "lr": lr}

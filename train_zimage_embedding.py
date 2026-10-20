@@ -17,7 +17,7 @@ import torch
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from diffusers import AutoencoderKL
-from diffusers.models.transformers import ZImageTransformer2DModel
+from diffusers.models.transformers.transformer_z_image import ZImageTransformer2DModel
 from safetensors.torch import save_file
 from torch.optim import AdamW
 from torch.utils.data import DataLoader

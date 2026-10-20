@@ -41,8 +41,9 @@ from safetensors import safe_open
 from safetensors.torch import save_file
 from tqdm import tqdm
 
-# Re-exported: train_moss_image_finetune.py imports them from here.
-from maltrainer.finetune.classes import class_caption, resolve_classes  # noqa: F401
+from maltrainer.finetune.classes import class_caption, resolve_classes
+
+__all__ = ["class_caption", "resolve_classes"]  # re-exported: train_moss_image_finetune.py imports them from here
 
 logger = logging.getLogger(__name__)
 

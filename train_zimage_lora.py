@@ -17,7 +17,7 @@ import torch
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from diffusers import AutoencoderKL
-from diffusers.models.transformers import ZImageTransformer2DModel
+from diffusers.models.transformers.transformer_z_image import ZImageTransformer2DModel
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file, save_file
 from torch.optim import AdamW
@@ -105,7 +105,6 @@ class ZImageLoRATrainer:
                 module_name = module_name[len("diffusion_model.") :]
             if module_name.startswith("transformer."):
                 module_name = module_name[len("transformer.") :]
-
             module = module_map.get(module_name)
             if module is None or not isinstance(module, torch.nn.Linear):
                 continue
@@ -467,7 +466,8 @@ class ZImageLoRATrainer:
             try:
                 import bitsandbytes as bnb
 
-                optimizer_cls = bnb.optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb.optim.Adam8bit
+                bnb_optim: Any = bnb.optim
+                optimizer_cls = bnb_optim.AdamW8bit if optimizer_name == "adamw8bit" else bnb_optim.Adam8bit
                 self.optimizer = optimizer_cls(
                     self.lora_network.parameters(),
                     lr=lr,
