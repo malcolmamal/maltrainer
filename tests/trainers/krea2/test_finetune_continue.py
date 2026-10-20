@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import torch
 
-from train_krea2_finetune import STATE_MODEL, STATE_OPTIMIZER, STATE_TRAINER
+from maltrainer.trainers.krea2.finetune_host import STATE_MODEL, STATE_OPTIMIZER, STATE_TRAINER
 
 from .runs import run_finetune
 from .world import Workspace, write_checkpoint, write_image

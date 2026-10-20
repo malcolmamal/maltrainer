@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-import train_krea2_finetune as finetune
+from maltrainer.trainers.krea2 import finetune_save
 from train_krea2_finetune import Krea2FinetuneTrainer
 
 from .runs import run_finetune
@@ -34,7 +34,7 @@ def test_the_free_space_needed_is_the_models_bf16_size_plus_a_gigabyte(workspace
     trainer = _trained(workspace)
 
     assert trainer._model_bytes() == 2 * sum(t.numel() for t in trainer.transformer.state_dict().values())
-    assert trainer.DISK_MARGIN == 1 << 30
+    assert finetune_save.DISK_MARGIN == 1 << 30
 
 
 def test_a_numbered_save_that_does_not_fit_is_skipped_and_reported(
@@ -74,7 +74,7 @@ def test_a_failed_numbered_save_removes_its_partial_file_and_training_goes_on(
     workspace: Workspace, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     trainer = _trained(workspace)
-    monkeypatch.setattr(finetune, "save_krea2_model", _failing_save(workspace.out / "ft_step_3.safetensors"))
+    monkeypatch.setattr(finetune_save, "save_krea2_model", _failing_save(workspace.out / "ft_step_3.safetensors"))
 
     with caplog.at_level(logging.ERROR):
         saved = trainer.save_checkpoint(3)
@@ -88,7 +88,7 @@ def test_a_failed_final_save_removes_its_partial_file_and_raises(
 ) -> None:
     trainer = _trained(workspace)
     monkeypatch.setattr(trainer, "_name", lambda: "ft_new")
-    monkeypatch.setattr(finetune, "save_krea2_model", _failing_save(workspace.out / "ft_new.safetensors"))
+    monkeypatch.setattr(finetune_save, "save_krea2_model", _failing_save(workspace.out / "ft_new.safetensors"))
 
     with pytest.raises(OSError, match=r"disk full"):
         trainer.save_checkpoint("final")

@@ -13,10 +13,10 @@ import pytest
 import torch
 from accelerate.state import AcceleratorState, GradientState
 
-import train_krea2_finetune
 import train_krea2_lora
 from maltrainer.finetune import rotation
 from maltrainer.models.krea2 import loading
+from maltrainer.trainers.krea2 import finetune_save
 
 from .fakes import Fakes, install_fakes, skip_housekeeping
 from .tiny import CONFIG
@@ -63,5 +63,5 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
 def disk(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     """The free bytes ``shutil.disk_usage`` reports to the finetune's saves (plenty); set ``.free`` to change it."""
     state = SimpleNamespace(free=1 << 40)
-    monkeypatch.setattr(train_krea2_finetune.shutil, "disk_usage", lambda _path: SimpleNamespace(free=state.free))
+    monkeypatch.setattr(finetune_save.shutil, "disk_usage", lambda _path: SimpleNamespace(free=state.free))
     return state

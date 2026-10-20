@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from accelerate import Accelerator
 
-import train_krea2_finetune as finetune
+from maltrainer.trainers.krea2 import finetune_loop, finetune_save
 from maltrainer.training import loop
 
 from .fakes import ScriptedKeys, script_keys
@@ -22,7 +22,7 @@ def press(monkeypatch: pytest.MonkeyPatch) -> Callable[[list[list[str]]], list[S
     """``press([[], ['s']])``: the keys pending at the 1st and the 2nd step boundary."""
 
     def pressing(script: list[list[str]]) -> list[ScriptedKeys]:
-        return script_keys(monkeypatch, [finetune, loop], script)
+        return script_keys(monkeypatch, [finetune_loop, loop], script)
 
     return pressing
 
@@ -77,7 +77,7 @@ def test_q_does_not_stop_on_a_save_that_failed(
     workspace: Workspace, press: Callable[..., Any], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     workspace.add_images(2)
-    real, calls = finetune.save_krea2_model, []
+    real, calls = finetune_save.save_krea2_model, []
 
     def flaky(*args: Any, **kwargs: Any) -> None:
         calls.append(1)
@@ -85,7 +85,7 @@ def test_q_does_not_stop_on_a_save_that_failed(
             raise OSError("disk full")
         real(*args, **kwargs)
 
-    monkeypatch.setattr(finetune, "save_krea2_model", flaky)
+    monkeypatch.setattr(finetune_save, "save_krea2_model", flaky)
     press([["q"]])
 
     with caplog.at_level(logging.ERROR):
