@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pytest
@@ -84,12 +85,16 @@ def test_the_default_caption_and_trigger_make_the_captions_of_uncaptioned_images
 
 
 @pytest.mark.parametrize("flag", ["do_guidance_loss", "do_differential_guidance"])
-def test_guidance_loss_also_encodes_the_unconditional_prompt(workspace: Workspace, flag: str) -> None:
+def test_guidance_loss_is_ignored_with_a_warning_and_encodes_only_the_captions(
+    workspace: Workspace, flag: str, caplog: pytest.LogCaptureFixture
+) -> None:
     workspace.add_images(1)
 
-    trainer = cached(workspace.config(train={flag: True, "unconditional_prompt": "blurry"}))
+    with caplog.at_level(logging.WARNING):
+        trainer = cached(workspace.config(train={flag: True, "unconditional_prompt": "blurry"}))
 
-    assert sorted(trainer.text_cache) == ["a photo of zed", "blurry"]
+    assert sorted(trainer.text_cache) == ["a photo of zed"]
+    assert "do_guidance_loss is not implemented" in caplog.text
 
 
 def test_an_unconditional_prompt_that_is_also_a_caption_is_encoded_once(workspace: Workspace, fakes: Fakes) -> None:

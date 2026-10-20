@@ -34,7 +34,7 @@
   "train_minimax_h3_lora.py": 1175,
   "train_moss_image_finetune.py": 813,
   "train_moss_image_lora.py": 812,
-  "train_qwen_image_2_1_lora.py": 637,
+  "train_qwen_image_2_1_lora.py": 616,
   "train_zimage_embedding.py": 641,
   "train_zimage_lora.py": 1102
 }

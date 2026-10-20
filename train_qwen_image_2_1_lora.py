@@ -36,6 +36,8 @@ from maltrainer.models.qwen_image_2_1.text_encoder import (
 from maltrainer.models.qwen_image_2_1.vae import (
     load_qwen_image_2_1_vae,
 )
+from maltrainer.optimizers.prodigy import build_prodigy
+from maltrainer.utils.batching import batch_text_embeddings
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.logging_utils import setup_logging
 from maltrainer.utils.lora_metadata import build_metadata, git_commit
@@ -162,14 +164,9 @@ class QwenImage21LoRATrainer:
                     text_embeds = text_encoder.encode_prompts([caption], device=self.device).detach().cpu()
                 self.text_cache[caption] = text_embeds
 
-        # Also cache unconditional prompt if differential guidance is enabled
         train_config = self.config.get("train", {})
         if train_config.get("do_guidance_loss", train_config.get("do_differential_guidance", False)):
-            uncond_prompt = str(train_config.get("unconditional_prompt", ""))
-            if uncond_prompt not in self.text_cache:
-                with torch.no_grad():
-                    uncond_embeds = text_encoder.encode_prompts([uncond_prompt], device=self.device).detach().cpu()
-                self.text_cache[uncond_prompt] = uncond_embeds
+            logger.warning("train.do_guidance_loss is not implemented for Qwen-Image 2.1 and is ignored")
 
         del text_encoder
         gc.collect()
@@ -208,6 +205,10 @@ class QwenImage21LoRATrainer:
             target_modules=lora_config.get("target_modules", None),
         )
 
+        if not self.lora_network.lora_layers:
+            raise ValueError(
+                f"No Qwen-Image 2.1 module matched lora.target_modules {lora_config.get('target_modules')}"
+            )
         self.lora_dtype = getattr(torch, str(lora_config.get("dtype", "float32")))
         self.lora_network.set_lora_dtype(self.device, self.lora_dtype)
 
@@ -259,10 +260,10 @@ class QwenImage21LoRATrainer:
         distribution = str(train_config.get("timestep_distribution", "shift")).lower()
         if distribution in {"sigmoid", "shift", "logit_normal"}:
             scale = float(train_config.get("sigmoid_scale", 1.0))
-            z = torch.randn(batch_size, device=self.device, dtype=self.dtype) * scale
+            z = torch.randn(batch_size, device=self.device) * scale
             timesteps = torch.sigmoid(z).clamp(0.001, 0.999)
         else:
-            timesteps = torch.rand(batch_size, device=self.device, dtype=self.dtype)
+            timesteps = torch.rand(batch_size, device=self.device)
         return timesteps
 
     def setup_optimizer(self) -> None:
@@ -272,6 +273,7 @@ class QwenImage21LoRATrainer:
         optimizer_name = str(train_config.get("optimizer", "adamw8bit")).lower()
         weight_decay = float(train_config.get("weight_decay", 0.01))
         params = list(self.lora_network.trainable_parameters())
+        warmup_steps = int(train_config.get("warmup_steps") or train_config.get("learning_rate_warmup_steps") or 0)
 
         if optimizer_name in {"adamw8bit", "adam8bit"}:
             try:
@@ -286,41 +288,19 @@ class QwenImage21LoRATrainer:
                 self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
         elif optimizer_name.startswith("prodigy"):
             try:
-                import inspect
-
-                from prodigyopt import Prodigy
-
-                configured_lr = float(train_config.get("learning_rate", 1.0))
-                default_multiplier = configured_lr if configured_lr >= 0.01 else 1.0
-                requested = {
-                    "lr": float(train_config.get("prodigy_lr", default_multiplier)),
-                    "betas": (
-                        float(train_config.get("adam_beta1", 0.9)),
-                        float(train_config.get("prodigy_beta2", 0.99)),
-                    ),
-                    "beta3": train_config.get("prodigy_beta3"),
-                    "weight_decay": weight_decay,
-                    "eps": float(train_config.get("prodigy_eps", 1e-8)),
-                    "d0": float(train_config.get("prodigy_d0", 1e-6)),
-                    "d_coef": float(train_config.get("prodigy_d_coef", 1.0)),
-                    "growth_rate": float(train_config.get("prodigy_growth_rate", float("inf"))),
-                    "decouple": bool(train_config.get("prodigy_decouple", True)),
-                    "use_bias_correction": bool(train_config.get("prodigy_use_bias_correction", True)),
-                    "safeguard_warmup": bool(
-                        train_config.get(
-                            "prodigy_safeguard_warmup",
-                            int(train_config.get("warmup_steps", 0)) > 0,
-                        )
-                    ),
+                recipe = {  # this trainer's defaults (the shared ones suit the other LoRA trainers)
+                    "prodigy_beta2": 0.99,
+                    "prodigy_use_bias_correction": True,
+                    "prodigy_safeguard_warmup": warmup_steps > 0,
+                    "prodigy_slice_p": None,
                 }
-                sig = inspect.signature(Prodigy.__init__)
-                supported = {k: v for k, v in requested.items() if k in sig.parameters and v is not None}
-                self.optimizer = Prodigy(params, **supported)
+                configured_lr = float(train_config.get("learning_rate", 1.0))
+                self.optimizer, supported = build_prodigy(params, train_config, configured_lr, weight_decay, recipe)
                 logger.info(
                     "Using Prodigy optimizer: mult=%.2f, d_coef=%.2f, d0=%.1e",
-                    requested["lr"],
-                    requested["d_coef"],
-                    requested["d0"],
+                    supported["lr"],
+                    supported.get("d_coef", 1.0),
+                    supported.get("d0", 1e-6),
                 )
                 self.run_metadata["optimizer_resolved"] = {"name": "prodigy", **supported}
             except (ImportError, OSError, RuntimeError) as e:
@@ -357,7 +337,6 @@ class QwenImage21LoRATrainer:
             self.optimizer = AdamW(params, lr=lr, weight_decay=weight_decay)
             self.run_metadata["optimizer_resolved"] = {"name": "adamw", "lr": lr}
 
-        warmup_steps = int(train_config.get("warmup_steps", 0))
         if warmup_steps > 0:
             from torch.optim.lr_scheduler import LambdaLR
 
@@ -370,7 +349,7 @@ class QwenImage21LoRATrainer:
     def train(self) -> None:
         """Main Qwen-Image-2.1 LoRA training loop."""
         train_config = self.config["train"]
-        save_every = train_config.get("save_every", 500)
+        save_every = int(train_config.get("save_every", 500) or 0)
 
         self.lora_network, self.optimizer, self.train_dataloader = self.accelerator.prepare(
             self.lora_network, self.optimizer, self.train_dataloader
@@ -406,9 +385,8 @@ class QwenImage21LoRATrainer:
                     )
 
                     # 2. Fetch pre-cached text embeddings [B, text_len, 4096]
-                    text_embeds = torch.cat([self.text_cache[c] for c in captions], dim=0).to(
-                        device=self.device, dtype=self.dtype
-                    )
+                    text_embeds = batch_text_embeddings([self.text_cache[c] for c in captions])
+                    text_embeds = text_embeds.to(device=self.device, dtype=self.dtype)
 
                     bsz, c_lat, h_lat, w_lat = latents.shape
                     img_tokens = h_lat * w_lat
@@ -422,7 +400,7 @@ class QwenImage21LoRATrainer:
                     # Flow matching interpolation: x_t = (1 - t) * x_0 + t * noise
                     noise = torch.randn_like(latents)
                     sigma_broadcast = shifted_sigmas.view(bsz, 1, 1, 1)
-                    noisy_latents = (1.0 - sigma_broadcast) * latents + sigma_broadcast * noise
+                    noisy_latents = ((1.0 - sigma_broadcast) * latents + sigma_broadcast * noise).to(latents.dtype)
 
                     # 5. Model forward pass
                     # Target velocity: v = noise - x_0
@@ -504,7 +482,7 @@ class QwenImage21LoRATrainer:
                             current_lr,
                         )
 
-                    if global_step % save_every == 0 and global_step < total_steps:
+                    if save_every > 0 and global_step % save_every == 0 and global_step < total_steps:
                         self.save_checkpoint(global_step)
 
                 progress_bar.set_postfix(
@@ -542,7 +520,8 @@ class QwenImage21LoRATrainer:
 
         save_dtype = getattr(torch, str(self.config.get("output", {}).get("dtype", "bfloat16")))
         format_type = str(self.config.get("output", {}).get("format", "diffusers")).lower()
-        state_dict = self.lora_network.get_state_dict(save_dtype=save_dtype, format_type=format_type)
+        network = self.accelerator.unwrap_model(self.lora_network)
+        state_dict = network.get_state_dict(save_dtype=save_dtype, format_type=format_type)
 
         runtime = dict(self.run_metadata)
         runtime["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
