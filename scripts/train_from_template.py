@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -77,6 +78,39 @@ def find_model(root: Path, subfolder: str, name: str) -> Path | None:
     return next((p for p in base.rglob(name) if p.is_file()), None) if base.is_dir() else None
 
 
+def _place_models(
+    args: argparse.Namespace, config: dict[str, Any], files: dict[str, tuple[str, str]], text: str
+) -> int | None:
+    """Point the config at the ComfyUI model files. A message and exit code 1 when they cannot be found."""
+    if args.comfyui_models:
+        missing = []
+        for key, (subfolder, name) in files.items():
+            found = find_model(Path(args.comfyui_models), subfolder, name)
+            if found:
+                config["model"][key] = str(found)
+            else:
+                missing.append(f"{subfolder}/{name}")
+        if missing and not args.dry_run:
+            print(f"Not found under {args.comfyui_models}: {', '.join(missing)}", file=sys.stderr)
+            return 1
+    elif "[comfyui_models]" in text and not args.dry_run:
+        print("Set COMFYUI_MODELS_PATH (or --comfyui-models) to your ComfyUI models folder.", file=sys.stderr)
+        return 1
+    return None
+
+
+def _apply_overrides(args: argparse.Namespace, config: dict[str, Any]) -> None:
+    train = config.setdefault("train", {})
+    if args.optimizer:
+        train["optimizer"] = args.optimizer
+    if args.learning_rate:
+        train["learning_rate"] = args.learning_rate
+    if args.epochs:
+        train["num_epochs"], train["max_steps"] = args.epochs, 0
+    if args.max_steps:
+        train["max_steps"] = args.max_steps
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("model", choices=sorted(MODELS))
@@ -107,30 +141,11 @@ def main() -> int:
         config["dataset"]["trigger"] = args.trigger
         config["dataset"]["default_caption"] = f"a photo of {args.trigger}"
 
-    if args.comfyui_models:
-        missing = []
-        for key, (subfolder, name) in files.items():
-            found = find_model(Path(args.comfyui_models), subfolder, name)
-            if found:
-                config["model"][key] = str(found)
-            else:
-                missing.append(f"{subfolder}/{name}")
-        if missing and not args.dry_run:
-            print(f"Not found under {args.comfyui_models}: {', '.join(missing)}", file=sys.stderr)
-            return 1
-    elif "[comfyui_models]" in text and not args.dry_run:
-        print("Set COMFYUI_MODELS_PATH (or --comfyui-models) to your ComfyUI models folder.", file=sys.stderr)
-        return 1
+    code = _place_models(args, config, files, text)
+    if code is not None:
+        return code
 
-    train = config.setdefault("train", {})
-    if args.optimizer:
-        train["optimizer"] = args.optimizer
-    if args.learning_rate:
-        train["learning_rate"] = args.learning_rate
-    if args.epochs:
-        train["num_epochs"], train["max_steps"] = args.epochs, 0
-    if args.max_steps:
-        train["max_steps"] = args.max_steps
+    _apply_overrides(args, config)
 
     output = Path(config["output"]["path"])
     output.mkdir(parents=True, exist_ok=True)
