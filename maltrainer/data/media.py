@@ -29,6 +29,47 @@ def _on_grid(time: float, frame_duration: float, snap: float) -> float:
     return grid if abs(time - grid) <= snap else time
 
 
+class _TickClock:
+    """Repeats the latest source frame onto every 24 fps tick, converting (resizing) each frame once."""
+
+    def __init__(self, resolution: int, max_frames: int) -> None:
+        self.resolution = resolution
+        self.max_frames = max_frames
+        self.frames: list[np.ndarray] = []
+        self.size: tuple[int, int] | None = None
+        self.last_frame: Any = None
+        self.last_array: np.ndarray | None = None
+        self.last_time = 0.0
+
+    @property
+    def full(self) -> bool:
+        return len(self.frames) >= self.max_frames
+
+    def _convert(self, frame: Any) -> np.ndarray:
+        image = frame.to_image()
+        if self.size is None:
+            self.size = bucket_size(image.width, image.height, self.resolution)
+        return np.asarray(resize_and_crop(image, self.size), dtype=np.uint8)
+
+    def emit_until(self, end: float) -> None:
+        """Every 24 fps tick strictly before ``end`` belongs to the latest frame."""
+        while self.last_frame is not None and not self.full and len(self.frames) / FPS < end - 1e-6:
+            if self.last_array is None:
+                self.last_array = self._convert(self.last_frame)
+            self.frames.append(self.last_array)
+
+    def push(self, frame: Any, time: float) -> None:
+        self.last_frame, self.last_array = frame, None
+        self.last_time = time
+
+
+def _frame_timing(stream: Any) -> tuple[float, float]:
+    """The frame duration and the largest timestamp rounding to snap back onto the frame grid."""
+    rate = stream.average_rate
+    frame_duration = 1.0 / float(rate) if rate else 1.0 / FPS
+    return frame_duration, min(float(stream.time_base or 0.0), frame_duration / 4)
+
+
 def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarray:
     """Up to ``max_frames`` frames resampled to 24 fps, as uint8 [T, H, W, 3].
 
@@ -37,57 +78,30 @@ def read_video_frames(path: Path, resolution: int, max_frames: int) -> np.ndarra
     resized as they are decoded, so a long 4K source never sits in memory at full size.
     """
     av = _require_av()
-    frames: list[np.ndarray] = []
+    clock = _TickClock(resolution, max_frames)
     with av.open(str(path)) as container:
         if not container.streams.video:
             raise ValueError(f"{path.name}: no video stream")
         stream = container.streams.video[0]
         stream.thread_type = "AUTO"
-        rate = stream.average_rate
-        frame_duration = 1.0 / float(rate) if rate else 1.0 / FPS
-        snap = min(float(stream.time_base or 0.0), frame_duration / 4)
+        frame_duration, snap = _frame_timing(stream)
 
-        size: tuple[int, int] | None = None
         origin: float | None = None
-        last_frame = None
-        last_array: np.ndarray | None = None
-        last_time = 0.0
-        target = 0
-
-        def convert(frame: Any) -> np.ndarray:
-            nonlocal size
-            image = frame.to_image()
-            if size is None:
-                size = bucket_size(image.width, image.height, resolution)
-            return np.asarray(resize_and_crop(image, size), dtype=np.uint8)
-
         for decoded, frame in enumerate(container.decode(stream)):
             time = frame.time if frame.time is not None else decoded * frame_duration
             if origin is None:
                 origin = time
             time = _on_grid(time - origin, frame_duration, snap)
-            # every 24 fps tick strictly before this frame belongs to the previous one
-            while last_frame is not None and target < max_frames and target / FPS < time - 1e-6:
-                if last_array is None:
-                    last_array = convert(last_frame)
-                frames.append(last_array)
-                target += 1
-            if target >= max_frames:
+            clock.emit_until(time)
+            if clock.full:
                 break
-            last_frame, last_array = frame, None
-            last_time = time
+            clock.push(frame, time)
 
-        if last_frame is not None and target < max_frames:
-            end = last_time + frame_duration
-            while target < max_frames and target / FPS < end - 1e-6:
-                if last_array is None:
-                    last_array = convert(last_frame)
-                frames.append(last_array)
-                target += 1
+        clock.emit_until(clock.last_time + frame_duration)
 
-    if not frames:
+    if not clock.frames:
         raise ValueError(f"{path.name}: no decodable video frames")
-    return np.stack(frames)
+    return np.stack(clock.frames)
 
 
 def read_audio(path: Path) -> np.ndarray | None:

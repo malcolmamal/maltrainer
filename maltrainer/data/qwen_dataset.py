@@ -59,11 +59,7 @@ class QwenImage21Dataset(Dataset[dict[str, torch.Tensor | str]]):
             ]
         )
 
-    def _load_dataset(self) -> None:
-        if not self.data_root.exists():
-            logger.warning("Dataset root does not exist: %s", self.data_root)
-            return
-
+    def _find_images(self) -> list[Path]:
         base_images: list[Path] = []
         for root, _, files in walk_visible(self.data_root):
             for file in files:
@@ -72,28 +68,39 @@ class QwenImage21Dataset(Dataset[dict[str, torch.Tensor | str]]):
                     base_images.append(Path(root) / file)
 
         base_images.sort()
+        return base_images
 
-        for img_path in base_images:
-            txt_path = img_path.with_suffix(".txt")
-            caption = ""
-            if txt_path.exists():
-                try:
-                    caption = txt_path.read_text(encoding="utf-8").strip()
-                except (OSError, ValueError) as e:
-                    logger.warning("Error reading caption for %s: %s", img_path, e)
+    def _caption_for(self, img_path: Path) -> str:
+        """The sidecar ``.txt`` caption (trigger prepended if missing), else the default caption."""
+        txt_path = img_path.with_suffix(".txt")
+        caption = ""
+        if txt_path.exists():
+            try:
+                caption = txt_path.read_text(encoding="utf-8").strip()
+            except (OSError, ValueError) as e:
+                logger.warning("Error reading caption for %s: %s", img_path, e)
 
-            if caption:
-                if self.trigger_token and self.trigger_token.lower() not in caption.lower():
-                    caption = f"{self.trigger_token} {caption}"
-            elif self.trigger_token and self.default_caption:
-                # "a photo of sks" already names the subject; otherwise prepend the trigger to it
-                if self.trigger_token.lower() in self.default_caption.lower():
-                    caption = self.default_caption
-                else:
-                    caption = f"{self.trigger_token} {self.default_caption}"
+        if caption:
+            if self.trigger_token and self.trigger_token.lower() not in caption.lower():
+                caption = f"{self.trigger_token} {caption}"
+        elif self.trigger_token and self.default_caption:
+            # "a photo of sks" already names the subject; otherwise prepend the trigger to it
+            if self.trigger_token.lower() in self.default_caption.lower():
+                caption = self.default_caption
             else:
-                caption = self.trigger_token or self.default_caption
+                caption = f"{self.trigger_token} {self.default_caption}"
+        else:
+            caption = self.trigger_token or self.default_caption
+        return caption
 
+    def _load_dataset(self) -> None:
+        if not self.data_root.exists():
+            logger.warning("Dataset root does not exist: %s", self.data_root)
+            return
+
+        base_images = self._find_images()
+        for img_path in base_images:
+            caption = self._caption_for(img_path)
             for _ in range(self.repeats):
                 self.image_paths.append(img_path)
                 self.captions.append(caption)

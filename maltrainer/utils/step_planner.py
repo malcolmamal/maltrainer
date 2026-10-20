@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from maltrainer.data.minimax_dataset import _media_kind
+from maltrainer.data.minimax_scan import _media_kind
 from maltrainer.data.walk import walk_visible
 from maltrainer.finetune.repeats import folder_repeats, samples_per_epoch
 
