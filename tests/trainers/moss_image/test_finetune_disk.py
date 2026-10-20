@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -139,3 +140,22 @@ def test_the_state_size_estimate_counts_weights_optimizer_and_ema(workspace: Wor
 
     assert trainer._state_bytes(hard_linked=True) == optimizer_bytes + ema_bytes + (16 << 20)
     assert trainer._state_bytes(hard_linked=False) == trainer._state_bytes(True) + workspace.layout.stat().st_size
+
+
+def test_a_dataset_folder_the_cache_cannot_write_to_still_trains(
+    workspace: Workspace, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def refused(**_options: object) -> tuple[int, str]:
+        raise PermissionError(13, "Permission denied")  # a read-only dataset folder
+
+    monkeypatch.setattr(tempfile, "mkstemp", refused)
+
+    workspace.add_images("p", 2)
+    config = workspace.config(dataset={"cache": True}, train={"max_steps": 1})
+
+    with caplog.at_level(logging.WARNING, logger="maltrainer.data.disk_cache"):
+        trainer = run_finetune(config)
+
+    assert trainer.global_step == 1
+    assert "Not caching latents/" in caplog.text
+    assert "Not caching text/" in caplog.text

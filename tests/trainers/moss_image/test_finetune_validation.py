@@ -51,6 +51,16 @@ def test_a_prior_without_classes_or_a_class_word_is_refused(workspace: Workspace
         _build(config)
 
 
+def test_a_finetune_without_a_prior_section_builds_and_has_no_gallery(workspace: Workspace) -> None:
+    config = workspace.config()
+    del config["prior"]
+
+    trainer = _build(config)
+
+    assert trainer.prior is None
+    assert not trainer.gallery.enabled
+
+
 def test_a_class_word_with_the_dataset_trigger_stands_in_for_classes(workspace: Workspace) -> None:
     config = workspace.config(prior={"weight": 1.0, "class_word": "woman"})
     del config["prior"]["classes"]
@@ -102,6 +112,8 @@ def test_a_missing_base_checkpoint_stops_the_run_with_the_files_error(workspace:
 
     with pytest.raises(FileNotFoundError, match=r"gone\.safetensors"):
         run_finetune(config)
+
+    assert not (workspace.data / "p" / ".maltrainer_cache").exists()  # failed before any image was encoded
 
 
 def test_a_layout_file_without_an_entry_for_a_model_weight_is_refused_when_saving(workspace: Workspace) -> None:

@@ -147,7 +147,12 @@ def test_a_file_without_the_tensor_entry_is_a_miss(tmp_path: Path) -> None:
 def test_each_write_uses_a_temp_file_of_its_own(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     temps: list[str] = []
     real_save = disk_cache.save_file
-    monkeypatch.setattr(disk_cache, "save_file", lambda tensors, path: (temps.append(path), real_save(tensors, path)))
+
+    def noting(tensors: dict[str, torch.Tensor], path: str) -> None:
+        temps.append(path)
+        real_save(tensors, path)
+
+    monkeypatch.setattr(disk_cache, "save_file", noting)
     cache = FolderCache(tmp_path)
 
     cache.put("latents", "k1", torch.ones(1))
@@ -156,20 +161,3 @@ def test_each_write_uses_a_temp_file_of_its_own(tmp_path: Path, monkeypatch: pyt
     assert len(set(temps)) == 2
     assert all(Path(temp).name.startswith("k1.") and temp.endswith(".tmp") for temp in temps)
     torch.testing.assert_close(cache.get("latents", "k1"), torch.zeros(1))
-
-
-def test_a_failed_write_leaves_neither_an_entry_nor_a_temp_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def failing_save(_tensors: object, path: str) -> None:
-        Path(path).write_bytes(b"partial")
-        raise OSError("disk full")
-
-    monkeypatch.setattr(disk_cache, "save_file", failing_save)
-    cache = FolderCache(tmp_path)
-
-    with pytest.raises(OSError, match="disk full"):
-        cache.put("latents", "k1", torch.ones(1))
-
-    assert not cache.has("latents", "k1")
-    assert list((tmp_path / CACHE_DIR_NAME / "latents").iterdir()) == []

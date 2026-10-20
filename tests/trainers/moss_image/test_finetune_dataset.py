@@ -107,6 +107,18 @@ def test_reg_repeats_sets_how_often_regularisation_images_appear(
     assert (len(trainer._epoch_order()), trainer._epoch_size()) == (expected, expected)
 
 
+@pytest.mark.parametrize("reg_repeats", [0, 0.5, 1, 1.5, 2])
+def test_the_step_planner_counts_the_regularisation_images_the_way_training_draws_them(
+    workspace: Workspace, reg_repeats: float
+) -> None:
+    config = _regularised(workspace)
+    config["dataset"]["reg_repeats"] = reg_repeats
+
+    planned = sum(group.samples for group in finetune.MOSSImageFinetuneTrainer.step_groups(config))
+
+    assert planned == cached_finetune(config)._epoch_size()
+
+
 @pytest.mark.parametrize("fused", [True, False])
 def test_regularisation_images_step_at_the_reduced_size(
     workspace: Workspace, monkeypatch: pytest.MonkeyPatch, fused: bool

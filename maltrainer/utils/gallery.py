@@ -32,6 +32,8 @@ from typing import Any
 
 from PIL import Image
 
+from maltrainer.finetune.classes import resolve_classes
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPTS: dict[str, list[str]] = {
@@ -71,6 +73,20 @@ class Gallery:
         self.templates = {**DEFAULT_PROMPTS, **(config.get("prompts") or {})}
         self.dir = Path(output_dir) / "samples" / "gallery"
         self._random = random.Random()  # its own generator: a press never moves the training RNG
+
+    @classmethod
+    def from_config(cls, config: dict[str, Any], prior_classes: dict[str, str]) -> Gallery:
+        """The gallery a finetune config asks for. Its people are the prior's classes, or what
+        ``prior.class_word`` / ``dataset.trigger`` name; with none of those there is nobody to show
+        and the gallery is off (a finetune without prior preservation is a valid config)."""
+        try:
+            people = prior_classes or resolve_classes(
+                config.get("prior") or {}, config.get("dataset", {}).get("trigger")
+            )
+        except ValueError:
+            people = {}
+        output = Path(config.get("output", {}).get("path", "./output"))
+        return cls((config.get("sample") or {}).get("gallery"), people, output)
 
     def prompts_for(self, trigger: str) -> list[str]:
         cls = self.people[trigger]

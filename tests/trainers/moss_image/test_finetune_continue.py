@@ -43,11 +43,23 @@ def test_a_state_saved_with_other_optimizer_groups_is_refused(workspace: Workspa
         _resume(workspace, train={"automagic_param_groups": False})
 
 
-def test_a_state_saved_with_a_different_number_of_trained_parameters_is_refused(workspace: Workspace) -> None:
+def test_a_state_saved_for_other_trained_parameters_is_refused_before_any_state_loads(workspace: Workspace) -> None:
     _first_run(workspace)
 
-    with pytest.raises(ValueError, match=r"doesn't match the size of optimizer's group"):
+    with pytest.raises(ValueError, match=r"The resumed run trained \d+ parameters, this config trains \d+ \(only in"):
         _resume(workspace, finetune={"trainable_prefixes": ["layers.1."]})
+
+
+def test_a_state_that_did_not_record_its_parameter_names_resumes_as_before(workspace: Workspace) -> None:
+    _first_run(workspace)
+    path = workspace.out / "ft_state" / "trainer_state.pt"
+    state = torch.load(path, weights_only=False)
+    del state["param_names"]
+    torch.save(state, path)
+
+    trainer = _resume(workspace)
+
+    assert trainer.global_step == 4
 
 
 def test_a_resume_that_is_already_at_its_step_budget_trains_nothing_and_says_so(
@@ -139,6 +151,10 @@ def test_turning_ema_on_when_resuming_a_run_that_had_none_starts_the_average_fro
 
 def test_an_ema_state_that_lacks_the_trained_parameters_of_this_config_is_refused(workspace: Workspace) -> None:
     _first_run(workspace, train={"ema_decay": 0.5}, finetune={"trainable_prefixes": ["layers.0."]})
+    path = workspace.out / "ft_state" / "trainer_state.pt"
+    state = torch.load(path, weights_only=False)
+    del state["param_names"]  # a state from before the names were recorded gets past the trained-set check
+    torch.save(state, path)
 
     with pytest.raises(
         ValueError, match=r"EMA state lacks 6 trained parameters, e\.g\. \['layers\.1\.proj\.q\.weight'"

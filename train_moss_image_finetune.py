@@ -49,6 +49,7 @@ from maltrainer.finetune.notes import step_notes
 from maltrainer.finetune.prior import PriorPreservation, class_caption, resolve_classes, weights_from_file
 from maltrainer.finetune.regularisation import set_step_scale
 from maltrainer.finetune.repeats import folder_repeats, repeat_order, samples_per_epoch
+from maltrainer.finetune.resume import check_same_trainable_set
 from maltrainer.finetune.selection import select_trainable
 from maltrainer.models.flux3.loading import is_int8_convrot
 from maltrainer.models.moss_image.finetune import (
@@ -61,6 +62,7 @@ from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.optimizers import Automagic3
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import OffloadedParameterEMA
+from maltrainer.utils.fsutil import rename_with_retry
 from maltrainer.utils.gallery import Gallery
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.logging_utils import setup_logging
@@ -110,11 +112,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 every=int(prior_config.get("every", 1)),
                 seed=int(config.get("seed", 42)),
             )
-        # key g: a few of the trained people at random (sample.gallery; maltrainer/utils/gallery.py)
-        people = self.prior_classes or resolve_classes(prior_config, config.get("dataset", {}).get("trigger"))
-        self.gallery = Gallery(
-            (config.get("sample") or {}).get("gallery"), people, Path(config.get("output", {}).get("path", "./output"))
-        )
+        self.gallery = Gallery.from_config(config, self.prior_classes)  # key g (maltrainer/utils/gallery.py)
 
     # ------------------------------------------------------------------ data
 
@@ -144,7 +142,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 Group(
                     "Regularisation",
                     reg_path,
-                    max(int(dataset_config.get("reg_repeats", 1)), 0),
+                    max(float(dataset_config.get("reg_repeats", 1)), 0),
                     folder_counts(reg_path),
                 )
             )
@@ -208,6 +206,10 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         return sum(samples_per_epoch(len(indices), repeats) for indices, repeats in self._repeat_groups())
 
     # ------------------------------------------------------------------ model
+
+    def precache_dataset(self) -> None:
+        Path(self.config["model"]["transformer_path"]).stat()  # a typo fails here, not after all the caching
+        super().precache_dataset()
 
     def load_transformer_and_lora(self) -> None:
         print("=== Step 2/2: Loading MOSS-Image DiT for finetuning ===", flush=True)
@@ -298,13 +300,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
 
         if self.resume_dir is not None:
             state = torch.load(self.resume_dir / STATE_TRAINER, map_location="cpu", weights_only=False)
-            saved_groups = state.get("group_names")
-            if saved_groups != [g["name"] for g in groups]:
-                raise ValueError(
-                    f"The resumed optimizer had groups {saved_groups}, this config builds "
-                    f"{[g['name'] for g in groups]}; keep finetune.trainable_prefixes and "
-                    "train.automagic_param_groups as they were"
-                )
+            check_same_trainable_set(state, [g["name"] for g in groups], [name for name, _ in self.named_trainable])
             self.optimizer.load_state_dict(
                 torch.load(self.resume_dir / STATE_OPTIMIZER, map_location=self.device, weights_only=False)
             )
@@ -766,6 +762,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
                 "cuda_rng": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
                 "ema_counters": ema_counters,
                 "group_names": [g["name"] for g in self.optimizer.param_groups],
+                "param_names": [name for name, _ in self.named_trainable],
                 "dataset_fingerprint": self._dataset_fingerprint(),
                 "dataset_samples": self._epoch_size(),
             },
@@ -774,8 +771,8 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         old = state_dir.with_name(state_dir.name + ".old")
         shutil.rmtree(old, ignore_errors=True)
         if state_dir.exists():
-            state_dir.rename(old)
-        tmp.rename(state_dir)
+            rename_with_retry(state_dir, old)
+        rename_with_retry(tmp, state_dir)
         shutil.rmtree(old, ignore_errors=True)
         logger.info(
             "Saved resume state (step %d%s) to %s (%.0fs)",

@@ -85,14 +85,19 @@ class FolderCache:
             return None
 
     def put(self, kind: str, key: str, tensor: torch.Tensor) -> None:
+        """Store an entry. The cache is optional: a write that fails (a read-only dataset folder, a full
+        disk, a scanner holding a file) is logged and skipped, and the entry is encoded again next time."""
         path = self._path(kind, key)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # A temp file of its own: two processes encoding the same entry must not write one file.
-        handle, tmp = tempfile.mkstemp(dir=path.parent, prefix=f"{key}.", suffix=".tmp")
-        os.close(handle)
+        tmp = ""
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # A temp file of its own: two processes encoding the same entry must not write one file.
+            handle, tmp = tempfile.mkstemp(dir=path.parent, prefix=f"{key}.", suffix=".tmp")
+            os.close(handle)
             save_file({"tensor": tensor.detach().cpu().contiguous()}, tmp)
             Path(tmp).replace(path)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        except (OSError, SafetensorError) as error:
+            logger.warning("Not caching %s/%s in %s: %s", kind, key, self.root, error)
+        finally:
+            if tmp:
+                Path(tmp).unlink(missing_ok=True)

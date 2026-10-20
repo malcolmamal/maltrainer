@@ -129,3 +129,23 @@ def test_a_press_leaves_the_global_random_state_alone(tmp_path: Path) -> None:
     Gallery(None, PEOPLE, tmp_path).run(3, _renderer([]), contextlib.nullcontext)
 
     assert random.random() == expected
+
+
+def test_the_gallery_of_a_config_shows_the_prior_classes(tmp_path: Path) -> None:
+    config = {"output": {"path": str(tmp_path)}, "sample": {"gallery": {"count": 2}}}
+
+    gallery = Gallery.from_config(config, {"ann": "woman", "bob": "man"})
+
+    assert (gallery.enabled, gallery.count, gallery.people) == (True, 2, {"ann": "woman", "bob": "man"})
+    assert gallery.dir == tmp_path / "samples" / "gallery"
+
+
+def test_a_class_word_and_the_dataset_trigger_name_the_one_person_when_there_are_no_classes(tmp_path: Path) -> None:
+    config = {"prior": {"class_word": "woman"}, "dataset": {"trigger": "ann"}, "output": {"path": str(tmp_path)}}
+
+    assert Gallery.from_config(config, {}).people == {"ann": "woman"}
+
+
+@pytest.mark.parametrize("config", [{}, {"prior": {"weight": 0.0}}, {"prior": None}])
+def test_a_config_with_nobody_to_show_has_no_gallery(config: dict[str, object], tmp_path: Path) -> None:
+    assert not Gallery.from_config({**config, "output": {"path": str(tmp_path)}}, {}).enabled
