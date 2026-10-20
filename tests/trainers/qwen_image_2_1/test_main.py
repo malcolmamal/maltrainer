@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 import train_qwen_image_2_1_lora as qwen
+from maltrainer.training import progress
 
 from .fakes import Fakes
 from .runs import run_qwen
@@ -62,7 +63,7 @@ def test_a_dry_run_ticks_through_the_planned_steps_without_loading_any_model(
 def test_a_dry_run_waits_the_step_time_between_steps(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
     workspace.add_images(2)
     waits: list[float] = []
-    monkeypatch.setattr(qwen.time, "sleep", waits.append)
+    monkeypatch.setattr(progress.time, "sleep", waits.append)
     _command(monkeypatch, workspace, workspace.config(train={"max_steps": 2}), "--dry-run")
 
     qwen.main()

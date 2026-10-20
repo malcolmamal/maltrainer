@@ -28,7 +28,8 @@ from maltrainer.models.flux3.lora import Flux3LoRANetwork
 from maltrainer.models.flux3.text_encoder import load_flux3_text_encoder
 from maltrainer.models.flux3.vae import load_flux2_vae_encoder
 from maltrainer.training.cli import start_run, training_arguments
-from maltrainer.training.image_lora import ImageLoRATrainer, free_memory
+from maltrainer.training.image_lora import ImageLoRATrainer
+from maltrainer.training.session import free_memory
 from maltrainer.training.sigma import LOGIT_NORMAL_NAMES, clamped, logit_normal, shifted
 from maltrainer.utils.config import load_config
 

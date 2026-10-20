@@ -13,7 +13,7 @@ import torch
 from .runs import prepared
 from .world import Workspace
 
-LOGGER = "train_qwen_image_2_1_lora"
+LOGGER = "maltrainer.trainers.qwen_image_2_1.optimizer"
 
 
 def _built(ws: Workspace, **train: Any) -> Any:

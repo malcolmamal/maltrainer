@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 import torch
 
-import train_qwen_image_2_1_lora as qwen
+from maltrainer.trainers.qwen_image_2_1.step import plan_training_steps
 
 from .fakes import Fakes
 from .runs import cached
@@ -135,8 +135,8 @@ def test_models_load_vae_first_then_text_and_the_transformer_waits(workspace: Wo
 def test_the_plan_gives_steps_per_epoch_epochs_and_total_steps(
     train: dict[str, Any], expected: tuple[int, int, int]
 ) -> None:
-    assert qwen.plan_training_steps(2, {"max_steps": 0, "num_epochs": 5, **train}) == expected
+    assert plan_training_steps(2, {"max_steps": 0, "num_epochs": 5, **train}) == expected
 
 
 def test_an_empty_dataset_still_plans_one_step_per_epoch() -> None:
-    assert qwen.plan_training_steps(0, {}) == (1, 10, 10)
+    assert plan_training_steps(0, {}) == (1, 10, 10)

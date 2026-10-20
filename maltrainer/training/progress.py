@@ -22,21 +22,24 @@ def log_step(
     epoch: int,
     num_epochs: int,
     note: str = "",
+    rates: bool = True,
 ) -> None:
     """``Step: n/total [p%], Loss, Epoch, <note>LR``, the rate as the optimizer has it: Automagic3's average
-    and per-group rates, Prodigy's multiplier x d, or the plain rate."""
+    (and, with ``rates``, each group's), Prodigy's multiplier x d, or the plain rate."""
     group = optimizer.param_groups[0]
     inner = getattr(optimizer, "optimizer", optimizer)  # accelerate's wrapper does not forward custom methods
     prefix = (
         f"Step: {step}/{total} [{int(step / total * 100)}%], Loss: {loss.item():.6f}, Epoch: {epoch + 1}/{num_epochs}, "
     )
     prefix += note
-    if hasattr(inner, "get_avg_learning_rate"):
-        rates = ", ".join(
+    if hasattr(inner, "get_avg_learning_rate") and not rates:
+        progress_logger.info("%sLR: %.2e (automagic3)", prefix, inner.get_avg_learning_rate())
+    elif hasattr(inner, "get_avg_learning_rate"):
+        per_group = ", ".join(
             f"{g.get('name', i)} {lr:.2e}"
             for i, (g, lr) in enumerate(zip(inner.param_groups, inner.get_learning_rates(), strict=False))
         )
-        progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), rates)
+        progress_logger.info("%sLR: %.2e (automagic3: %s)", prefix, inner.get_avg_learning_rate(), per_group)
     elif group.get("d") is not None:
         progress_logger.info(
             "%sLR: %.2e (mult %.3f x d %.2e)", prefix, group["lr"] * group["d"], group["lr"], group["d"]

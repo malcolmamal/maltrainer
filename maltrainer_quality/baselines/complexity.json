@@ -23,7 +23,6 @@
   "train_moss_image_finetune.py::train": 32,
   "train_moss_image_lora.py::precache_dataset": 24,
   "train_moss_image_lora.py::train": 14,
-  "train_qwen_image_2_1_lora.py::train": 12,
   "train_zimage_embedding.py::setup_optimizer": 16,
   "train_zimage_embedding.py::train": 14,
   "train_zimage_lora.py::setup_optimizer": 20,

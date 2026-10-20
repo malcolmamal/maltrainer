@@ -11,7 +11,7 @@ import pytest
 import torch
 from torch.nn import functional
 
-from maltrainer.training import image_lora, session
+from maltrainer.training import session
 from maltrainer.utils.keyboard import KeyCommands
 
 from .tiny import CONFIG
@@ -70,7 +70,7 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
 
 def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, commit: str = "abc1234") -> None:
     """The trainers' two slow environment calls, a full ``gc.collect()`` and ``git`` (twice), answered at once."""
-    monkeypatch.setattr(image_lora, "gc", SimpleNamespace(collect=lambda: 0))
+    monkeypatch.setattr(session, "gc", SimpleNamespace(collect=lambda: 0))
     monkeypatch.setattr(session, "git_commit", lambda: commit)
 
 

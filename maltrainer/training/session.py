@@ -1,7 +1,9 @@
-"""A training run's set-up: its metadata, the Accelerator, the device report and the training.log file."""
+"""A training run's set-up: its metadata, the Accelerator, the device report and the training.log file; and
+handing an unloaded model's memory back."""
 
 from __future__ import annotations
 
+import gc
 import logging
 import time
 from pathlib import Path
@@ -52,3 +54,9 @@ def open_training_log(config: dict[str, Any]) -> logging.Logger:
     progress_logger.addHandler(file_handler)
     progress_logger.propagate = False
     return progress_logger
+
+
+def free_memory() -> None:
+    """Hand an unloaded model's memory back: Python's garbage, then CUDA's cache."""
+    gc.collect()
+    torch.cuda.empty_cache()

@@ -7,7 +7,6 @@ loop and its hooks are in loop.py.
 
 from __future__ import annotations
 
-import gc
 import logging
 from collections.abc import Iterable
 from typing import Any, ClassVar
@@ -26,12 +25,6 @@ from maltrainer.training.steps import epoch_order, plan_training_steps
 from maltrainer.utils.ema import OffloadedParameterEMA, ParameterEMA
 
 logger = logging.getLogger(__name__)
-
-
-def free_memory() -> None:
-    """Hand an unloaded model's memory back: Python's garbage, then CUDA's cache."""
-    gc.collect()
-    torch.cuda.empty_cache()
 
 
 class ImageLoRATrainer(StepLoop):

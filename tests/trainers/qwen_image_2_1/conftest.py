@@ -12,8 +12,6 @@ import pytest
 import torch
 from accelerate.state import AcceleratorState, GradientState
 
-import train_qwen_image_2_1_lora
-
 from .fakes import Fakes, install_fakes, skip_housekeeping
 from .world import Workspace
 
@@ -45,5 +43,5 @@ def workspace(tmp_path: Path) -> Workspace:
 
 @pytest.fixture(autouse=True)
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
-    skip_housekeeping(monkeypatch, train_qwen_image_2_1_lora)
-    return install_fakes(monkeypatch, train_qwen_image_2_1_lora)
+    skip_housekeeping(monkeypatch)
+    return install_fakes(monkeypatch)

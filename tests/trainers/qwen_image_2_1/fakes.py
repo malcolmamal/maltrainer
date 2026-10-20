@@ -13,6 +13,8 @@ import torch
 from torch.nn import functional
 
 from maltrainer.models.qwen_image_2_1.model import QwenImage21Transformer
+from maltrainer.trainers.qwen_image_2_1 import data, model
+from maltrainer.training import session
 
 LATENT_CHANNELS = 4
 TEXT_DIM = 6
@@ -77,8 +79,8 @@ class Fakes:
         return {k: v.detach().clone().to(dtype) for k, v in _tiny().state_dict().items()}
 
 
-def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
-    """Replace the three loaders ``module`` imported with ones returning the fakes."""
+def install_fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
+    """Replace the three loaders the trainer's parts import with ones returning the fakes."""
     fakes = Fakes()
 
     def vae(_path: str, device: torch.device, dtype: torch.dtype, include_decoder: bool) -> FakeVAE:
@@ -98,13 +100,13 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
         fakes.dtypes.append(dtype)
         return _tiny().requires_grad_(False).to(device=device, dtype=dtype).eval()
 
-    monkeypatch.setattr(module, "load_qwen_image_2_1_vae", vae)
-    monkeypatch.setattr(module, "load_qwen_image_2_1_text_encoder", text)
-    monkeypatch.setattr(module, "load_qwen_image_2_1_transformer", transformer)
+    monkeypatch.setattr(data, "load_qwen_image_2_1_vae", vae)
+    monkeypatch.setattr(data, "load_qwen_image_2_1_text_encoder", text)
+    monkeypatch.setattr(model, "load_qwen_image_2_1_transformer", transformer)
     return fakes
 
 
-def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, module: object, commit: str = "abc1234") -> None:
+def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, commit: str = "abc1234") -> None:
     """The trainer's two slow environment calls, a full ``gc.collect()`` and ``git``, answered at once."""
-    monkeypatch.setattr(module, "gc", SimpleNamespace(collect=lambda: 0))
-    monkeypatch.setattr(module, "git_commit", lambda: commit)
+    monkeypatch.setattr(session, "gc", SimpleNamespace(collect=lambda: 0))
+    monkeypatch.setattr(session, "git_commit", lambda: commit)

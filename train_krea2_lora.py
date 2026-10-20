@@ -28,7 +28,8 @@ from maltrainer.models.krea2.timesteps import sample_sigma
 from maltrainer.models.krea2.vae import load_krea2_vae
 from maltrainer.training.cli import start_run, training_arguments
 from maltrainer.training.dop import check_dop_config, dop_captions, dop_loss
-from maltrainer.training.image_lora import ImageLoRATrainer, free_memory
+from maltrainer.training.image_lora import ImageLoRATrainer
+from maltrainer.training.session import free_memory
 from maltrainer.utils.config import load_config
 
 logger = logging.getLogger(__name__)
@@ -136,8 +137,7 @@ class Krea2LoRATrainer(ImageLoRATrainer):
     def _training_step(
         self, index: int, shift_logged: list[bool] | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """The flow-matching loss for one sample, and the noised latent and sigma it used. ``shift_logged``:
-        whether the sigma shift was logged yet (the run's own flag when not given)."""
+        """One sample's loss, noised latent and sigma; ``shift_logged``: the shift was logged (default: the run's)."""
         logged = self._shift_logged if shift_logged is None else shift_logged
         train_config = self.config["train"]
         key, caption = self._sample(index)
