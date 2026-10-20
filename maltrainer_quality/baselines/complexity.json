@@ -4,8 +4,6 @@
   "maltrainer/models/moss_image/text_encoder.py::load_moss_image_text_encoder": 11,
   "maltrainer/optimizers/automagic3.py::_update_param": 15,
   "maltrainer/utils/preview_menu.py::run_menu": 27,
-  "scripts/extract_lora.py::main": 11,
-  "scripts/merge_loras.py::main": 13,
   "scripts/qwen_2_1_bench_report.py::main": 14,
   "scripts/qwen_2_1_bench_score.py::main": 14,
   "scripts/train_from_template.py::main": 13

@@ -31,7 +31,7 @@ from pathlib import Path
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from merge_loras import sha256_prefix
+from merge_loras_io import sha256_prefix
 
 # the four blocks, in dotted (ComfyUI) or underscored (kohya) spelling
 TEXT_FUSION_BLOCK = re.compile(r"txtfusion[._](layerwise|refiner)[._]blocks[._](\d)")

@@ -44,7 +44,8 @@ from typing import Any
 import yaml
 from safetensors.torch import save_file
 
-from merge_loras import DTYPES, merge, merged_metadata
+from merge_loras_core import merge, merged_metadata
+from merge_loras_io import DTYPES
 
 ROOT = Path(__file__).resolve().parents[1]
 

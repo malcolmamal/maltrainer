@@ -32,7 +32,7 @@ from pathlib import Path
 import torch
 from safetensors.torch import save_file
 
-from merge_loras import DTYPES, read_lora, sha256_prefix
+from merge_loras_io import DTYPES, read_lora, sha256_prefix
 
 
 def resize_module(
