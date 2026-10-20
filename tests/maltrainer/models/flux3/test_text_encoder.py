@@ -142,9 +142,12 @@ def test_the_capture_hook_reads_the_hidden_states_from_kwargs_when_called_withou
         ("language_model.model.embed_tokens.weight", "embed_tokens.weight"),
         ("language_model.layers.2.self_attn.q_norm.weight", "layers.2.self_attn.q_norm.weight"),
         ("model.norm.weight", "norm.weight"),
+        ("language_model.norm.weight", "norm.weight"),
+        ("model.layers.1.q.weight", "layers.1.q.weight"),
         ("layers.3.mlp.down_proj.weight", "layers.3.mlp.down_proj.weight"),
         ("model.visual.blocks.0.attn.weight", None),
         ("visual.blocks.0.attn.weight", None),
+        ("visual.merger.weight", None),
         ("lm_head.weight", None),
     ],
 )
@@ -162,3 +165,4 @@ def test_the_constants_match_the_vendored_qwen3_vl_tokenizer() -> None:
     assert tokenizer.convert_tokens_to_ids("<|endoftext|>") == PAD_TOKEN
     assert ids[0] == tokenizer.convert_tokens_to_ids("<|im_start|>")
     assert len(ids) < BASE
+    assert te.MAX_SEQUENCE_LENGTH == 4096

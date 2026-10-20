@@ -72,28 +72,25 @@ def test_the_encoder_loader_infers_channel_widths_from_the_weights(tmp_path: Pat
     assert loaded.quant_conv.in_channels == 2 * Z and loaded.quant_conv.out_channels == 2 * EMBED
 
 
-def test_the_encoder_loader_defaults_to_32_latent_channels_when_the_file_has_no_decoder(tmp_path: Path) -> None:
-    loaded = load_flux2_vae_encoder(_write(tmp_path / "e.safetensors", _encoder()), CPU)
+def test_without_decoder_weights_the_encoder_expects_32_latent_channels(tmp_path: Path) -> None:
+    path = _write(tmp_path / "enc.safetensors", _encoder(Z))
 
-    assert loaded.quant_conv.in_channels == 64
+    with pytest.raises(RuntimeError, match="size mismatch"):
+        load_flux2_vae_encoder(path, CPU)
 
 
-@pytest.mark.parametrize("prefix", ["first_stage_model.", "vae."])
-def test_the_encoder_loader_strips_a_container_prefix(tmp_path: Path, prefix: str) -> None:
-    source = _encoder()
-    path = _write(tmp_path / "vae.safetensors", source, prefix=prefix)
+@pytest.mark.parametrize(("prefix", "nested"), [("first_stage_model.", False), ("vae.", True)])
+def test_the_encoder_loads_from_a_container_prefix_or_a_nested_quant_conv_and_encodes_like_its_source(
+    tmp_path: Path, prefix: str, nested: bool
+) -> None:
+    source = _encoder(Z)
+    path = _write(tmp_path / "vae.safetensors", source, _decoder(), nested=nested, prefix=prefix)
+    images = torch.rand(1, 3, 32, 32, generator=torch.Generator().manual_seed(1))
 
     loaded = load_flux2_vae_encoder(path, CPU)
 
+    torch.testing.assert_close(loaded.encode(images), source.encode(images))
     assert torch.equal(loaded.bn_running_mean, source.bn_running_mean)
-
-
-def test_the_encoder_loader_moves_a_nested_encoder_quant_conv_to_the_root(tmp_path: Path) -> None:
-    source = _encoder()
-    path = _write(tmp_path / "vae.safetensors", source, nested=True)
-
-    loaded = load_flux2_vae_encoder(path, CPU)
-
     assert torch.equal(loaded.quant_conv.weight, source.quant_conv.weight)
 
 
@@ -106,7 +103,7 @@ def test_the_encoder_loader_casts_to_the_requested_dtype(tmp_path: Path) -> None
 def test_the_encoder_loader_rejects_a_vae_without_batch_norm_statistics(tmp_path: Path) -> None:
     save_file({"encoder.conv_in.weight": torch.zeros(1)}, str(tmp_path / "sd.safetensors"))
 
-    with pytest.raises(ValueError, match=re.escape("FLUX.3 needs the Flux2 VAE")):
+    with pytest.raises(ValueError, match=r"no batch-norm latent statistics; FLUX\.3 needs the Flux2 VAE"):
         load_flux2_vae_encoder(tmp_path / "sd.safetensors", CPU)
 
 
@@ -122,15 +119,6 @@ def test_the_decoder_loader_reproduces_the_source_decoder_exactly(tmp_path: Path
     assert not loaded.training and not any(p.requires_grad for p in loaded.parameters())
 
 
-def test_the_decoder_loader_moves_a_nested_decoder_post_quant_conv_to_the_root(tmp_path: Path) -> None:
-    source = _decoder()
-    path = _write(tmp_path / "vae.safetensors", source, nested=True)
-
-    loaded = load_flux2_vae_decoder(path, CPU)
-
-    assert torch.equal(loaded.post_quant_conv.weight, source.post_quant_conv.weight)
-
-
 def test_the_decoder_loader_ignores_the_encoder_half_of_a_full_checkpoint(tmp_path: Path) -> None:
     source = _decoder()
 
@@ -140,13 +128,19 @@ def test_the_decoder_loader_ignores_the_encoder_half_of_a_full_checkpoint(tmp_pa
     assert not any(key.startswith("encoder.") for key in loaded.state_dict())
 
 
-@pytest.mark.parametrize("prefix", ["first_stage_model.", "vae."])
-def test_the_decoder_loader_strips_a_container_prefix(tmp_path: Path, prefix: str) -> None:
+@pytest.mark.parametrize(("prefix", "nested"), [("first_stage_model.", False), ("vae.", True)])
+def test_the_decoder_loads_from_a_container_prefix_or_a_nested_post_quant_conv_and_decodes_like_its_source(
+    tmp_path: Path, prefix: str, nested: bool
+) -> None:
     source = _decoder()
+    path = _write(tmp_path / "vae.safetensors", source, nested=nested, prefix=prefix)
+    latents = torch.randn(1, 4 * EMBED, 2, 2, generator=torch.Generator().manual_seed(1))
 
-    loaded = load_flux2_vae_decoder(_write(tmp_path / "v.safetensors", source, prefix=prefix), CPU)
+    loaded = load_flux2_vae_decoder(path, CPU)
 
+    torch.testing.assert_close(loaded.decode(latents), source.decode(latents))
     assert torch.equal(loaded.bn_running_var, source.bn_running_var)
+    assert torch.equal(loaded.post_quant_conv.weight, source.post_quant_conv.weight)
 
 
 def test_the_decoder_loader_rejects_an_encoder_only_file(tmp_path: Path) -> None:
@@ -165,5 +159,5 @@ def test_the_decoder_loader_rejects_a_vae_without_batch_norm_statistics(tmp_path
 
 @pytest.mark.parametrize("loader", [load_flux2_vae_decoder, load_flux2_vae_encoder])
 def test_both_loaders_name_a_missing_file(tmp_path: Path, loader) -> None:
-    with pytest.raises(FileNotFoundError, match=re.escape("absent.safetensors")):
+    with pytest.raises(FileNotFoundError, match=r"Flux2 VAE not found.*absent\.safetensors"):
         loader(tmp_path / "absent.safetensors", CPU)
