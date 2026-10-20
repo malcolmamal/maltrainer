@@ -20,6 +20,8 @@ maltrainer/utils/                  config, logging, previews and the preview men
 
 The root `train_*.py` files stay small on purpose (200 lines at most, like every Python file). Anything reusable
 moves into `maltrainer/`.
+The package layers are a guide, not a strict hierarchy: `models`, `finetune` and `utils` import each other in a few places
+(see the import table in [architecture.md](architecture.md)).
 
 ## Top level
 
@@ -46,6 +48,10 @@ moves into `maltrainer/`.
 H3, Qwen 2.1 and Z-Image have loops that differ too much to share the base; they reuse only the small pieces.
 
 ### `trainers/<model>/`: one model's pipeline
+Not every trainer has a package here. `trainers/` exists for MiniMax H3, MOSS-Image, Qwen-Image 2.1, Z-Image and the
+two finetunes' parts. The FLUX.3 [klein] and Krea 2 LoRA trainers are classes on `ImageLoRATrainer` that live in
+their root `train_*.py` files (still under 200 lines), and the finetune entry points import the LoRA script they
+extend (`train_krea2_finetune.py` -> `train_krea2_lora.py`, `train_moss_image_finetune.py` -> `train_moss_image_lora.py`).
 Modules by role: `data` (what is loaded), `model` (loading and wiring), `step` (one forward/backward), `loop`,
 `optimizer`, `previews`/`sample`, plus model specifics (`audio`/`visual` for H3, `pipeline` for the Z-Image run
 order). The finetunes are split into `finetune_*` modules:
