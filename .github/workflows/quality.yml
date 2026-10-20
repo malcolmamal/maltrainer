@@ -59,8 +59,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Tests
-        run: npm test
+      - name: Tests with coverage
+        run: npm run test:coverage
 
       # Type-checks the templates too, which lint and Jest do not.
       - name: Build
