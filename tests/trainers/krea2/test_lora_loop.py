@@ -10,7 +10,8 @@ import pytest
 import torch
 
 from maltrainer.models.krea2.lora import Krea2LoRANetwork
-from train_krea2_lora import Krea2LoRATrainer, plan_training_steps
+from maltrainer.training.steps import plan_training_steps
+from train_krea2_lora import Krea2LoRATrainer
 
 from .runs import prepared_lora, progress_lines, run_lora
 from .world import Workspace, named_weights, same_values

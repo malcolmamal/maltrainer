@@ -38,13 +38,14 @@ from maltrainer.finetune.rotation import WindowRotator
 from maltrainer.models.krea2.finetune import DEFAULT_ALWAYS_ON, always_on_linears, parse_windows, save_krea2_model
 from maltrainer.models.krea2.loading import load_krea2_transformer
 from maltrainer.optimizers import Automagic3
+from maltrainer.training.steps import plan_training_steps
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.fsutil import replace_directory
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.logging_utils import setup_logging
 from maltrainer.utils.lora_metadata import build_metadata
 from maltrainer.utils.train_monitor import TrainMonitor
-from train_krea2_lora import Krea2LoRATrainer, plan_training_steps
+from train_krea2_lora import Krea2LoRATrainer
 
 logger = logging.getLogger(__name__)
 
@@ -190,11 +191,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         epoch_size = len(self._epoch_order())
         steps_per_epoch, num_epochs, total_steps = plan_training_steps(epoch_size, train_config)
         self.run_metadata.update(
-            {
-                "steps_per_epoch": steps_per_epoch,
-                "planned_total_steps": total_steps,
-                "dataset_samples": len(self.samples),
-            }
+            steps_per_epoch=steps_per_epoch, planned_total_steps=total_steps, dataset_samples=len(self.samples)
         )
 
         resume = self.resume_state

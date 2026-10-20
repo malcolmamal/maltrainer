@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import train_krea2_lora
+from maltrainer.training import loop
 from maltrainer.utils import keyboard
 
 from .fakes import ScriptedKeys, script_keys
@@ -22,7 +22,7 @@ def press(monkeypatch: pytest.MonkeyPatch) -> Callable[[list[list[str]]], list[S
     """``press([[], ['s']])``: the keys pending at the 1st and the 2nd step boundary."""
 
     def pressing(script: list[list[str]]) -> list[ScriptedKeys]:
-        return script_keys(monkeypatch, [train_krea2_lora], script)
+        return script_keys(monkeypatch, [loop], script)
 
     return pressing
 

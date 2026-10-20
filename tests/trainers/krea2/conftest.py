@@ -54,7 +54,7 @@ def workspace(tmp_path: Path) -> Workspace:
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
     """The tiny DiT instead of the 12.9B one the loader builds, instant git and gc, fake VAE and text encoder."""
     monkeypatch.setattr(loading, "Krea2Config", lambda: CONFIG)
-    skip_housekeeping(monkeypatch, train_krea2_lora)
+    skip_housekeeping(monkeypatch)
     monkeypatch.setattr(rotation, "gc", SimpleNamespace(collect=lambda: 0))  # a window swap collects garbage
     return install_fakes(monkeypatch, train_krea2_lora)
 

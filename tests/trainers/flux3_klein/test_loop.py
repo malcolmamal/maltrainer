@@ -10,7 +10,8 @@ import pytest
 import torch
 
 from maltrainer.models.flux3.lora import Flux3LoRANetwork
-from train_flux3_klein_lora import Flux3KleinLoRATrainer, plan_training_steps
+from maltrainer.training.steps import plan_training_steps
+from train_flux3_klein_lora import Flux3KleinLoRATrainer
 
 from .runs import prepared, progress_lines, run_lora
 from .world import Workspace, named_weights, same_values

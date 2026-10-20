@@ -10,7 +10,7 @@ import pytest
 from accelerate import Accelerator
 
 import train_krea2_finetune as finetune
-import train_krea2_lora as lora
+from maltrainer.training import loop
 
 from .fakes import ScriptedKeys, script_keys
 from .runs import final_weights, run_finetune
@@ -22,7 +22,7 @@ def press(monkeypatch: pytest.MonkeyPatch) -> Callable[[list[list[str]]], list[S
     """``press([[], ['s']])``: the keys pending at the 1st and the 2nd step boundary."""
 
     def pressing(script: list[list[str]]) -> list[ScriptedKeys]:
-        return script_keys(monkeypatch, [finetune, lora], script)
+        return script_keys(monkeypatch, [finetune, loop], script)
 
     return pressing
 

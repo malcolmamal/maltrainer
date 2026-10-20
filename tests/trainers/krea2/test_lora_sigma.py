@@ -9,7 +9,8 @@ from typing import Any
 import pytest
 import torch
 
-from train_krea2_lora import Krea2LoRATrainer, krea2_shift
+from maltrainer.models.krea2.timesteps import krea2_shift
+from train_krea2_lora import Krea2LoRATrainer
 
 from .runs import run_lora
 from .world import Workspace

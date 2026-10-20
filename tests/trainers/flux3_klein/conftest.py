@@ -47,5 +47,5 @@ def workspace(tmp_path: Path) -> Workspace:
 
 @pytest.fixture(autouse=True)
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
-    skip_housekeeping(monkeypatch, train_flux3_klein_lora)
+    skip_housekeeping(monkeypatch)
     return install_fakes(monkeypatch, train_flux3_klein_lora)
