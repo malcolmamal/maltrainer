@@ -129,3 +129,24 @@ def test_main_missing_file(checkpoints, monkeypatch, capsys):
 
 def test_detect_profile_falls_back_to_generic(checkpoints):
     assert extract_lora.detect_profile(checkpoints[0]).name == "generic"
+
+
+def test_changed_tensors_that_are_not_lora_targets_are_reported_and_left_out(tmp_path, monkeypatch, capsys):
+    base = {"layer.weight": BASE_W, "norm.weight": torch.ones(OUT)}
+    tuned = {"layer.weight": BASE_W + CHANGE, "norm.weight": torch.full((OUT,), 2.0)}
+    save_file(base, str(tmp_path / "base.safetensors"))
+    save_file(tuned, str(tmp_path / "ft.safetensors"))
+
+    assert run(monkeypatch, tmp_path / "base.safetensors", tmp_path / "ft.safetensors", "--rank", "2") == 0
+
+    assert "1 changed tensors are not LoRA targets and are left out, e.g. ['norm']" in capsys.readouterr().out
+
+
+def test_a_moss_image_checkpoint_is_recognised_by_its_layout(tmp_path):
+    path = tmp_path / "moss.safetensors"
+    save_file(
+        {"shared_block_modulation.weight": torch.zeros(2, 2), "layers.0.proj.ffn_up_gate.weight": torch.zeros(2, 2)},
+        str(path),
+    )
+
+    assert extract_lora.detect_profile(path).name == "moss_image"

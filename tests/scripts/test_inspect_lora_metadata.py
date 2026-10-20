@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 import pytest
 import torch
@@ -87,3 +88,27 @@ def test_fmt_pretty_prints_json_and_big_numbers():
     assert inspect_meta._fmt("1234567") == "1,234,567"
     assert inspect_meta._fmt("123456") == "123456"
     assert inspect_meta._abbreviate("x" * 200).endswith("... (200 chars)")
+
+
+def test_a_file_from_another_tool_lists_its_keys_and_says_it_is_not_ours(tmp_path, monkeypatch, capsys):
+    bulky = "x" * 200
+    path = make(tmp_path / "k.safetensors", {"ss_datasets": bulky, "ss_tag_frequency": "{}", "modelspec.title": "t"})
+
+    assert run(monkeypatch, path) == 0
+
+    out = capsys.readouterr().out
+    assert "recognised training settings" not in out
+    assert "ss_datasets" in out and "<200 chars, use --all or --json>" in out
+    assert "ss_tag_frequency" in out and bulky not in out
+    assert "probably not a maltrainer checkpoint" in out
+    assert "embedded maltrainer config: no" in out
+
+
+def test_the_config_comes_out_as_json_when_pyyaml_is_missing(lora, monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "yaml", None)
+
+    assert run(monkeypatch, lora, "--config") == 0
+
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == CONFIG
+    assert "PyYAML unavailable" in captured.err

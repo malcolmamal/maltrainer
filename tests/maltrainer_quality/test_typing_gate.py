@@ -7,6 +7,7 @@ off while every other gate stays green.
 from __future__ import annotations
 
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -78,4 +79,15 @@ def test_a_mypy_that_cannot_run_fails_loudly(monkeypatch: pytest.MonkeyPatch, tm
     monkeypatch.setattr(typing_gate.importlib.util, "find_spec", lambda _name: None)
 
     with pytest.raises(RuntimeError, match="not installed"):
+        typing_gate.mypy_output(tmp_path)
+
+
+def test_a_mypy_that_crashes_is_not_taken_for_a_clean_tree(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        typing_gate.subprocess,
+        "run",
+        lambda command, **_: subprocess.CompletedProcess(command, 2, stdout=b"boom"),
+    )
+
+    with pytest.raises(RuntimeError, match="mypy exited with 2:\nboom"):
         typing_gate.mypy_output(tmp_path)

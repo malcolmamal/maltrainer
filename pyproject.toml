@@ -221,9 +221,9 @@ branch = true
 [tool.coverage.report]
 # A floor, not a target: raise it whenever tests land, never lower it.
 # CI is the reference: the Linux runner reads a hair below Windows (platform branches in fsutil and the console keys).
-# Reset to 99.25 when every trainer and scripts/ joined the scope (Windows: 99.32). Raise it as the gaps close:
-# scripts/qwen_2_1_bench_score (model downloads), merge_loras, inspect_lora_metadata, extract_lora and the CUDA-only lines.
-fail_under = 99.25
+# Raised to 99.45 once merge_loras, inspect_lora_metadata, extract_lora and the quality gates were covered (Windows: 99.50).
+# What is left: scripts/qwen_2_1_bench_score (model downloads) and the CUDA-only lines.
+fail_under = 99.45
 precision = 2
 show_missing = true
 skip_covered = true
