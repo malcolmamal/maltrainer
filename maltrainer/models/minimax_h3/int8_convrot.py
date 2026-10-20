@@ -203,7 +203,7 @@ def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.de
         weight_bases = {
             key[: -len(".weight")]
             for key in keys
-            if key.endswith(".weight") and handle.get_tensor(key).dtype is torch.int8
+            if key.endswith(".weight") and handle.get_slice(key).get_dtype() == "I8"
         }
         if not marker_config or set(marker_config) != scale_bases or set(marker_config) != weight_bases:
             raise ValueError(
