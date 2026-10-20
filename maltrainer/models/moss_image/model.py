@@ -24,183 +24,58 @@ Conventions (the report's equation 3, ComfyUI ModelType.FLOW):
 - the DiT gets sigma in [0, 1]; the sinusoidal embedding is of 1000 * sigma, computed in float64
   and fed to the MLP in float32, as the training code does (OpenMOSS's ComfyUI node)
 - it predicts the flow velocity v = noise - x0
+
+The pieces live in ``model_config`` (the config), ``model_math`` (timestep embedding, RoPE, SiTU) and
+``model_blocks`` (the modules the transformer is made of); every name is re-exported here.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Any, cast
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
+from maltrainer.models.moss_image.model_blocks import _T, Block, RMSNorm, TextBlock, TextEmbedder, attention
+from maltrainer.models.moss_image.model_config import MOSSImageConfig
+from maltrainer.models.moss_image.model_math import (
+    LATENT_CHANNELS,
+    ROPE_AXES,
+    ROPE_THETA,
+    TIME_FACTOR,
+    TIME_FREQ_DIM,
+    apply_rope,
+    position_ids,
+    rope,
+    rope_from_ids,
+    situ,
+    timestep_embedding,
+)
+
 logger = logging.getLogger(__name__)
 
-ROPE_THETA = 10000
-ROPE_AXES = 4
-_T = torch.Tensor
-LATENT_CHANNELS = 128
-TIME_FREQ_DIM = 256
-TIME_FACTOR = 1000.0
-
-
-@dataclass(frozen=True)
-class MOSSImageConfig:
-    dim: int = 3072
-    ffn_dim: int = 8192
-    num_heads: int = 24
-    num_layers: int = 42
-    text_dim: int = 4096
-    fused_qkv: bool = False
-
-    @classmethod
-    def from_state_dict(cls, state_dict: dict[str, torch.Tensor]) -> MOSSImageConfig:
-        """comfy/model_detection.py's MOSS-Image branch."""
-        keys = state_dict.keys()
-        if "shared_block_modulation.weight" not in keys or "layers.0.proj.ffn_up_gate.weight" not in keys:
-            raise ValueError("Not a MOSS-Image DiT checkpoint (no shared_block_modulation / layers.0.proj.ffn_up_gate)")
-        dim = state_dict["shared_block_modulation.weight"].shape[0] // 6
-        return cls(
-            dim=dim,
-            ffn_dim=state_dict["layers.0.proj.ffn_up_gate.weight"].shape[0] // 2,
-            num_heads=dim // 128,
-            num_layers=len({k.split(".", 2)[1] for k in keys if k.startswith("layers.")}),
-            text_dim=state_dict["text_embedder.proj.weight"].shape[1],
-            fused_qkv="layers.0.proj.qkv.weight" in keys,
-        )
-
-
-# ---------------------------------------------------------------- embeddings and RoPE
-
-
-def timestep_embedding(sigma: torch.Tensor, dim: int = TIME_FREQ_DIM, max_period: int = 10000) -> torch.Tensor:
-    """[B] sigma -> [B, dim] float32 (cos | sin) of 1000 * sigma, the phases in float64."""
-    half = dim // 2
-    freqs = max_period ** (-torch.arange(half, device=sigma.device, dtype=torch.float64) / half)
-    phase = (TIME_FACTOR * sigma.double())[:, None] * freqs
-    return torch.cat([phase.cos(), phase.sin()], dim=-1).float()
-
-
-def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
-    """[n] positions -> [n, dim/2, 2, 2] rotation matrices (comfy/ldm/flux/math.py)."""
-    scale = torch.linspace(0, (dim - 2) / dim, steps=dim // 2, dtype=torch.float64, device=pos.device)
-    omega = 1.0 / (theta**scale)
-    out = torch.einsum("...n,d->...nd", pos.to(torch.float32).to(torch.float64), omega)
-    out = torch.stack([torch.cos(out), -torch.sin(out), torch.sin(out), torch.cos(out)], dim=-1)
-    return out.reshape(*out.shape[:-1], 2, 2).float()
-
-
-def position_ids(h: int, w: int, text_len: int, device: torch.device) -> torch.Tensor:
-    """[h*w + text_len, 4] (r, f, h, w): the image first, at f = text_len, rows/cols centred; then text."""
-    ids = torch.zeros(h * w + text_len, 4, device=device, dtype=torch.float32)
-    ids[: h * w, 1] = text_len
-    ids[: h * w, 2] = (torch.arange(h, device=device, dtype=torch.float32) - (h - 1) / 2).repeat_interleave(w)
-    ids[: h * w, 3] = (torch.arange(w, device=device, dtype=torch.float32) - (w - 1) / 2).repeat(h)
-    ids[h * w :, 1] = torch.arange(text_len, device=device, dtype=torch.float32)
-    return ids
-
-
-def rope_from_ids(ids: torch.Tensor, head_dim: int) -> torch.Tensor:
-    """[N, 4] ids -> [1, N, 1, head_dim/2, 2, 2], broadcast over batch and heads of [B, N, H, D]."""
-    axis = head_dim // ROPE_AXES
-    emb = torch.cat([rope(ids[:, i], axis, ROPE_THETA) for i in range(ROPE_AXES)], dim=-3)
-    return emb[None, :, None]
-
-
-def apply_rope(x: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
-    """Split-half RoPE on [B, N, H, D]: pairs (x[i], x[i + D/2]) (ComfyUI's rope_split_half)."""
-    x_ = cast(Any, x.to(pe.dtype)).unflatten(-1, (2, -1)).movedim(-2, -1).unsqueeze(-2)
-    out = pe[..., 0] * x_[..., 0] + pe[..., 1] * x_[..., 1]
-    return cast(torch.Tensor, out.movedim(-1, -2).flatten(-2).type_as(x))
-
-
-def situ(hidden: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
-    return (4.0 * torch.tanh(gate / 4.0) * torch.sigmoid(gate)) * (25.0 * torch.tanh(hidden / 25.0))
-
-
-# ---------------------------------------------------------------- modules
-
-
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.rms_norm(x, (x.shape[-1],), self.weight.to(x.dtype), self.eps)
-
-
-def attention(q: _T, k: _T, v: _T, q_norm: RMSNorm, k_norm: RMSNorm, pe: _T, heads: int) -> torch.Tensor:
-    """[B, N, H*D] q/k/v -> [B, N, H*D]. QK-norm and RoPE in fp32, rounded once, as ComfyUI's
-    fused rms_rope_split_half kernel does at inference."""
-    B, N, _ = q.shape
-    q = apply_rope(q_norm(q.view(B, N, heads, -1).float()), pe).to(v.dtype)
-    k = apply_rope(k_norm(k.view(B, N, heads, -1).float()), pe).to(v.dtype)
-    out = F.scaled_dot_product_attention(q.transpose(1, 2), k.transpose(1, 2), v.view(B, N, heads, -1).transpose(1, 2))
-    return out.transpose(1, 2).reshape(B, N, -1)
-
-
-class TextBlock(nn.Module):
-    """Unmodulated pre-norm block of the text embedder; its Linears carry biases."""
-
-    def __init__(self, dim: int, ffn_dim: int, num_heads: int):
-        super().__init__()
-        self.num_heads = num_heads
-        self.norm1 = RMSNorm(dim)
-        self.norm2 = RMSNorm(dim)
-        self.q_norm = RMSNorm(dim // num_heads)
-        self.k_norm = RMSNorm(dim // num_heads)
-        self.qkv = nn.Linear(dim, 3 * dim)
-        self.proj = nn.Linear(dim, dim)
-        self.ffn_gate = nn.Linear(dim, ffn_dim)
-        self.ffn_up = nn.Linear(dim, ffn_dim)
-        self.ffn_down = nn.Linear(ffn_dim, dim)
-
-    def forward(self, x: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
-        q, k, v = self.qkv(self.norm1(x)).chunk(3, dim=-1)
-        x = x + self.proj(attention(q, k, v, self.q_norm, self.k_norm, pe, self.num_heads))
-        y = self.norm2(x)
-        return cast(torch.Tensor, x + self.ffn_down(situ(self.ffn_up(y), self.ffn_gate(y))))
-
-
-class TextEmbedder(nn.Module):
-    def __init__(self, text_dim: int, dim: int, ffn_dim: int, num_heads: int):
-        super().__init__()
-        self.proj = nn.Linear(text_dim, dim)
-        self.blocks = nn.ModuleList([TextBlock(dim, ffn_dim, num_heads) for _ in range(2)])
-
-
-class Block(nn.Module):
-    def __init__(self, dim: int, ffn_dim: int, num_heads: int, fused_qkv: bool):
-        super().__init__()
-        self.num_heads = num_heads
-        self.fused_qkv = fused_qkv
-        self.norm1 = RMSNorm(dim)
-        self.norm2 = RMSNorm(dim)
-        self.q_norm = RMSNorm(dim // num_heads)
-        self.k_norm = RMSNorm(dim // num_heads)
-        names = ("qkv", "o") if fused_qkv else ("q", "k", "v", "o")
-        self.proj = nn.ModuleDict({n: nn.Linear(dim, 3 * dim if n == "qkv" else dim, bias=False) for n in names})
-        self.proj["ffn_up_gate"] = nn.Linear(dim, 2 * ffn_dim, bias=False)
-        self.proj["ffn_down"] = nn.Linear(ffn_dim, dim, bias=False)
-
-    def forward(
-        self, x: _T, shift_a: _T, scale_a: _T, gate_a: _T, shift_f: _T, scale_f: _T, gate_f: _T, pe: _T
-    ) -> torch.Tensor:
-        """The six adaLN vectors are [B, 1, D], shared by every token."""
-        y = self.norm1(x) * (1 + scale_a) + shift_a
-        if self.fused_qkv:
-            q, k, v = self.proj["qkv"](y).chunk(3, dim=-1)
-        else:
-            q, k, v = self.proj["q"](y), self.proj["k"](y), self.proj["v"](y)
-        x = x + self.proj["o"](attention(q, k, v, self.q_norm, self.k_norm, pe, self.num_heads)) * gate_a
-        y = self.norm2(x) * (1 + scale_f) + shift_f
-        hidden, gate = self.proj["ffn_up_gate"](y).chunk(2, dim=-1)
-        return cast(torch.Tensor, x + self.proj["ffn_down"](situ(hidden, gate)) * gate_f)
+__all__ = [
+    "LATENT_CHANNELS",
+    "ROPE_AXES",
+    "ROPE_THETA",
+    "TIME_FACTOR",
+    "TIME_FREQ_DIM",
+    "Block",
+    "MOSSImageConfig",
+    "MOSSImageTransformer",
+    "RMSNorm",
+    "TextBlock",
+    "TextEmbedder",
+    "apply_rope",
+    "attention",
+    "position_ids",
+    "rope",
+    "rope_from_ids",
+    "situ",
+    "timestep_embedding",
+]
 
 
 class MOSSImageTransformer(nn.Module):
