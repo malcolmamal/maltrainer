@@ -6,7 +6,8 @@ from typing import Any
 
 import pytest
 
-from backend import app as backend
+from backend import files, schemas
+from backend import plan as planner
 
 from .conftest import build
 
@@ -87,7 +88,7 @@ def test_missing_checkpoints_are_warned_about_with_the_models_folder_and_returne
 ) -> None:
     make_dataset()
 
-    plan, _, _, missing = backend.build_plan(backend.StartTrainRequest(dataset="alice", model="flux3_klein"))
+    plan, _, _, missing = planner.build_plan(schemas.StartTrainRequest(dataset="alice", model="flux3_klein"))
 
     assert missing == [
         "diffusion_models/flux3_image_klein_int8_convrot.safetensors",
@@ -101,7 +102,7 @@ def test_missing_checkpoints_without_a_models_folder_point_at_the_environment_va
     make_dataset: Maker, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     make_dataset()
-    monkeypatch.delenv(backend.COMFYUI_MODELS_ENV)
+    monkeypatch.delenv(files.COMFYUI_MODELS_ENV)
 
     plan, _ = build(model="flux3_klein")
 

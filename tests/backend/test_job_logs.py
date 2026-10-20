@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from backend import app as backend
+from backend import training
 
 from .conftest import add_job
 from .fakes import FakeProcess
@@ -16,7 +16,7 @@ def _log(line: str, stream: str = "stdout", replace: bool = False, progress: boo
     return {"type": "log", "stream": stream, "line": line, "replace": replace, "is_progress": progress}
 
 
-def _read(stdout: Sequence[bytes] = (), stderr: Sequence[bytes] = ()) -> backend.TrainingJob:
+def _read(stdout: Sequence[bytes] = (), stderr: Sequence[bytes] = ()) -> training.TrainingJob:
     job = add_job("j1", "running", process=FakeProcess(list(stdout), list(stderr), 0, hold=False))
     asyncio.run(job.start_readers())
     return job

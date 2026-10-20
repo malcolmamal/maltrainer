@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import app as backend
+from backend import training
 
 from .conftest import add_job
 from .fakes import FakeSpawner, call_in_loop, settle
@@ -41,7 +41,7 @@ def test_a_new_job_waits_for_the_running_one_and_then_runs_in_submission_order(
 
     assert [_statuses(client)[ids[name]["job_id"]] for name in ids] == ["running", "queued", "queued"]
     assert len(spawner.calls) == 1
-    assert list(backend.queued_job_ids) == [ids["bob"]["job_id"], ids["carol"]["job_id"]]
+    assert list(training.queued_job_ids) == [ids["bob"]["job_id"], ids["carol"]["job_id"]]
 
     spawner.hold = False
     call_in_loop(client, spawner.processes[0].finish)
@@ -49,7 +49,7 @@ def test_a_new_job_waits_for_the_running_one_and_then_runs_in_submission_order(
 
     assert set(_statuses(client).values()) == {"exited"}
     assert _configs(spawner) == [ids[name]["config_path"] for name in ids]
-    assert not backend.queued_job_ids
+    assert not training.queued_job_ids
 
 
 def test_starting_a_queued_job_by_id_runs_it_and_takes_it_off_the_queue(
@@ -57,13 +57,13 @@ def test_starting_a_queued_job_by_id_runs_it_and_takes_it_off_the_queue(
 ) -> None:
     spawner.hold = True
     add_job("q1")
-    backend.queued_job_ids.append("q1")
+    training.queued_job_ids.append("q1")
 
     response = client.post("/api/jobs/q1/start")
 
     assert (response.status_code, response.json()) == (200, {"status": "ok"})
     assert [list(args) for args, _ in spawner.calls] == [["python", "train.py"]]
-    assert (client.get("/api/jobs/q1").json()["status"], list(backend.queued_job_ids)) == ("running", [])
+    assert (client.get("/api/jobs/q1").json()["status"], list(training.queued_job_ids)) == ("running", [])
 
 
 def test_a_queued_job_missing_from_the_queue_can_still_be_started(client: TestClient, spawner: FakeSpawner) -> None:
@@ -98,11 +98,11 @@ def test_start_next_runs_the_oldest_queued_job_and_skips_stale_queue_entries(
     add_job("done", "exited")
     add_job("q1")
     add_job("q2")
-    backend.queued_job_ids.extend(["ghost", "done", "q1", "q2"])
+    training.queued_job_ids.extend(["ghost", "done", "q1", "q2"])
 
     assert client.post("/api/jobs/start-next").json() == {"status": "ok"}
 
-    assert (_statuses(client)["q1"], _statuses(client)["q2"], list(backend.queued_job_ids)) == (
+    assert (_statuses(client)["q1"], _statuses(client)["q2"], list(training.queued_job_ids)) == (
         "running",
         "queued",
         ["q2"],
@@ -117,7 +117,7 @@ def test_start_next_does_nothing_while_a_job_runs_or_when_nothing_is_queued(
     if running:
         add_job("busy", "running")
         add_job("q1")
-        backend.queued_job_ids.append("q1")
+        training.queued_job_ids.append("q1")
 
     assert client.post("/api/jobs/start-next").json() == {"status": "ok"}
-    assert (spawner.calls, list(backend.queued_job_ids)) == ([], ["q1"] if running else [])
+    assert (spawner.calls, list(training.queued_job_ids)) == ([], ["q1"] if running else [])

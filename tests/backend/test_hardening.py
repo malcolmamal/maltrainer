@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import app as backend
+from backend import streams, training
 
 from .conftest import add_job, write_images
 from .fakes import FakeSpawner, TestClient, settle
@@ -90,13 +90,13 @@ def test_a_job_whose_process_cannot_start_fails_and_does_not_block_the_next(
 def test_a_queued_job_runs_after_the_one_before_it_failed_to_start(client: TestClient, spawner: FakeSpawner) -> None:
     add_job("first")
     add_job("second")
-    backend.queued_job_ids.extend(["first", "second"])
+    training.queued_job_ids.extend(["first", "second"])
     spawner.fail_first = 1
     spawner.hold = True
 
     client.post("/api/jobs/start-next")
 
-    assert (backend.jobs["first"].status, backend.jobs["second"].status) == ("failed", "running")
+    assert (training.jobs["first"].status, training.jobs["second"].status) == ("failed", "running")
     assert len(spawner.calls) == 2
 
 
@@ -109,7 +109,7 @@ def test_a_jobs_last_log_lines_come_before_the_status_that_says_it_ended(
     job_id = client.post("/api/train", json={"dataset": "alice", "dry_run": True}).json()["job_id"]
     settle(client)
 
-    kinds = [(m["type"], m.get("line", m.get("status"))) for m in backend.jobs[job_id].log_buffer]
+    kinds = [(m["type"], m.get("line", m.get("status"))) for m in training.jobs[job_id].log_buffer]
     assert kinds[-3:] == [("log", "first line"), ("log", "the very last line"), ("status", "exited")]
 
 
@@ -126,6 +126,6 @@ def test_a_jobs_last_log_lines_come_before_the_status_that_says_it_ended(
     ],
 )
 def test_only_a_step_counter_counts_as_progress(line: str, found: tuple[int, int] | None) -> None:
-    match = backend.PROGRESS_RE.search(line)
+    match = streams.PROGRESS_RE.search(line)
 
     assert (match and (int(match[1]), int(match[2]))) == found or (match is None and found is None)

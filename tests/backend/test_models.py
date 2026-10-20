@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import app as backend
+from backend import files, registry
 
 Installer = Callable[..., list[Path]]
 QWEN_FILES = [
@@ -21,12 +21,12 @@ def _models(client: TestClient) -> dict[str, dict]:
 
 
 def test_every_registered_model_is_listed_in_registry_order(client: TestClient) -> None:
-    assert list(_models(client)) == list(backend.MODELS)
+    assert list(_models(client)) == list(registry.MODELS)
 
 
-@pytest.mark.parametrize("model_id", list(backend.MODELS))
+@pytest.mark.parametrize("model_id", list(registry.MODELS))
 def test_each_model_offers_its_optimizers_with_their_default_rates(client: TestClient, model_id: str) -> None:
-    spec = backend.MODELS[model_id]
+    spec = registry.MODELS[model_id]
 
     listed = _models(client)[model_id]
 
@@ -75,7 +75,7 @@ def test_an_empty_models_folder_reports_every_required_file_missing(client: Test
 def test_an_unset_models_folder_reports_every_file_missing_with_no_root(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv(backend.COMFYUI_MODELS_ENV)
+    monkeypatch.delenv(files.COMFYUI_MODELS_ENV)
 
     qwen = _models(client)["qwen_image_2_1"]
 
@@ -99,7 +99,7 @@ def test_a_checkpoint_is_found_anywhere_below_its_subfolder(client: TestClient, 
 def test_resolved_files_map_config_keys_to_absolute_paths(install_models: Installer) -> None:
     paths = install_models("krea2", nested="deep")
 
-    found, missing = backend.resolve_model_files(backend.MODELS["krea2"])
+    found, missing = files.resolve_model_files(registry.MODELS["krea2"])
 
     assert missing == []
     assert found == dict(zip(("transformer_path", "vae_path", "text_encoder_path"), map(str, paths), strict=True))
@@ -108,31 +108,31 @@ def test_resolved_files_map_config_keys_to_absolute_paths(install_models: Instal
 def test_a_file_name_that_is_a_folder_does_not_count_as_a_checkpoint(workspace: Path) -> None:
     (workspace / "models" / "vae" / "flux2_vae.safetensors").mkdir(parents=True)
 
-    _, missing = backend.resolve_model_files(backend.MODELS["flux3_klein"])
+    _, missing = files.resolve_model_files(registry.MODELS["flux3_klein"])
 
     assert "vae/flux2_vae.safetensors" in missing
 
 
 def test_a_lookup_is_cached_until_it_is_older_than_the_cache_window(install_models: Installer) -> None:
-    spec = backend.MODELS["flux3_klein"]
-    assert len(backend.resolve_model_files(spec)[1]) == 3
+    spec = registry.MODELS["flux3_klein"]
+    assert len(files.resolve_model_files(spec)[1]) == 3
     install_models("flux3_klein")
 
-    assert len(backend.resolve_model_files(spec)[1]) == 3
+    assert len(files.resolve_model_files(spec)[1]) == 3
 
-    for key, (stamp, found, missing) in list(backend._model_file_cache.items()):
-        backend._model_file_cache[key] = (stamp - backend.MODEL_FILE_CACHE_SECONDS - 1, found, missing)
+    for key, (stamp, found, missing) in list(files._model_file_cache.items()):
+        files._model_file_cache[key] = (stamp - files.MODEL_FILE_CACHE_SECONDS - 1, found, missing)
 
-    assert backend.resolve_model_files(spec)[1] == []
+    assert files.resolve_model_files(spec)[1] == []
 
 
 def test_callers_cannot_change_the_cached_lookup(install_models: Installer) -> None:
-    spec = backend.MODELS["flux3_klein"]
+    spec = registry.MODELS["flux3_klein"]
     install_models("flux3_klein")
-    found, missing = backend.resolve_model_files(spec)
+    found, missing = files.resolve_model_files(spec)
     found.clear()
     missing.append("x")
 
-    again_found, again_missing = backend.resolve_model_files(spec)
+    again_found, again_missing = files.resolve_model_files(spec)
 
     assert (len(again_found), again_missing) == (3, [])

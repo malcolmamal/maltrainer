@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import app as backend
+from backend import registry, training
 
 from .fakes import FakeSpawner
 
@@ -20,7 +20,7 @@ def test_an_unknown_model_is_a_bad_request_listing_the_available_ones(client: Te
     response = _post(client, model="sdxl")
 
     assert response.status_code == 400
-    assert response.json()["detail"] == f"Unknown model 'sdxl'. Available: {', '.join(backend.MODELS)}"
+    assert response.json()["detail"] == f"Unknown model 'sdxl'. Available: {', '.join(registry.MODELS)}"
 
 
 def test_an_unknown_dataset_is_not_found(client: TestClient) -> None:
@@ -89,7 +89,7 @@ def test_a_failed_plan_starts_nothing_and_writes_nothing(
 ) -> None:
     _post(client, dataset="ghost")
 
-    assert (spawner.calls, backend.jobs, (workspace / "output").exists()) == ([], {}, False)
+    assert (spawner.calls, training.jobs, (workspace / "output").exists()) == ([], {}, False)
 
 
 def test_a_plan_previews_the_run_without_starting_or_writing_anything(
@@ -118,7 +118,7 @@ def test_a_plan_previews_the_run_without_starting_or_writing_anything(
         "notes": [],
         "warnings": [],
     }
-    assert (spawner.calls, backend.jobs, (workspace / "output").exists()) == ([], {}, False)
+    assert (spawner.calls, training.jobs, (workspace / "output").exists()) == ([], {}, False)
 
 
 def test_a_null_dry_run_step_time_is_rejected(client: TestClient) -> None:

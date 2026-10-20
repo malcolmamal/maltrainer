@@ -8,6 +8,7 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 
 from backend import app as backend
+from backend import training
 
 from .conftest import add_job
 from .fakes import FakeSpawner, TestClient, call_in_loop, settle
@@ -34,7 +35,7 @@ def test_a_new_listener_gets_the_job_and_then_the_buffered_log_in_order() -> Non
     add_job(
         "j1", "running", 4.0, progress={"step": 1, "total": 2}, model="krea2", optimizer="prodigy", duration="2 steps"
     )
-    backend.jobs["j1"].log_buffer = deque(logs)
+    training.jobs["j1"].log_buffer = deque(logs)
 
     with TestClient(backend.app).websocket_connect("/ws/jobs/j1") as ws:
         first = ws.receive_json()

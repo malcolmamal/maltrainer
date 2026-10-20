@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from backend.app import count_images, scan_images
+from backend.files import count_images, scan_images
 
 
 def _image(path: Path, size: tuple[int, int] = (20, 20)) -> None:

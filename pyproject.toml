@@ -80,8 +80,8 @@ paths = [
     "train_zimage_embedding.py", "train_zimage_lora.py", "check_weights.py", "compare_loras.py", "inspect_lora.py",
 ]
 min_confidence = 60
-# FastAPI registers the handlers it decorates.
-ignore_decorators = ["@app.get", "@app.post", "@app.websocket"]
+# FastAPI registers the handlers it decorates (on the app, and on the job routes' router).
+ignore_decorators = ["@app.get", "@app.post", "@app.websocket", "@router.get", "@router.post", "@router.websocket"]
 ignore_names = [
     # Pydantic response fields and dataclass fields: read by FastAPI / by the garbage collector, not by name.
     "models_root", "missing_files", "estimated_minutes", "reader_task", "monitor_task",

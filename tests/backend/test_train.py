@@ -10,7 +10,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from backend import app as backend
+from backend import files, registry, training
 
 from .conftest import REPO_ROOT
 from .fakes import FakeSpawner
@@ -64,13 +64,13 @@ def test_training_runs_the_models_script_on_that_config_in_a_child_interpreter(
     assert kwargs["env"]["PYTHONUNBUFFERED"] == "1"
 
 
-@pytest.mark.parametrize("model_id", list(backend.MODELS))
+@pytest.mark.parametrize("model_id", list(registry.MODELS))
 def test_each_model_is_trained_by_its_own_script(client: TestClient, make_dataset: Maker, model_id: str) -> None:
     make_dataset()
 
     command = _train(client, model=model_id, dry_run=True).json()["command"]
 
-    assert Path(command[2]).name == backend.MODELS[model_id].script
+    assert Path(command[2]).name == registry.MODELS[model_id].script
 
 
 @pytest.mark.parametrize(("step_time", "expected"), [(None, "0.025"), (0.5, "0.5")])
@@ -105,14 +105,14 @@ def test_training_without_its_checkpoints_is_refused_before_anything_is_written(
 ) -> None:
     make_dataset()
     if not models_env:
-        monkeypatch.delenv(backend.COMFYUI_MODELS_ENV)
+        monkeypatch.delenv(files.COMFYUI_MODELS_ENV)
 
     response = _train(client, model="qwen_image_2_1")
 
     assert response.status_code == 400
     assert response.json()["detail"].startswith("Cannot train Qwen-Image 2.1: missing model files diffusion_models/")
     assert shown.format(root=(workspace / "models").resolve()) in response.json()["detail"]
-    assert (spawner.calls, backend.jobs, (workspace / "output").exists()) == ([], {}, False)
+    assert (spawner.calls, training.jobs, (workspace / "output").exists()) == ([], {}, False)
 
 
 def test_a_dry_run_does_not_need_the_checkpoints(client: TestClient, make_dataset: Maker) -> None:
@@ -155,4 +155,4 @@ def test_a_rejected_request_starts_and_writes_nothing(
     response = _train(client, **body)
 
     assert response.status_code == status
-    assert (spawner.calls, backend.jobs, (workspace / "output").exists()) == ([], {}, False)
+    assert (spawner.calls, training.jobs, (workspace / "output").exists()) == ([], {}, False)

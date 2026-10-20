@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import app as backend
+from backend import files
 
 from .conftest import REAL_OUTPUT_ROOT, write_images
 
@@ -66,29 +66,29 @@ def test_an_empty_dataset_folder_is_listed_with_no_images(client: TestClient, wo
 def test_the_datasets_folder_defaults_to_datasets_under_the_working_directory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.delenv(backend.DATASETS_ENV)
+    monkeypatch.delenv(files.DATASETS_ENV)
     monkeypatch.chdir(tmp_path)
 
-    assert backend.datasets_root() == (tmp_path / "datasets").resolve()
+    assert files.datasets_root() == (tmp_path / "datasets").resolve()
 
 
 def test_the_models_folder_is_unset_without_its_environment_variable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(backend.COMFYUI_MODELS_ENV)
+    monkeypatch.delenv(files.COMFYUI_MODELS_ENV)
 
-    assert backend.comfyui_models_root() is None
+    assert files.comfyui_models_root() is None
 
 
 def test_a_scan_is_reused_until_it_is_older_than_the_cache_window(make_dataset: Maker) -> None:
     folder = make_dataset("alice", 2)
-    assert backend.scan_images(folder)[0] == 2
+    assert files.scan_images(folder)[0] == 2
     write_images(folder / "more", 3)
 
-    assert backend.scan_images(folder)[0] == 2
+    assert files.scan_images(folder)[0] == 2
 
-    stamp, result = backend._scan_cache[str(folder)]
-    backend._scan_cache[str(folder)] = (stamp - backend.SCAN_CACHE_SECONDS - 1, result)
+    stamp, result = files._scan_cache[str(folder)]
+    files._scan_cache[str(folder)] = (stamp - files.SCAN_CACHE_SECONDS - 1, result)
 
-    assert backend.scan_images(folder)[0] == 5
+    assert files.scan_images(folder)[0] == 5
 
 
 @pytest.mark.parametrize(("size", "non_square"), [((100, 100), 0), ((100, 103), 0), ((100, 104), 1), ((104, 100), 1)])
@@ -97,21 +97,21 @@ def test_an_image_is_non_square_past_a_three_percent_difference(
 ) -> None:
     folder = write_images(workspace / "datasets" / "alice", 1, size)
 
-    assert backend.scan_images(folder) == (1, non_square, size if non_square else None)
+    assert files.scan_images(folder) == (1, non_square, size if non_square else None)
 
 
 def test_an_unreadable_image_counts_but_is_not_judged_non_square(workspace: Path) -> None:
     folder = write_images(workspace / "datasets" / "alice", 1, (20, 40))
     (folder / "broken.png").write_bytes(b"not an image")
 
-    assert backend.scan_images(folder) == (2, 1, (20, 40))
+    assert files.scan_images(folder) == (2, 1, (20, 40))
 
 
 def test_a_scan_ignores_files_that_are_not_images(workspace: Path) -> None:
     folder = write_images(workspace / "datasets" / "alice", 2)
     (folder / "img0.txt").write_text("a caption")
 
-    assert backend.scan_images(folder) == (2, 0, None)
+    assert files.scan_images(folder) == (2, 0, None)
 
 
 def test_runs_are_written_below_an_output_folder_in_the_working_directory(

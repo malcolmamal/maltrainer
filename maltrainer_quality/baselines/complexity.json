@@ -1,6 +1,4 @@
 {
-  "backend/app.py::build_plan": 25,
-  "backend/app.py::start_readers": 14,
   "maltrainer/data/media.py::read_video_frames": 13,
   "maltrainer/data/qwen_dataset.py::_load_dataset": 13,
   "maltrainer/models/flux3/text_encoder.py::load_flux3_text_encoder": 13,
