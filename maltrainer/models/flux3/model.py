@@ -27,207 +27,54 @@ Conventions (ComfyUI ModelType.FLUX, the diffusers FLUX.3 trainer):
 from __future__ import annotations
 
 import logging
-import math
-from dataclasses import dataclass
 from typing import cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.utils.checkpoint import checkpoint
+
+from maltrainer.models.flux3.config import Flux3Config
+from maltrainer.models.flux3.layers import Block, LastLayer, MLPEmbedder, Modulation, QKNorm, RMSNorm
+from maltrainer.models.flux3.rope import (
+    IMAGE_ROPE_SCALE,
+    ROPE_AXES,
+    ROPE_THETA,
+    apply_rope,
+    image_ids,
+    rope,
+    rope_from_ids,
+    text_ids,
+    timestep_embedding,
+)
 
 logger = logging.getLogger(__name__)
 
 CONTENT_MODES = ("image", "image_cond")
-IMAGE_ROPE_SCALE = 0.5
-ROPE_THETA = 10000
-ROPE_AXES = (32, 32, 32, 32)
 LATENT_CHANNELS = 128
 CONTEXT_DIM = 20480  # 8 Qwen3-VL-4B hidden layers x 2560
 
-
-@dataclass(frozen=True)
-class Flux3Config:
-    hidden_size: int = 3072
-    num_heads: int = 24
-    depth: int = 5
-    depth_single_blocks: int = 28
-    fused_qkv: bool = False
-    flow_map: bool = False
-    mlp_ratio: float = 3.0
-
-    @classmethod
-    def from_state_dict(cls, state_dict: dict[str, torch.Tensor]) -> Flux3Config:
-        """comfy/model_detection.py's FLUX.3 branch."""
-        keys = state_dict.keys()
-        if (
-            "content_mode_blocks.image.0.attn_out.weight" not in keys
-            or "single_stream_modulations.txt.lin.weight" not in keys
-        ):
-            raise ValueError("Not a FLUX.3 DiT checkpoint (no content_mode_blocks / single_stream_modulations)")
-        hidden = state_dict["content_mode_blocks.image.0.attn_out.weight"].shape[0]
-
-        def count(prefix: str) -> int:
-            return len({k[len(prefix) :].split(".", 1)[0] for k in keys if k.startswith(prefix)})
-
-        return cls(
-            hidden_size=hidden,
-            num_heads=hidden // 128,
-            depth=count("txt_mode_blocks."),
-            depth_single_blocks=count("single_blocks."),
-            fused_qkv="single_blocks.0.qkv.weight" in keys,
-            flow_map="ref_time_in.in_layer.weight" in keys,
-        )
-
-
-# ---------------------------------------------------------------- embeddings and RoPE
-
-
-def timestep_embedding(
-    t: torch.Tensor, dim: int = 256, max_period: int = 10000, time_factor: float = 1000.0
-) -> torch.Tensor:
-    """comfy/ldm/flux/layers.py: the x1000 happens in ``t``'s own dtype."""
-    t = time_factor * t
-    half = dim // 2
-    freqs = torch.exp(-math.log(max_period) * torch.arange(half, dtype=torch.float32, device=t.device) / half)
-    args = t[:, None].float() * freqs[None]
-    embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-    return embedding.to(t) if torch.is_floating_point(t) else embedding
-
-
-def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
-    """[..., n] positions -> [..., n, dim/2, 2, 2] rotation matrices (comfy/ldm/flux/math.py)."""
-    scale = torch.linspace(0, (dim - 2) / dim, steps=dim // 2, dtype=torch.float64, device=pos.device)
-    omega = 1.0 / (theta**scale)
-    out = torch.einsum("...n,d->...nd", pos.to(torch.float32).to(torch.float64), omega)
-    out = torch.stack([torch.cos(out), -torch.sin(out), torch.sin(out), torch.cos(out)], dim=-1)
-    return out.reshape(*out.shape[:-1], 2, 2).float()
-
-
-def rope_from_ids(ids: torch.Tensor) -> torch.Tensor:
-    """[N, 4] ids -> [1, 1, N, 64, 2, 2], broadcast over batch and heads of [B, H, N, D]."""
-    emb = torch.cat([rope(ids[..., i], ROPE_AXES[i], ROPE_THETA) for i in range(ids.shape[-1])], dim=-3)
-    return emb[None, None]
-
-
-def apply_rope(x: torch.Tensor, pe: torch.Tensor) -> torch.Tensor:
-    x_ = x.to(pe.dtype).reshape(*x.shape[:-1], -1, 1, 2)
-    out = pe[..., 0] * x_[..., 0] + pe[..., 1] * x_[..., 1]
-    return out.reshape(*x.shape).type_as(x)
-
-
-def image_ids(h: int, w: int, index: int, device: torch.device | str) -> torch.Tensor:
-    ids = torch.zeros(h, w, 4, device=device, dtype=torch.float32)
-    ids[..., 1] = torch.arange(h, device=device, dtype=torch.float32)[:, None] * IMAGE_ROPE_SCALE
-    ids[..., 2] = torch.arange(w, device=device, dtype=torch.float32)[None, :] * IMAGE_ROPE_SCALE
-    ids[..., 3] = index
-    return ids.flatten(0, 1)
-
-
-def text_ids(length: int, device: torch.device | str) -> torch.Tensor:
-    ids = torch.zeros(length, 4, device=device, dtype=torch.float32)
-    ids[:, 3] = torch.arange(length, device=device, dtype=torch.float32)
-    return ids
-
-
-# ---------------------------------------------------------------- modules
-
-
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.rms_norm(x, (x.shape[-1],), self.weight.to(x.dtype), self.eps)
-
-
-class QKNorm(nn.Module):
-    def __init__(self, dim: int):
-        super().__init__()
-        self.query_norm = RMSNorm(dim)
-        self.key_norm = RMSNorm(dim)
-
-
-class MLPEmbedder(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int):
-        super().__init__()
-        self.in_layer = nn.Linear(in_dim, hidden_dim, bias=False)
-        self.silu = nn.SiLU()
-        self.out_layer = nn.Linear(hidden_dim, hidden_dim, bias=False)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return cast(torch.Tensor, self.out_layer(self.silu(self.in_layer(x))))
-
-
-class Modulation(nn.Module):
-    """Single adaLN: (shift, scale, gate), each [B, 1, D]."""
-
-    def __init__(self, dim: int):
-        super().__init__()
-        self.lin = nn.Linear(dim, 3 * dim, bias=False)
-
-    def forward(self, vec: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        shift, scale, gate = self.lin(F.silu(vec[:, None, :])).chunk(3, dim=-1)
-        return shift, scale, gate
-
-
-class Block(nn.Module):
-    """Parallel attention + SwiGLU MLP under one adaLN and one gate."""
-
-    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float, fused_qkv: bool):
-        super().__init__()
-        self.num_heads = num_heads
-        self.fused_qkv = fused_qkv
-        mlp_hidden = int(hidden_size * mlp_ratio)
-        if fused_qkv:
-            self.qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
-        else:
-            self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-            self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-            self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.mlp_in = nn.Linear(hidden_size, 2 * mlp_hidden, bias=False)
-        self.attn_out = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.mlp_out = nn.Linear(mlp_hidden, hidden_size, bias=False)
-        self.norm = QKNorm(hidden_size // num_heads)
-        self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-
-    def forward(
-        self, x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor, gate: torch.Tensor, pe: torch.Tensor
-    ) -> torch.Tensor:
-        """``shift``/``scale``/``gate`` broadcast over x: [B, 1, D] for one mode, [B, N, D] per row."""
-        B, N, _ = x.shape
-        x_mod = self.pre_norm(x) * (1 + scale) + shift
-        if self.fused_qkv:
-            q, k, v = self.qkv(x_mod).chunk(3, dim=-1)
-        else:
-            q, k, v = self.q_proj(x_mod), self.k_proj(x_mod), self.v_proj(x_mod)
-        mlp = self.mlp_in(x_mod)
-
-        def heads(t: torch.Tensor) -> torch.Tensor:
-            return t.view(B, N, self.num_heads, -1).transpose(1, 2)
-
-        # QK-norm and RoPE in fp32, rounded once: the reference's rmsnorm_rope and ComfyUI's fused rms_rope
-        q = apply_rope(self.norm.query_norm(heads(q).float()), pe).to(v.dtype)
-        k = apply_rope(self.norm.key_norm(heads(k).float()), pe).to(v.dtype)
-        attn = F.scaled_dot_product_attention(q, k, heads(v))
-        out = self.attn_out(attn.transpose(1, 2).reshape(B, N, -1))
-        gate_mlp, up = mlp.chunk(2, dim=-1)
-        out = out + self.mlp_out(F.silu(gate_mlp) * up)
-        return cast(torch.Tensor, x + out * gate)
-
-
-class LastLayer(nn.Module):
-    def __init__(self, hidden_size: int, out_channels: int):
-        super().__init__()
-        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.linear = nn.Linear(hidden_size, out_channels, bias=False)
-        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=False))
-
-    def forward(self, x: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
-        shift, scale = self.adaLN_modulation(vec[:, None, :]).chunk(2, dim=-1)
-        return cast(torch.Tensor, self.linear(self.norm_final(x) * (1 + scale) + shift))
+__all__ = [
+    "CONTENT_MODES",
+    "CONTEXT_DIM",
+    "IMAGE_ROPE_SCALE",
+    "LATENT_CHANNELS",
+    "ROPE_AXES",
+    "ROPE_THETA",
+    "Block",
+    "Flux3Config",
+    "Flux3Transformer",
+    "LastLayer",
+    "MLPEmbedder",
+    "Modulation",
+    "QKNorm",
+    "RMSNorm",
+    "apply_rope",
+    "image_ids",
+    "rope",
+    "rope_from_ids",
+    "text_ids",
+    "timestep_embedding",
+]
 
 
 class Flux3Transformer(nn.Module):
