@@ -155,3 +155,13 @@ def test_the_warmup_scheduler_advances_with_every_optimizer_step(workspace: Work
 
     assert trainer.lr_scheduler.last_epoch == 4
     assert trainer.optimizer.param_groups[0]["lr"] == pytest.approx(1e-3)
+
+
+def test_accumulation_over_a_sample_count_it_does_not_divide_plans_the_steps_it_takes(workspace: Workspace) -> None:
+    workspace.add_images(3)
+
+    trainer = run_h3(workspace.config(train={"num_epochs": 2, "gradient_accumulation_steps": 2}))
+
+    lines = progress_lines(workspace)
+    assert [_step_fields(line)[:2] for line in lines] == [("1/3", "33"), ("2/3", "66"), ("3/3", "100")]
+    assert trainer.run_metadata["planned_total_steps"] == 3

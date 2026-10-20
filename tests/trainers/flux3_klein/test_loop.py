@@ -21,7 +21,8 @@ from .world import Workspace, named_weights, same_values
     [
         (5, {}, (5, 10, 50)),
         (5, {"max_steps": 12}, (5, 3, 12)),
-        (5, {"gradient_accumulation_steps": 2, "num_epochs": 4}, (3, 4, 12)),
+        (5, {"gradient_accumulation_steps": 2, "num_epochs": 4}, (3, 4, 10)),
+        (3, {"gradient_accumulation_steps": 2, "max_steps": 4}, (2, 3, 4)),
         (0, {"max_steps": 3}, (1, 3, 3)),
         (4, {"num_epochs": 0, "max_steps": None}, (4, 1, 4)),
     ],
@@ -40,6 +41,18 @@ def test_max_steps_ends_the_run_in_the_middle_of_an_epoch(workspace: Workspace) 
     assert "Step: 3/3 [100%]" in lines[-1] and "Epoch: 2/2" in lines[-1]
     assert trainer.run_metadata["planned_total_steps"] == 3
     assert trainer.run_metadata["steps_per_epoch"] == 2
+
+
+def test_accumulation_over_a_sample_count_it_does_not_divide_still_takes_every_planned_step(
+    workspace: Workspace,
+) -> None:
+    workspace.add_images(3)
+
+    run_lora(workspace.config(train={"max_steps": 4, "gradient_accumulation_steps": 2}))
+
+    lines = progress_lines(workspace)
+    assert len(lines) == 4
+    assert "Step: 4/4 [100%]" in lines[-1]
 
 
 def test_without_max_steps_the_epochs_decide(workspace: Workspace) -> None:

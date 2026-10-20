@@ -1023,7 +1023,7 @@ class MiniMaxH3LoRATrainer:
         grad_accum = self.accelerator.gradient_accumulation_steps
         items_per_epoch = len(self._epoch_order())
         steps_per_epoch = math.ceil(items_per_epoch / max(grad_accum, 1))
-        total_steps = num_epochs * steps_per_epoch
+        total_steps = max(num_epochs * items_per_epoch // max(grad_accum, 1), 1)  # no sync ends an epoch
         self.run_metadata["steps_per_epoch"] = steps_per_epoch
         self.run_metadata["planned_total_steps"] = total_steps
         self.run_metadata["dataset_samples"] = len(self.samples)

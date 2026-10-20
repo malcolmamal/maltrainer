@@ -80,3 +80,12 @@ def test_the_run_stops_at_max_steps_wherever_it_falls_in_an_epoch(
     trainer = run_finetune(workspace.config(train={"max_steps": steps}))
 
     assert (trainer.global_step, trainer.epoch + 1) == (steps, epochs)
+
+
+def test_epochs_with_accumulation_that_does_not_divide_train_exactly_those_epochs(workspace: Workspace) -> None:
+    workspace.add_images("p", 10)
+    train = {"automagic_fused": False, "gradient_accumulation_steps": 4, "num_epochs": 2, "max_steps": 0}
+
+    trainer = run_finetune(workspace.config(train=train))
+
+    assert trainer.global_step == 5  # 2 epochs x 10 images = 20 micro-batches = 5 steps of 4, not 6 steps

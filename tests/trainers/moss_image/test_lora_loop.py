@@ -19,7 +19,8 @@ from .world import Workspace
         (10, {}, (10, 10, 100)),
         (10, {"num_epochs": 3}, (10, 3, 30)),
         (10, {"max_steps": 25, "num_epochs": 99}, (10, 3, 25)),
-        (10, {"gradient_accumulation_steps": 4, "num_epochs": 2}, (3, 2, 6)),
+        (10, {"gradient_accumulation_steps": 4, "num_epochs": 2}, (3, 2, 5)),
+        (3, {"gradient_accumulation_steps": 2, "max_steps": 4}, (2, 3, 4)),
         (0, {}, (1, 10, 10)),
         (7, {"max_steps": None, "num_epochs": None, "gradient_accumulation_steps": None}, (7, 1, 7)),
         (7, {"max_steps": 0, "num_epochs": 0}, (7, 1, 7)),
@@ -44,6 +45,18 @@ def test_max_steps_stops_mid_epoch_and_the_log_counts_every_step(workspace: Work
         "5/5 [100%]",
     ]
     assert "Epoch: 2/2" in progress_lines(workspace)[-1]
+
+
+def test_accumulation_over_a_sample_count_it_does_not_divide_still_takes_every_planned_step(
+    workspace: Workspace,
+) -> None:
+    workspace.add_images("p", 3)
+
+    run_lora(workspace.lora_config(train={"max_steps": 4, "gradient_accumulation_steps": 2}))
+
+    lines = progress_lines(workspace)
+    assert len(lines) == 4
+    assert "Step: 4/4 [100%]" in lines[-1]
 
 
 def test_repeats_make_the_epoch_longer_and_num_epochs_sets_the_total(workspace: Workspace) -> None:

@@ -46,14 +46,14 @@ logger = logging.getLogger(__name__)
 
 
 def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
-    """(steps_per_epoch, num_epochs, total_steps); ``train.max_steps`` > 0 wins over epochs."""
+    """(steps_per_epoch, num_epochs, total_steps); max_steps wins. An epoch yields num_samples / grad_accum steps."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
     max_steps = int(train_config.get("max_steps", 0) or 0)
     if max_steps > 0:
-        return steps_per_epoch, math.ceil(max_steps / steps_per_epoch), max_steps
+        return steps_per_epoch, math.ceil(max_steps * grad_accum / max(num_samples, 1)), max_steps
     num_epochs = max(int(train_config.get("num_epochs", 10) or 1), 1)
-    return steps_per_epoch, num_epochs, num_epochs * steps_per_epoch
+    return steps_per_epoch, num_epochs, max(num_epochs * max(num_samples, 1) // grad_accum, 1)
 
 
 def krea2_shift(image_tokens: int) -> float:
