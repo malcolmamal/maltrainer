@@ -16,6 +16,7 @@ from maltrainer.models.minimax_h3.text_encoder import (
 
 def test_the_bundled_assets_directory_is_used_when_no_tokenizer_path_is_given() -> None:
     assert _resolve_tokenizer_assets(None) == BUNDLED_TOKENIZER_ASSETS
+    assert (BUNDLED_TOKENIZER_ASSETS / "tokenizer.json").exists()
 
 
 def test_an_explicit_tokenizer_directory_with_a_tokenizer_json_is_returned_as_a_path(tmp_path: Path) -> None:

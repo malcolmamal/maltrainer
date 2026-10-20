@@ -7,6 +7,9 @@ import torch
 import torch.nn.functional as F
 
 from maltrainer.models.minimax_h3.audio_vae import (
+    HOP_LENGTH,
+    LATENTS_PER_SECOND,
+    SAMPLE_RATE,
     AttnProjection,
     CausalAttention,
     DacEncoder,
@@ -16,6 +19,7 @@ from maltrainer.models.minimax_h3.audio_vae import (
     Snake1d,
     _fold_weight_norm,
 )
+from tests.maltrainer.models.minimax_h3.h3_audio import STRIDES
 
 
 def _random(module: torch.nn.Module, seed: int = 0) -> torch.nn.Module:
@@ -23,6 +27,11 @@ def _random(module: torch.nn.Module, seed: int = 0) -> torch.nn.Module:
     for p in module.parameters():
         p.data = torch.randn_like(p) * 0.3
     return module.eval()
+
+
+def test_the_hop_is_the_product_of_the_encoder_strides_giving_forty_latents_per_second() -> None:
+    assert math.prod(STRIDES) == HOP_LENGTH == 800
+    assert SAMPLE_RATE // HOP_LENGTH == LATENTS_PER_SECOND == 40
 
 
 def test_snake_adds_the_squared_sine_scaled_by_the_inverse_alpha() -> None:

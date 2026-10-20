@@ -53,6 +53,12 @@ def test_a_causal_conv_without_padding_is_a_plain_valid_convolution() -> None:
     torch.testing.assert_close(conv(x), F.conv3d(x, conv.weight, conv.bias))
 
 
+def test_a_stride_shrinks_the_output_without_a_padding_option() -> None:
+    conv = MiniMaxH3VideoCausalConv3d(4, 4, 3, stride=(2, 2, 2), temporal_padding=2)
+
+    assert conv(torch.randn(1, 4, 5, 9, 9)).shape == (1, 4, 3, 4, 4)
+
+
 def test_group_norm_normalises_each_frame_on_its_own() -> None:
     norm = _random(MiniMaxH3VideoGroupNorm(2, 4))
     x = torch.randn(2, 4, 3, 5, 5) * 3 + 2

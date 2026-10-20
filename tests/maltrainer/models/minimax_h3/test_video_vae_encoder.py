@@ -11,6 +11,7 @@ from maltrainer.models.minimax_h3.video_vae import (
     align_frame_count,
     video_latent_frames,
 )
+from tests.maltrainer.models.minimax_h3.h3_video import MEAN, STD, clip, tiny_video_encoder
 
 LATENTS = 24
 
@@ -114,9 +115,12 @@ def test_an_image_encodes_to_one_normalised_latent_frame_whether_or_not_it_has_a
 
 def test_a_single_frame_clip_is_encoded_as_an_image() -> None:
     model = small_encoder()
-    clip = torch.rand(1, 3, 1, 32, 32)
+    single = torch.rand(1, 3, 1, 32, 32)
 
-    torch.testing.assert_close(model.encode_video(clip), model.encode_image(clip))
+    video = model.encode_video(single)
+
+    assert video.shape == (1, LATENTS, 1, 2, 2)
+    torch.testing.assert_close(video, model.encode_image(single))
 
 
 @pytest.mark.parametrize("frames", [5, 22, 39])
@@ -130,24 +134,26 @@ def test_clips_on_the_grid_encode_to_the_reference_latent_frame_count(frames: in
 
 def test_each_seventeen_frame_chunk_is_encoded_independently_of_the_rest() -> None:
     model = small_encoder()
-    clip = torch.rand(1, 3, 34, 32, 32)
-    changed = clip.clone()
+    long = torch.rand(1, 3, 34, 32, 32)
+    changed = long.clone()
     changed[:, :, VIDEO_CLIP_LENGTH:] = torch.rand(1, 3, 17, 32, 32)
 
-    out, out_changed = model.encode_video(clip), model.encode_video(changed)
+    out, out_changed = model.encode_video(long), model.encode_video(changed)
 
-    first_chunk = model._normalize(model.encode_moments(clip[:, :, :VIDEO_CLIP_LENGTH]))
+    first_chunk = model._normalize(model.encode_moments(long[:, :, :VIDEO_CLIP_LENGTH]))
+    second_alone = model._normalize(model.encode_moments(long[:, :, VIDEO_CLIP_LENGTH:]))
     torch.testing.assert_close(out[:, :, :5], first_chunk)
+    torch.testing.assert_close(out[:, :, 5:], second_alone[:, :, :2])
     torch.testing.assert_close(out[:, :, :5], out_changed[:, :, :5])
     assert not torch.allclose(out[:, :, 5:], out_changed[:, :, 5:])
 
 
 def test_a_partial_last_chunk_is_padded_by_repeating_the_final_frame_and_the_last_three_latents_dropped() -> None:
     model = small_encoder()
-    clip = torch.rand(1, 3, 22, 32, 32)
-    padded = torch.cat([clip, clip[:, :, -1:].expand(-1, -1, 12, -1, -1)], dim=2)
+    short = torch.rand(1, 3, 22, 32, 32)
+    padded = torch.cat([short, short[:, :, -1:].expand(-1, -1, 12, -1, -1)], dim=2)
 
-    out = model.encode_video(clip)
+    out = model.encode_video(short)
 
     assert padded.shape[2] == 34
     reference = model._normalize(
@@ -155,3 +161,33 @@ def test_a_partial_last_chunk_is_padded_by_repeating_the_final_frame_and_the_las
     )
     assert out.shape[2] == 7
     torch.testing.assert_close(out, reference)
+
+
+@pytest.mark.parametrize("frames", [5, 17, 22, 39])
+def test_a_clip_is_cut_into_17_frame_chunks_of_five_latents_and_the_last_three_are_dropped(frames: int) -> None:
+    chunks = -(-frames // 17)
+
+    out = tiny_video_encoder().encode_video(clip(frames))
+
+    assert out.shape == (1, 2, chunks * 5 - 3, 2, 2)
+
+
+def test_latents_are_the_posterior_mean_minus_the_channel_mean_over_the_channel_std() -> None:
+    model = tiny_video_encoder()
+    moments = torch.randn(1, 4, 1, 1, 1, generator=torch.Generator().manual_seed(3))
+
+    out = model._normalize(moments)
+
+    expected = (moments[:, :2] - torch.tensor(MEAN).view(1, 2, 1, 1, 1)) / torch.tensor(STD).view(1, 2, 1, 1, 1)
+    torch.testing.assert_close(out, expected)
+
+
+def test_the_released_configuration_maps_17_frames_and_16_pixels_to_5_frames_and_one_latent_pixel() -> None:
+    with torch.device("meta"):
+        model = MiniMaxH3VideoEncoderModel()
+        moments = model.encode_moments(torch.empty(1, 3, 17, 32, 48))
+        latents = model.encode_video(torch.empty(1, 3, 39, 32, 48))
+
+    assert moments.shape == (1, 48, 5, 2, 3)
+    assert latents.shape == (1, 24, 12, 2, 3)
+    assert len(model.down_blocks) == 6

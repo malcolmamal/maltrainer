@@ -80,55 +80,6 @@ def _checkpoint(tmp_path: Path) -> Path:
     return path
 
 
-def test_the_bundled_assets_hold_the_tokenizer_and_are_the_default() -> None:
-    assert te._resolve_tokenizer_assets(None) == te.BUNDLED_TOKENIZER_ASSETS
-    assert (te.BUNDLED_TOKENIZER_ASSETS / "tokenizer.json").exists()
-
-
-def test_an_explicit_tokenizer_directory_is_used_when_it_has_a_tokenizer_json(tmp_path: Path) -> None:
-    (tmp_path / "tokenizer.json").write_text("{}")
-
-    assert te._resolve_tokenizer_assets(tmp_path) == tmp_path
-
-
-def test_a_directory_without_a_tokenizer_json_is_rejected_naming_where_it_came_from(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    with pytest.raises(FileNotFoundError, match=r"from model\.tokenizer_path"):
-        te._resolve_tokenizer_assets(tmp_path)
-    monkeypatch.setattr(te, "BUNDLED_TOKENIZER_ASSETS", tmp_path)
-    with pytest.raises(FileNotFoundError, match="from the bundled assets directory"):
-        te._resolve_tokenizer_assets(None)
-
-
-@pytest.mark.parametrize(
-    ("source", "target"),
-    [
-        ("visual.blocks.0", "visual.blocks.0"),
-        ("model", "language_model"),
-        ("model.layers.3.mlp", "language_model.layers.3.mlp"),
-        ("lm_head", "lm_head"),
-    ],
-)
-def test_checkpoint_prefixes_map_onto_the_visual_and_language_towers(source: str, target: str) -> None:
-    assert te._text_encoder_key(source) == target
-
-
-def test_the_text_tower_summary_reads_rope_parameters_when_present() -> None:
-    config = SimpleNamespace(num_hidden_layers=50, hidden_size=8, rope_parameters={"rope_theta": 5.0})
-
-    summary = te._describe_text_config(config)
-
-    assert "num_hidden_layers=50 hidden_size=8 num_attention_heads=? " in summary
-    assert summary.endswith("rope={'rope_theta': 5.0}")
-
-
-def test_the_text_tower_summary_falls_back_to_the_older_rope_fields() -> None:
-    summary = te._describe_text_config(SimpleNamespace(rope_theta=7.0, rope_scaling="s"))
-
-    assert summary.endswith("rope={'rope_theta': 7.0, 'rope_scaling': 's'}")
-
-
 def test_the_loader_truncates_the_text_tower_to_layer_50_and_rebuilds_the_rotary_tables(
     fakes: SimpleNamespace, tmp_path: Path
 ) -> None:
@@ -141,8 +92,22 @@ def test_the_loader_truncates_the_text_tower_to_layer_50_and_rebuilds_the_rotary
     assert model.visual.rotary_pos_emb.dim == 48 // 4 // 2
     assert model.language_model.rotary_emb.config is fakes.config.text_config
     assert model.language_model.rotary_emb.device_arg == CPU
+    assert isinstance(loaded, te.MiniMaxH3TextEncoder) and loaded.model is _FakeQwen.instances[0]
+    assert loaded.tokenizer is fakes.tokenizer
     assert not loaded.training
     assert fakes.asset_dirs == [str(te.BUNDLED_TOKENIZER_ASSETS)] * 2
+
+
+def test_an_explicit_tokenizer_directory_is_the_one_the_tokenizer_is_loaded_from(
+    fakes: SimpleNamespace, tmp_path: Path
+) -> None:
+    custom = tmp_path / "tok"
+    custom.mkdir()
+    (custom / "tokenizer.json").write_text("{}")
+
+    te.load_minimax_h3_text_encoder(_checkpoint(tmp_path), tokenizer_path=custom, device="cpu")
+
+    assert fakes.asset_dirs == [str(custom)] * 2
 
 
 def test_a_tokenizer_without_a_pad_token_pads_with_bos(fakes: SimpleNamespace, tmp_path: Path) -> None:

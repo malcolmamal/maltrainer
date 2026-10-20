@@ -29,6 +29,7 @@ def test_prompts_are_tokenized_raw_right_padded_and_truncated_to_the_max_length(
     assert call["add_special_tokens"] is False
     assert (call["padding"], call["truncation"], call["max_length"]) == (True, True, 7)
     assert call["padding_side"] == "right"
+    assert call["return_tensors"] == "pt"
 
 
 def test_the_hidden_states_are_the_language_models_last_hidden_state_cast_to_the_dtype() -> None:
@@ -74,6 +75,8 @@ def test_an_empty_prompt_is_represented_by_the_bos_token() -> None:
 
     out = enc.encode_prompts([""], CPU, dtype=torch.float32)
 
+    ids, mask, _ = enc.model.language_model.calls[0]
+    assert ids.tolist() == [[te.QWEN3VL_BOS_TOKEN_ID]] and mask.tolist() == [[1]]
     assert out.shape == (1, 1, 4)
     assert out[0, 0, 0].item() == te.QWEN3VL_BOS_TOKEN_ID
 
@@ -90,19 +93,45 @@ def test_a_row_with_no_tokens_gets_a_bos_when_the_batch_is_otherwise_one_token_w
 def test_prompts_of_different_token_lengths_are_rejected_and_not_cached() -> None:
     enc = encoder()
 
-    with pytest.raises(ValueError, match="equal token length"):
+    with pytest.raises(ValueError, match="equal token length in one call"):
         enc.encode_prompts(["a", "a b"], CPU)
 
     assert enc._prompt_cache == {}
 
 
-def test_a_repeated_prompt_is_served_from_the_cache_per_dtype() -> None:
+def test_a_batch_of_empty_prompts_becomes_one_bos_token_per_row() -> None:
+    out = encoder().encode_prompts(["", ""], CPU, dtype=torch.float32)
+
+    assert out.shape == (2, 1, 4)
+    assert out[:, 0, 0].tolist() == [float(te.QWEN3VL_BOS_TOKEN_ID)] * 2
+
+
+def test_an_all_padding_row_among_real_ones_is_repaired_then_rejected_as_unequal_length() -> None:
     enc = encoder()
 
-    first = enc.encode_prompts(["a bb"], CPU)
-    again = enc.encode_prompts(["a bb"], CPU)
-    other_dtype = enc.encode_prompts(["a bb"], CPU, dtype=torch.float32)
+    with pytest.raises(ValueError, match="equal token length"):
+        enc.encode_prompts(["x y", ""], CPU)
 
-    assert len(enc.model.language_model.calls) == 2
-    assert torch.equal(first, again)
-    assert other_dtype.dtype == torch.float32
+    assert enc.model.language_model.calls[0][0].tolist() == [[11, 11], [te.QWEN3VL_BOS_TOKEN_ID, 0]]
+    assert enc._prompt_cache == {}
+
+
+def test_a_repeated_prompt_is_served_from_the_cache_without_running_the_model_again() -> None:
+    enc = encoder()
+    first = enc.encode_prompts(["a bb"], CPU)
+
+    second = enc.encode_prompts(["a bb"], CPU)
+
+    assert len(enc.tokenizer.calls) == 1 and len(enc.model.language_model.calls) == 1
+    assert torch.equal(first, second)
+
+
+def test_the_cache_is_keyed_by_dtype_and_by_the_whole_prompt_list() -> None:
+    enc = encoder()
+    enc.encode_prompts(["a bb"], CPU, dtype=torch.float32)
+
+    other_dtype = enc.encode_prompts(["a bb"], CPU, dtype=torch.float16)
+    other_prompts = enc.encode_prompts(["a bb", "c dd"], CPU, dtype=torch.float32)
+
+    assert other_dtype.dtype == torch.float16 and other_prompts.shape[0] == 2
+    assert len(enc.model.language_model.calls) == 3
