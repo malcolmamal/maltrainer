@@ -4,7 +4,6 @@
   "maltrainer/models/comfy_fp8.py": 212,
   "maltrainer/models/krea2/model.py": 298,
   "maltrainer/models/krea2/vae.py": 204,
-  "maltrainer/models/minimax_h3/audio_vae.py": 300,
   "maltrainer/models/minimax_h3/comfy_quant.py": 277,
   "maltrainer/models/minimax_h3/int8_convrot.py": 279,
   "maltrainer/models/minimax_h3/lora.py": 357,
