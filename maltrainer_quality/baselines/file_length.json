@@ -1,6 +1,5 @@
 {
   "maltrainer/data/minimax_dataset.py": 288,
-  "maltrainer/models/minimax_h3/model.py": 424,
   "maltrainer/models/minimax_h3/text_encoder.py": 209,
   "maltrainer/models/moss_image/model.py": 265,
   "maltrainer/models/moss_image/text_encoder.py": 454,
