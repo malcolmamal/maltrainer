@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import torch
 from accelerate import init_empty_weights
@@ -72,7 +73,7 @@ def load_moss_image_transformer(
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
     grad_precision: str = "bf16",
-) -> tuple[MOSSImageTransformer, dict]:
+) -> tuple[MOSSImageTransformer, dict[str, Any]]:
     """The frozen DiT on ``device``, plus a small summary for the checkpoint metadata."""
     path = Path(path)
     if not path.exists():

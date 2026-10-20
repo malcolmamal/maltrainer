@@ -22,7 +22,7 @@ _T = torch.Tensor
 _HADAMARD_CACHE: dict[tuple[int, str, torch.dtype], torch.Tensor] = {}
 
 
-def parse_comfy_quant_marker(marker: torch.Tensor) -> dict:
+def parse_comfy_quant_marker(marker: torch.Tensor) -> dict[str, Any]:
     try:
         payload = bytes(marker.detach().cpu().flatten().tolist()).decode("utf-8")
         value = json.loads(payload)
@@ -185,7 +185,7 @@ def _int8_linear_forward(module: nn.Linear, inputs: torch.Tensor) -> torch.Tenso
 
 def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.device) -> tuple[dict[str, _T], int]:
     state_dict: dict[str, torch.Tensor] = {}
-    marker_config: dict[str, dict] = {}
+    marker_config: dict[str, dict[str, Any]] = {}
     with safe_open(str(checkpoint_path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
         for key in keys:

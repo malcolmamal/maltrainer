@@ -12,7 +12,7 @@ from torchvision import transforms
 from maltrainer.data.walk import walk_visible
 
 
-class ZImageDataset(Dataset):
+class ZImageDataset(Dataset[dict[str, Any]]):
     """Dataset for Z-Image training with VAE encoding and text encoding."""
 
     def __init__(

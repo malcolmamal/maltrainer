@@ -87,7 +87,7 @@ def step_of(path: Path) -> str:
     return match.group(1) if match else "final"
 
 
-def run_name(config: dict) -> str:
+def run_name(config: dict[str, Any]) -> str:
     """bench_adamw -> adamw; falls back to the output folder name."""
     return Path(config["output"]["path"]).name.removeprefix("bench_")
 

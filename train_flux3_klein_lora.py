@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 FLUX3_SHIFT = 6.93
 
 
-def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
+def plan_training_steps(num_samples: int, train_config: dict[str, Any]) -> tuple[int, int, int]:
     """(steps_per_epoch, num_epochs, total_steps); max_steps wins. An epoch yields num_samples / grad_accum steps."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
@@ -64,7 +64,7 @@ def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int,
 
 
 class Flux3KleinLoRATrainer:
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time

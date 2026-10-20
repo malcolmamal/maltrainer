@@ -103,7 +103,7 @@ class WindowRotator:
             )
         self.current: int | None = None
         self.optimizer: Any = None  # the active window's torch Optimizer
-        self.optimizer_states: dict[int, dict] = {}  # frozen windows' optimizer state, on the CPU
+        self.optimizer_states: dict[int, dict[str, Any]] = {}  # frozen windows' optimizer state, on the CPU
 
     @property
     def names(self) -> list[str]:
@@ -187,14 +187,14 @@ class WindowRotator:
     def keys(self) -> list[str]:
         return [key for _, keys in self.windows for key in keys]
 
-    def state_dict(self) -> dict:
+    def state_dict(self) -> dict[str, Any]:
         """Every window's optimizer state (the active one copied), for a resume."""
         states = dict(self.optimizer_states)
         if self.current is not None:
             states[self.current] = _to_cpu(self.optimizer.state_dict())
         return {"windows": self.names, "optimizers": states}
 
-    def load_state_dict(self, state: dict) -> None:
+    def load_state_dict(self, state: dict[str, Any]) -> None:
         """Before the first activate(): the saved per-window optimizer states."""
         if state.get("windows") != self.names:
             raise ValueError(

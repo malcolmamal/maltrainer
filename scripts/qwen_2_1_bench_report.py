@@ -24,6 +24,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 
@@ -46,7 +47,7 @@ def color(name: str) -> str | None:
     return next((c for key, c in COLORS.items() if name == key or name.endswith("_" + key)), None)
 
 
-def parse_log(path: Path) -> dict:
+def parse_log(path: Path) -> dict[str, Any]:
     steps, losses, lrs, times = [], [], [], []
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         m = LOG_LINE.match(line)
@@ -108,7 +109,6 @@ def main() -> None:
     parser.add_argument("--grid-steps", nargs="+", default=["500", "1000", "1500", "2000"])
     parser.add_argument("--grid-seed", type=int, default=1)
     args = parser.parse_args()
-
     bench = Path(args.bench)
     out = bench / "report"
     out.mkdir(exist_ok=True)

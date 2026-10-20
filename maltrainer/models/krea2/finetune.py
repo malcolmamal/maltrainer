@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import torch
 from safetensors.torch import save_file
@@ -42,7 +42,7 @@ DEFAULT_WINDOWS: tuple[Window, ...] = (
 DEFAULT_ALWAYS_ON = ("txtfusion",)
 
 
-def parse_windows(config: Sequence | None) -> tuple[Window, ...]:
+def parse_windows(config: Sequence[Any] | None) -> tuple[Window, ...]:
     """finetune.windows: [{name: attention, prefixes: ["attn."]}, ...] or [[name, [prefixes]], ...]."""
     if not config:
         return DEFAULT_WINDOWS

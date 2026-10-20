@@ -5,6 +5,7 @@ regularisation both caption by class."""
 from __future__ import annotations
 
 import re
+from typing import Any
 
 
 def class_caption(caption: str, classes: dict[str, str]) -> str | None:
@@ -22,7 +23,7 @@ def class_caption(caption: str, classes: dict[str, str]) -> str | None:
     return out if count else None
 
 
-def resolve_classes(prior_config: dict, trigger: str | None) -> dict[str, str]:
+def resolve_classes(prior_config: dict[str, Any], trigger: str | None) -> dict[str, str]:
     """``prior.classes`` (trigger -> class word), or ``dataset.trigger`` -> ``prior.class_word``."""
     classes = {str(k).strip(): str(v).strip() for k, v in (prior_config.get("classes") or {}).items() if str(k).strip()}
     word = str(prior_config.get("class_word") or "").strip()

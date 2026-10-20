@@ -279,9 +279,9 @@ class TrainingJob:
     exit_code: int | None = None
     progress: dict[str, Any] = field(default_factory=lambda: {"step": 0, "total": 0})
     websockets: set[WebSocket] = field(default_factory=set)
-    log_buffer: deque[dict] = field(default_factory=lambda: deque(maxlen=2000))
-    reader_task: asyncio.Task | None = None
-    monitor_task: asyncio.Task | None = None
+    log_buffer: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=2000))
+    reader_task: asyncio.Task[None] | None = None
+    monitor_task: asyncio.Task[None] | None = None
 
     async def start_readers(self) -> None:
         if not self.process:
@@ -357,7 +357,7 @@ class TrainingJob:
         await self.broadcast({"type": "status", "status": self.status, "exit_code": self.exit_code})
         await launch_next_job()
 
-    async def broadcast(self, payload: dict) -> None:
+    async def broadcast(self, payload: dict[str, Any]) -> None:
         self.log_buffer.append(payload)
         stale: list[WebSocket] = []
         for ws in self.websockets:

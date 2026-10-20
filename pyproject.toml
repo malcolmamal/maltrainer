@@ -187,11 +187,11 @@ warn_redundant_casts = true
 check_untyped_defs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
+disallow_any_generics = true
 
 # The gate's own package is held to --strict from the start.
 [[tool.mypy.overrides]]
 module = "maltrainer_quality.*"
-disallow_any_generics = true
 disallow_untyped_calls = true
 disallow_untyped_decorators = true
 disallow_subclassing_any = true

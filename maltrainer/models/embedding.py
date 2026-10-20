@@ -86,7 +86,7 @@ class TextualInversionEmbedding(nn.Module):
             for i, token_id in enumerate(self.token_ids):
                 embedding_layer.weight[token_id] = embeddings[i]
 
-    def get_state_dict(self) -> dict:
+    def get_state_dict(self) -> dict[str, Any]:
         """Get state dict for saving (compatible with SD format)."""
         embeddings = self.get_embeddings()
 

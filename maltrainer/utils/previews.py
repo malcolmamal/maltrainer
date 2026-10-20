@@ -48,11 +48,11 @@ import time
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
 logger = logging.getLogger(__name__)
-
 SETTINGS = ("every", "at_start", "negative", "steps", "cfg", "width", "height", "seed", "slow_after")
 ROWS = ("raw", "ema")
 
@@ -71,7 +71,7 @@ def _entries(prompts: Sequence[object] | None) -> list[tuple[str, bool]]:
 
 
 class Previews:
-    def __init__(self, config: dict | None, output_dir: Path):
+    def __init__(self, config: dict[str, Any] | None, output_dir: Path):
         self.slots: dict[str, int] = {}  # prompt -> its stable number (seed offset, file name)
         self.current = ""
         self.dir = Path(output_dir) / "samples"
@@ -80,7 +80,7 @@ class Previews:
         if self.every > 0 and not self.active:
             logger.warning("sample.every is set but no sample prompt is enabled: no previews")
 
-    def _apply(self, config: dict) -> None:
+    def _apply(self, config: dict[str, Any]) -> None:
         self.every = int(config.get("every", 0) or 0)
         entries = _entries(config.get("prompts"))
         self.prompts: list[str] = [p for p, _ in entries]  # every defined prompt, in file order
@@ -110,7 +110,7 @@ class Previews:
 
     # ------------------------------------------------------------------ changes while running
 
-    def update(self, config: dict | None) -> list[str]:
+    def update(self, config: dict[str, Any] | None) -> list[str]:
         """Apply a new ``sample`` section; returns a line per change (empty: nothing changed)."""
         before = {key: getattr(self, key) for key in SETTINGS}
         old_prompts, old_enabled, old_rows = list(self.prompts), set(self.enabled_prompts), dict(self.rows)
@@ -172,7 +172,7 @@ class Previews:
         self,
         step: int,
         render_one: Callable[[str, int], Image.Image],
-        variants: Sequence[tuple[str, Callable[[], AbstractContextManager]]] = (("", nullcontext),),
+        variants: Sequence[tuple[str, Callable[[], AbstractContextManager[Any]]]] = (("", nullcontext),),
         ready: Callable[[str], bool] = lambda _prompt: True,
     ) -> float:
         """Render every enabled, ready prompt for ``step``, once per variant (label, context that

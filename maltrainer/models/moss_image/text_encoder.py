@@ -356,7 +356,7 @@ class MOSSImageTextEncoder(nn.Module):
         self.model = model
         self.tokenizer = tokenizer
 
-    def token_ids(self, prompt: str) -> list:
+    def token_ids(self, prompt: str) -> list[Any]:
         ids = self.tokenizer(TEMPLATE.format(prompt.strip()), add_special_tokens=False).input_ids
         if len(ids) > MAX_SEQUENCE_LENGTH:
             logger.warning("Prompt is %d tokens; truncated to %d.", len(ids), MAX_SEQUENCE_LENGTH)

@@ -72,7 +72,7 @@ MOSS_UNIFORM_MIX = 0.01
 MOSS_GRID = 1000
 
 
-def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int, int]:
+def plan_training_steps(num_samples: int, train_config: dict[str, Any]) -> tuple[int, int, int]:
     """(steps_per_epoch, num_epochs, total_steps); max_steps wins. An epoch yields num_samples / grad_accum steps."""
     grad_accum = max(int(train_config.get("gradient_accumulation_steps", 1) or 1), 1)
     steps_per_epoch = max(math.ceil(num_samples / grad_accum), 1)
@@ -84,7 +84,7 @@ def plan_training_steps(num_samples: int, train_config: dict) -> tuple[int, int,
 
 
 class MOSSImageLoRATrainer:
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025) -> None:
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025) -> None:
         self.config = config
         self.dry_run, self.dry_run_step_time = dry_run, dry_run_step_time
         self.last_saved_path: str | None = None
@@ -212,7 +212,7 @@ class MOSSImageLoRATrainer:
 
         # A caption's embedding lives in every folder whose images use it; the empty dropout
         # prompt in the dataset folder itself.
-        prompt_folders: dict[str, set] = {}
+        prompt_folders: dict[str, set[Any]] = {}
         for key, caption in self.samples:
             prompt_folders.setdefault(caption, set()).add(Path(key).parent)
         if float(train_config.get("caption_dropout", 0.0) or 0.0) > 0:
@@ -721,18 +721,18 @@ class MOSSImageLoRATrainer:
         return max(count_media_files(dataset_config.get("path", ""), ["image"]), 1) * repeats
 
     @classmethod
-    def step_groups(cls, config: dict) -> list[Group]:
+    def step_groups(cls, config: dict[str, Any]) -> list[Group]:
         """The image folders an epoch draws from, for --suggest-steps."""
         dataset_config = config["dataset"]
         root = dataset_config.get("path", "")
         return [Group("Subjects", root, float(dataset_config.get("repeats", 1) or 1), folder_counts(root))]
 
     @classmethod
-    def step_notes(cls, config: dict) -> list[str]:  # noqa: ARG003 - overridden with the config in use
+    def step_notes(cls, config: dict[str, Any]) -> list[str]:  # noqa: ARG003 - overridden with the config in use
         return []
 
     @classmethod
-    def suggest_steps(cls, config: dict, epochs: float) -> str:
+    def suggest_steps(cls, config: dict[str, Any], epochs: float) -> str:
         return step_report(cls.step_groups(config), config.get("train", {}), epochs, cls.step_notes(config))
 
     def simulate(self) -> None:

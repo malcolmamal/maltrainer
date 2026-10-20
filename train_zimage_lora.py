@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 class ZImageLoRATrainer:
     """Trainer for Z-Image LoRA models (base or turbo)."""
 
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
@@ -88,7 +88,7 @@ class ZImageLoRATrainer:
         filename = "/".join(parts[2:])
         return hf_hub_download(repo_id=repo_id, filename=filename)
 
-    def _merge_lora_into_transformer(self, lora_state_dict: dict, merge_weight: float = 1.0) -> int:
+    def _merge_lora_into_transformer(self, lora_state_dict: dict[str, Any], merge_weight: float = 1.0) -> int:
         module_map = dict(self.transformer.named_modules())
         merged = 0
         for key, lora_a in lora_state_dict.items():

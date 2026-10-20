@@ -248,7 +248,7 @@ class MiniMaxH3AudioEncoder(nn.Module):
         return z.reshape(b, s, z.shape[1], z.shape[2]).permute(0, 2, 1, 3)
 
 
-def _fold_weight_norm(state_dict: dict) -> dict:
+def _fold_weight_norm(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """Fold weight_g/weight_v pairs (nn.utils.weight_norm, dim=0) into plain weights."""
     folded = {}
     for name, tensor in state_dict.items():

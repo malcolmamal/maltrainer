@@ -13,6 +13,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from maltrainer.data.minimax_dataset import _media_kind
 from maltrainer.data.walk import walk_visible
@@ -59,7 +60,7 @@ def folder_counts(root: str | Path, kinds: Sequence[str] = ("image",)) -> list[t
 
 def report(
     groups: Sequence[Group],
-    train_config: dict,
+    train_config: dict[str, Any],
     epochs: float | None = None,
     notes: Sequence[str] = (),
 ) -> str:

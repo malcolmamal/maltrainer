@@ -104,7 +104,7 @@ class Gallery:
         self,
         step: int,
         render_one: Callable[[str, int, str], Image.Image],
-        weights: Callable[[], contextlib.AbstractContextManager],
+        weights: Callable[[], contextlib.AbstractContextManager[Any]],
         ready: Callable[[str], bool] = lambda _prompt: True,
         label: str = "",
     ) -> float:

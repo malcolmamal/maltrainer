@@ -45,7 +45,7 @@ from maltrainer.utils.lora_metadata import build_metadata, git_commit
 logger = logging.getLogger(__name__)
 
 
-def plan_training_steps(num_batches: int, train_config: dict) -> tuple[int, int, int]:
+def plan_training_steps(num_batches: int, train_config: dict[str, Any]) -> tuple[int, int, int]:
     """Return (steps_per_epoch, num_epochs, total_steps) for a run.
 
     ``train.max_steps`` (> 0) wins over ``train.num_epochs``: the run stops exactly at that
@@ -64,7 +64,7 @@ def plan_training_steps(num_batches: int, train_config: dict) -> tuple[int, int,
 class QwenImage21LoRATrainer:
     """Trainer for Qwen-Image-2.1 LoRA models."""
 
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time

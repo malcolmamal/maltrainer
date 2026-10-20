@@ -32,13 +32,13 @@ logger = logging.getLogger(__name__)
 FP8_FORMATS = {"float8_e4m3fn": torch.float8_e4m3fn, "float8_e5m2": torch.float8_e5m2}
 
 
-def _layer_configs(handle: Any, keys: Iterable[str]) -> dict[str, dict]:
+def _layer_configs(handle: Any, keys: Iterable[str]) -> dict[str, dict[str, Any]]:
     """prefix -> per-layer quant config, from whichever marker style the file uses."""
     metadata = handle.metadata() or {}
     if "_quantization_metadata" in metadata:
         return dict(json.loads(metadata["_quantization_metadata"]).get("layers", {}))
 
-    configs: dict[str, dict] = {}
+    configs: dict[str, dict[str, Any]] = {}
     for key in keys:
         if key.endswith(".comfy_quant"):
             blob = handle.get_tensor(key)
@@ -54,7 +54,7 @@ def _layer_configs(handle: Any, keys: Iterable[str]) -> dict[str, dict]:
     return configs
 
 
-def read_comfy_checkpoint(path: str | Path) -> tuple[dict[str, torch.Tensor], dict[str, dict]]:
+def read_comfy_checkpoint(path: str | Path) -> tuple[dict[str, torch.Tensor], dict[str, dict[str, Any]]]:
     """All tensors of a ComfyUI checkpoint plus its quantized-layer table.
 
     Marker tensors (``comfy_quant``, ``scaled_fp8``) are dropped; legacy ``scale_weight``
@@ -99,8 +99,8 @@ def container_prefix(keys: Iterable[str], candidates: Iterable[str] = CONTAINER_
 
 
 def strip_prefix(
-    tensors: dict[str, torch.Tensor], layers: dict[str, dict], candidates: Iterable[str] = CONTAINER_PREFIXES
-) -> tuple[dict[str, torch.Tensor], dict[str, dict]]:
+    tensors: dict[str, torch.Tensor], layers: dict[str, dict[str, Any]], candidates: Iterable[str] = CONTAINER_PREFIXES
+) -> tuple[dict[str, torch.Tensor], dict[str, dict[str, Any]]]:
     """Drop a ComfyUI container prefix if every key carries it."""
     prefix = container_prefix(tensors, candidates)
     if prefix:
@@ -124,7 +124,7 @@ def dequantize(weight: torch.Tensor, scale: torch.Tensor, dtype: torch.dtype) ->
     return (weight.float() * scale.float()).to(dtype)
 
 
-def dequantize_checkpoint(tensors: dict[str, Tensor], layers: dict[str, dict], dtype: torch.dtype) -> dict[str, Tensor]:
+def dequantize_checkpoint(tensors: dict[str, Tensor], layers: dict[str, Any], dtype: torch.dtype) -> dict[str, Tensor]:
     """Plain state dict with every fp8 layer dequantized (for small frozen encoders)."""
     out = dict(tensors)
     for prefix in layers:
@@ -183,7 +183,7 @@ class Fp8ScaledLinear(nn.Module):
 
 def swap_in_fp8_linears(
     model: nn.Module,
-    layers: dict[str, dict],
+    layers: dict[str, dict[str, Any]],
     compute_dtype: torch.dtype,
     key_map: Callable[[str], str] | None = None,
     tensors: dict[str, torch.Tensor] | None = None,

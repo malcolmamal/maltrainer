@@ -205,7 +205,7 @@ class Flux2VAEEncoder(nn.Module):
         return F.batch_norm(z, rm, rv, training=False, eps=BN_EPS)
 
 
-def _read_vae_state(path: str | Path) -> dict:
+def _read_vae_state(path: str | Path) -> dict[str, Any]:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Flux2 VAE not found at {path}")

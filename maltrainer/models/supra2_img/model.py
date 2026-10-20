@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
@@ -202,7 +202,7 @@ def load_supra2_img(
     device: torch.device,
     dtype: torch.dtype,
     freeze: bool = True,
-) -> tuple[SupraDiT, dict]:
+) -> tuple[SupraDiT, dict[str, Any]]:
     """Load Supra2-IMG_fp32.safetensors. Returns the model and sidecar tensors.
 
     Sidecar holds the stored unconditional embedding (``uncond_text``, ``uncond_mask``)
@@ -212,7 +212,7 @@ def load_supra2_img(
     path = Path(path)
     model = SupraDiT()
     weights = load_file(str(path), device="cpu")
-    sidecar: dict = {}
+    sidecar: dict[str, Any] = {}
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         meta = handle.metadata() or {}
         sidecar.update({key: int(value) if str(value).isdigit() else value for key, value in meta.items()})

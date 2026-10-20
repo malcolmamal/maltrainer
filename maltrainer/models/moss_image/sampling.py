@@ -17,6 +17,7 @@ there. Our DiT takes sigma in [0, 1] (it embeds 1000 sigma itself).
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import Any
 
 import torch
 
@@ -56,7 +57,7 @@ def initial_noise(seed: int, height: int, width: int) -> torch.Tensor:
 
 @torch.no_grad()
 def sample(
-    dit: Callable,
+    dit: Callable[..., Any],
     context: torch.Tensor,
     height: int,
     width: int,

@@ -81,7 +81,7 @@ STATE_PRIOR = "prior.safetensors"
 
 
 class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         super().__init__(config, dry_run=dry_run, dry_run_step_time=dry_run_step_time)
         self.run_metadata["model_type"] = "moss_image_finetune"
         if self.accelerator.num_processes > 1:
@@ -89,7 +89,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         self.ema: OffloadedParameterEMA | None = None
         resume = config.get("train", {}).get("resume_from")
         self.resume_dir = Path(resume) if resume else None
-        self.resume_state: dict | None = None
+        self.resume_state: dict[str, Any] | None = None
         # Where the loop stands, for the resume state: the epoch, the next index into its
         # shuffled order, and the Python RNG state that shuffled it.
         self.global_step = 0
@@ -132,7 +132,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         return sources + reg
 
     @classmethod
-    def step_groups(cls, config: dict) -> list[Group]:
+    def step_groups(cls, config: dict[str, Any]) -> list[Group]:
         groups = super().step_groups(config)
         dataset_config = config["dataset"]
         groups[0].folder_repeats = dict(dataset_config.get("folder_repeats") or {})
@@ -149,7 +149,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         return groups
 
     @classmethod
-    def step_notes(cls, config: dict) -> list[str]:
+    def step_notes(cls, config: dict[str, Any]) -> list[str]:
         """Folders prior preservation would miss (see ``maltrainer.finetune.notes``)."""
         return step_notes(config)
 
@@ -162,7 +162,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
         root = self.config["dataset"].get("reg_path") if key in self.reg_keys else self.config["dataset"]["path"]
         return Path(os.path.relpath(key, root)).as_posix()
 
-    def _prior_captions(self) -> dict:
+    def _prior_captions(self) -> dict[str, Any]:
         """sample key -> its class caption, for every subject image whose caption names a trigger."""
         if self.prior is None:
             return {}
@@ -181,7 +181,7 @@ class MOSSImageFinetuneTrainer(MOSSImageLoRATrainer):
             gallery = [*gallery, self.previews.negative]
         return super()._extra_prompts() + sorted(set(self._prior_captions().values())) + gallery
 
-    def _repeat_groups(self) -> list[tuple]:
+    def _repeat_groups(self) -> list[tuple[Any, ...]]:
         """(sample indices, repeats) per subject folder (dataset.folder_repeats, else
         dataset.repeats), and the regularisation images with dataset.reg_repeats."""
         dataset_config = self.config["dataset"]

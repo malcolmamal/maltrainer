@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 from maltrainer.data.minimax_dataset import scan_media_sources
 from maltrainer.finetune.prior import resolve_classes
@@ -28,7 +29,7 @@ def names_its_folder(root: str, folder: Path, captions: list[str]) -> bool:
     return any(re.search(rf"(?<!\w){re.escape(folder.name)}(?!\w)", c, re.IGNORECASE) for c in captions)
 
 
-def step_notes(config: dict) -> list[str]:
+def step_notes(config: dict[str, Any]) -> list[str]:
     """Folders prior preservation would miss. People are named by their folder through
     prefix.txt's [folder] ("photo of feliciaday, ..."), so a folder whose captions name its
     own folder is a person, and needs a prior.classes entry. Folders that name nobody (e.g.
@@ -46,7 +47,7 @@ def step_notes(config: dict) -> list[str]:
         trigger_token=dataset_config.get("trigger"),
         default_caption=dataset_config.get("default_caption", ""),
     )
-    by_folder: dict = {}
+    by_folder: dict[Path, list[str]] = {}
     for source in sources:
         by_folder.setdefault(source.path.parent, []).append(source.caption)
     notes = list(stray_note)

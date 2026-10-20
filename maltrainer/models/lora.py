@@ -94,7 +94,7 @@ class LoRANetwork(nn.Module):
 
                 cast(Any, module).forward = make_forward(original_forward, lora_layer)
 
-    def get_state_dict(self) -> dict:
+    def get_state_dict(self) -> dict[str, Any]:
         """Get LoRA state dict for saving in Kohya/AI-Toolkit format."""
         state_dict = {}
         for safe_name, lora_layer in self.lora_layers.items():
@@ -136,7 +136,7 @@ class LoRANetwork(nn.Module):
 LORA_SUFFIXES = ((".lora_down.weight", ".lora_up.weight"), (".lora_A.weight", ".lora_B.weight"))
 
 
-def _layer_keys(state_dict: Mapping[str, Any], names: tuple) -> tuple | None:
+def _layer_keys(state_dict: Mapping[str, Any], names: tuple[Any, ...]) -> tuple[Any, ...] | None:
     """(down, up, alpha) keys of the first of ``names`` in ``state_dict``: an exact key first, then
     one behind a prefix ending in "." or "_" ("diffusion_model.", "lora_unet_")."""
     for down, up in LORA_SUFFIXES:

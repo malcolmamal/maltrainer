@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import torch
 from safetensors import safe_open
@@ -48,7 +49,7 @@ def param_group_of(param_name: str) -> str:
     return "other"
 
 
-def param_groups(named: list[tuple[str, nn.Parameter]], split: bool) -> list[dict]:
+def param_groups(named: list[tuple[str, nn.Parameter]], split: bool) -> list[dict[str, Any]]:
     if not split:
         return [{"params": [p for _, p in named], "name": "all"}]
     groups: dict[str, list[nn.Parameter]] = {}

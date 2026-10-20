@@ -50,7 +50,7 @@ TARGET_PRESETS = ("blocks", "attn", "all")
 # negative branch (the pipeline's uncond_skip_layers=[22]; ComfyUI's SkipLayerGuidanceDiTSimple),
 # so a LoRA there acts on the positive branch only. AI Toolkit leaves it out for that reason, but
 # Fizgig's A/B runs (v8.6.0, 2026-10-18) found that costs likeness, and Fizgig now trains it.
-DEFAULT_SKIP_BLOCKS: tuple = ()
+DEFAULT_SKIP_BLOCKS: tuple[Any, ...] = ()
 
 
 def _block_leaf(name: str) -> str | None:
@@ -163,7 +163,7 @@ class MOSSImageLoRANetwork(nn.Module):
     def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
-    def param_groups(self, split: bool) -> list[dict]:
+    def param_groups(self, split: bool) -> list[dict[str, Any]]:
         if not split:
             return [{"params": list(self.lora_layers.parameters()), "name": "lora"}]
         groups: dict[str, list[nn.Parameter]] = {}

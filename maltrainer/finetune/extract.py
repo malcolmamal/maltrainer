@@ -28,6 +28,7 @@ import logging
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import torch
 from safetensors import safe_open
@@ -36,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 CONTAINER_PREFIXES = ("model.diffusion_model.", "diffusion_model.")
 MODES = ("fixed", "fro", "ratio", "threshold")
-
 # module name (no ".weight"), diff [out, in] -> [(LoRA module name, diff part)]
 SplitFn = Callable[[str, torch.Tensor], list[tuple[str, torch.Tensor]]]
 
@@ -132,8 +132,8 @@ def extract(
     device: str = "cpu",
     out_prefix: str = "diffusion_model.",
     dtype: torch.dtype = torch.bfloat16,
-    progress: Callable[[Iterable], Iterable] | None = None,
-) -> tuple[dict[int, dict[str, torch.Tensor]], dict]:
+    progress: Callable[[Iterable[str]], Iterable[str]] | None = None,
+) -> tuple[dict[int, dict[str, torch.Tensor]], dict[str, Any]]:
     """({cap: LoRA state dict}, report). Both files must have the same keys and shapes."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}, got {mode!r}")

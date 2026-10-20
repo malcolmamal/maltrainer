@@ -65,14 +65,14 @@ class Automagic3(torch.optim.Optimizer):
         # Training-health statistics, summed on the device (no sync per step) and read with
         # pop_stats(): each group's vote signal, and how many gradient values were NaN / inf
         # (they are zeroed before the update, so without this count they would pass unseen).
-        self._signal_sum: dict = {}
-        self._signal_steps: dict = {}
+        self._signal_sum: dict[str, Any] = {}
+        self._signal_steps: dict[str, Any] = {}
         self._nonfinite: torch.Tensor | None = None
 
         total = sum(p.numel() for g in self.param_groups for p in g["params"])
         logging.getLogger(__name__).info("Total training parameters: %s", f"{total:,}")
 
-    def add_param_group(self, param_group: dict) -> None:
+    def add_param_group(self, param_group: dict[str, Any]) -> None:
         super().add_param_group(param_group)
         group = self.param_groups[-1]
         # As built, overrides included: a reload restores these, not the previous run's saved ones.
@@ -116,7 +116,7 @@ class Automagic3(torch.optim.Optimizer):
         noise = torch.rand_like(v).sub_(0.5).mul_(ulp)
         return v.add_(noise).to(dtype)
 
-    _PACK_CONSTS: ClassVar[dict] = {}
+    _PACK_CONSTS: ClassVar[dict[torch.device, tuple[torch.Tensor, torch.Tensor]]] = {}
 
     @classmethod
     def _pack_consts(cls, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
@@ -167,8 +167,8 @@ class Automagic3(torch.optim.Optimizer):
 
     def _rebuild_group_index(self) -> None:
         self._param_group_index = {p: gi for gi, group in enumerate(self.param_groups) for p in group["params"]}
-        self._group_num: list = [None] * len(self.param_groups)
-        self._group_den: list = [None] * len(self.param_groups)
+        self._group_num: list[Any] = [None] * len(self.param_groups)
+        self._group_den: list[Any] = [None] * len(self.param_groups)
 
     @classmethod
     def _stochastic_copy_(cls, dst: torch.Tensor, src_fp32: torch.Tensor) -> None:
@@ -192,7 +192,7 @@ class Automagic3(torch.optim.Optimizer):
 
         return _hook
 
-    def _init_state(self, p: torch.Tensor, group: dict) -> None:
+    def _init_state(self, p: torch.Tensor, group: dict[str, Any]) -> None:
         state = self.state[p]
         state["step"] = 0
         state["lr"] = torch.tensor(
@@ -209,7 +209,7 @@ class Automagic3(torch.optim.Optimizer):
         else:
             state["exp_avg_sq"] = torch.zeros(p.shape, dtype=p.dtype, device=p.device)
 
-    def _make_backward_hook(self, group: dict) -> Callable[[torch.Tensor], None]:
+    def _make_backward_hook(self, group: dict[str, Any]) -> Callable[[torch.Tensor], None]:
         def _hook(p: torch.Tensor) -> None:
             self._update_param(p, group)
 
@@ -218,7 +218,7 @@ class Automagic3(torch.optim.Optimizer):
     # -------------------------------------------------------------- per-param
 
     @torch.no_grad()
-    def _update_param(self, p: torch.Tensor, group: dict) -> None:
+    def _update_param(self, p: torch.Tensor, group: dict[str, Any]) -> None:
         if p.grad is None:
             return
         state = self.state[p]
@@ -358,7 +358,7 @@ class Automagic3(torch.optim.Optimizer):
             self._group_num[gi] = None
             self._group_den[gi] = None
 
-    def pop_stats(self) -> dict:
+    def pop_stats(self) -> dict[str, Any]:
         """Statistics since the last call, then reset (one GPU sync).
 
         signal: per group, the mean of the vote signal in [-1, 1], weighted by update size: the

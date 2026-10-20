@@ -29,6 +29,7 @@ import random
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 from tqdm import tqdm
@@ -53,7 +54,7 @@ STATE_TRAINER = "trainer_state.pt"
 
 
 class Krea2FinetuneTrainer(Krea2LoRATrainer):
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         if config.get("train", {}).get("dop"):
             raise ValueError("train.dop is the LoRA trainer's; the Krea 2 finetune has no prior preservation yet")
         super().__init__(config, dry_run=dry_run, dry_run_step_time=dry_run_step_time)
@@ -64,7 +65,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             raise ValueError("fused Automagic3 steps inside backward, so gradient_accumulation_steps must be 1")
         resume = config.get("train", {}).get("resume_from")
         self.resume_dir = Path(resume) if resume else None
-        self.resume_state: dict | None = None
+        self.resume_state: dict[str, Any] | None = None
         self.global_step = 0
         self.epoch = 0
         self.position = 0
@@ -85,7 +86,6 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
                     raise FileNotFoundError(f"train.resume_from: {self.resume_dir / name} is missing")
             path = self.resume_dir / STATE_MODEL
             logger.info("Resuming from %s", self.resume_dir)
-
         master: dict[str, torch.Tensor] = {}
         self.transformer, info = load_krea2_transformer(path, self.device, self.dtype, master=master)
         self.key_prefix = str(info.get("key_prefix", ""))
@@ -135,7 +135,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
     def _rotate_every(self) -> int:
         return max(int((self.config.get("finetune", {}) or {}).get("rotate_every", 100) or 100), 1)
 
-    def _automagic_kwargs(self) -> dict:
+    def _automagic_kwargs(self) -> dict[str, Any]:
         train_config = self.config["train"]
         return {
             "lr": float(train_config.get("learning_rate", 1e-5)),

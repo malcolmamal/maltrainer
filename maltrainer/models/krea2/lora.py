@@ -141,7 +141,7 @@ class Krea2LoRANetwork(nn.Module):
     def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
-    def param_groups(self, split: bool) -> list[dict]:
+    def param_groups(self, split: bool) -> list[dict[str, Any]]:
         if not split:
             return [{"params": list(self.lora_layers.parameters()), "name": "lora"}]
         groups: dict[str, list[nn.Parameter]] = {}

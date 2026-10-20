@@ -24,7 +24,7 @@ def align_to_multiple(val: int, multiple: int = 16) -> int:
     return ((val + multiple - 1) // multiple) * multiple
 
 
-class QwenImage21Dataset(Dataset):
+class QwenImage21Dataset(Dataset[dict[str, torch.Tensor | str]]):
     """Image and caption dataset loader for Qwen-Image-2.1 training."""
 
     def __init__(

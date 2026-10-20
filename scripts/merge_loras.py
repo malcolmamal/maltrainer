@@ -48,6 +48,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 import yaml
@@ -75,12 +76,10 @@ def read_lora(path: Path) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor, f
         keys = list(handle.keys())
         metadata = handle.metadata() or {}
         tensors = {key: handle.get_tensor(key) for key in keys}
-
     layout = next((pair for pair in LAYOUTS if any(k.endswith(pair[0]) for k in keys)), None)
     if layout is None:
         raise ValueError(f"{path.name}: no lora_A/lora_B or lora_down/lora_up keys")
     down_suffix, up_suffix = layout
-
     modules, used = {}, set()
     for key in keys:
         if not key.endswith(down_suffix):
@@ -117,8 +116,8 @@ def sha256_prefix(path: Path, length: int = 12) -> str:
 
 def merge(
     inputs: list[tuple[Path, float]], dtype: torch.dtype, verify: bool
-) -> tuple[dict[str, torch.Tensor], dict, list]:
-    loras: list[dict] = []
+) -> tuple[dict[str, torch.Tensor], dict[str, Any], list[Any]]:
+    loras: list[dict[str, Any]] = []
     for path, strength in inputs:
         modules, metadata, layout = read_lora(path)
         ranks = sorted({down.shape[0] for down, _, _ in modules.values()})
@@ -153,7 +152,6 @@ def merge(
         state[f"{name}.{out_down}.weight"] = down.to(dtype).contiguous()
         state[f"{name}.{out_up}.weight"] = up.to(dtype).contiguous()
         state[f"{name}.alpha"] = torch.tensor(float(total_rank), dtype=torch.float32)
-
         if verify:
             expected = sum(f * (u @ d) for d, u, f in parts)
             merged = state[f"{name}.{out_up}.weight"].double() @ state[f"{name}.{out_down}.weight"].double()
@@ -169,7 +167,7 @@ def merge(
     return state, info, loras
 
 
-def load_config(path: Path) -> dict:
+def load_config(path: Path) -> dict[str, Any]:
     """The YAML merge config -> {"output", "dtype", "verify", "inputs": [(Path, strength)]}."""
     with Path(path).open(encoding="utf-8") as handle:
         raw = handle.read().replace("\xa0", " ")
@@ -199,7 +197,9 @@ def load_config(path: Path) -> dict:
     }
 
 
-def merged_metadata(loras: list, info: dict, dtype: torch.dtype, config_file: Path | None = None) -> dict[str, str]:
+def merged_metadata(
+    loras: list[Any], info: dict[str, Any], dtype: torch.dtype, config_file: Path | None = None
+) -> dict[str, str]:
     """Carry the inputs' shared ``ss_*`` identity, fix the network size, and record the recipe."""
     out: dict[str, str] = {}
     first = loras[0]["metadata"]

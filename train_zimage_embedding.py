@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 class ZImageEmbeddingTrainer:
     """Trainer for Z-Image Textual Inversion embeddings."""
 
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time

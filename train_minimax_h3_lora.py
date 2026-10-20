@@ -194,7 +194,7 @@ class H3Sample:
 class MiniMaxH3LoRATrainer:
     """Trainer for MiniMax H3 LoRA models."""
 
-    def __init__(self, config: dict, dry_run: bool = False, dry_run_step_time: float = 0.025):
+    def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
         self.dry_run = dry_run
         self.dry_run_step_time = dry_run_step_time
@@ -211,7 +211,7 @@ class MiniMaxH3LoRATrainer:
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
 
         self.samples: list[H3Sample] = []
-        self._layout_cache: dict[tuple, dict[str, torch.Tensor]] = {}
+        self._layout_cache: dict[tuple[Any, ...], dict[str, torch.Tensor]] = {}
         self.text_cache: dict[str, torch.Tensor] = {}
         self.ema: ParameterEMA | None = None
 

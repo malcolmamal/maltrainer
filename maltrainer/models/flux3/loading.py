@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import torch
 from accelerate import init_empty_weights
@@ -77,7 +78,7 @@ def load_flux3_transformer(
     device: torch.device,
     dtype: torch.dtype = torch.bfloat16,
     grad_precision: str = "bf16",
-) -> tuple[Flux3Transformer, dict]:
+) -> tuple[Flux3Transformer, dict[str, Any]]:
     """The frozen DiT on ``device``, plus a small summary for the checkpoint metadata."""
     path = Path(path)
     if not path.exists():

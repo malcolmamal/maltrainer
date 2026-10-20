@@ -39,6 +39,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import yaml
 from safetensors.torch import save_file
@@ -48,7 +49,7 @@ from merge_loras import DTYPES, merge, merged_metadata
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_yaml(path: Path) -> dict:
+def load_yaml(path: Path) -> dict[str, Any]:
     with Path(path).open(encoding="utf-8") as handle:
         data = yaml.safe_load(handle.read().replace("\xa0", " ")) or {}
     if not isinstance(data, dict):
@@ -82,7 +83,7 @@ def load_plan(path: Path) -> tuple[Path, list[tuple[Path, float]], Path, str]:
     return Path(trainer), plan, member_output(output), dtype
 
 
-def member_output(output: dict) -> Path:
+def member_output(output: dict[str, Any]) -> Path:
     """The file a trainer writes for an ``output:`` block: ``<path>/<name>.safetensors``."""
     name = str(output.get("name") or "")
     if name.endswith(".safetensors"):

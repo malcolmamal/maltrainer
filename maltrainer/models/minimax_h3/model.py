@@ -7,6 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Any
 
 import torch
 from torch import nn
@@ -45,7 +46,7 @@ class MiniMaxH3TransformerConfig:
     final_norm_eps: float = 1e-5
 
     @classmethod
-    def from_dict(cls, value: dict) -> MiniMaxH3TransformerConfig:
+    def from_dict(cls, value: dict[str, Any]) -> MiniMaxH3TransformerConfig:
         fields = cls.__dataclass_fields__
         kwargs = {key: value[key] for key in fields if key in value}
         if "patch_size" in kwargs:
@@ -398,7 +399,6 @@ class MiniMaxH3Transformer(nn.Module):
         audio = self.audio_patch_proj(audio_hidden_states.to(self.audio_patch_proj.weight.dtype))
         text = self.condition_proj(encoder_hidden_states.to(self.condition_proj.weight.dtype))
         text = self.token_refiner(text, self.gradient_checkpointing)
-
         hidden_states = text.new_zeros((text.shape[0], sequence_length, text.shape[-1]))
         hidden_states = hidden_states.index_copy(1, text_indices, text)
         hidden_states = hidden_states.index_copy(1, video_indices, video.to(text.dtype))

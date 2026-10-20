@@ -31,7 +31,7 @@ def has_comfy_quantized_layers(path: str | Path) -> bool:
         return any(key.endswith(COMFY_QUANT_SUFFIX) for key in source_keys)
 
 
-def _parse_quant_config(blob: torch.Tensor) -> dict:
+def _parse_quant_config(blob: torch.Tensor) -> dict[str, object]:
     try:
         value = json.loads(bytes(blob.cpu().tolist()).decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
