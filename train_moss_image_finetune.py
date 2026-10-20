@@ -60,6 +60,7 @@ from maltrainer.models.moss_image.finetune import (
 )
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.optimizers import Automagic3
+from maltrainer.training.steps import plan_training_steps
 from maltrainer.utils.config import load_config, save_config_to_output
 from maltrainer.utils.ema import OffloadedParameterEMA
 from maltrainer.utils.fsutil import replace_directory
@@ -69,7 +70,7 @@ from maltrainer.utils.logging_utils import setup_logging
 from maltrainer.utils.lora_metadata import build_metadata
 from maltrainer.utils.step_planner import DEFAULT_EPOCHS, Group, folder_counts
 from maltrainer.utils.train_monitor import TrainMonitor, WeightDrift
-from train_moss_image_lora import MOSSImageLoRATrainer, plan_training_steps
+from train_moss_image_lora import MOSSImageLoRATrainer
 
 logger = logging.getLogger(__name__)
 
@@ -794,7 +795,6 @@ def main() -> None:
         f"EPOCHS epochs of each (default {DEFAULT_EPOCHS}), then exit without training",
     )
     args = parser.parse_args()
-
     config = load_config(args.config)
     if args.suggest_steps is not None:
         print(MOSSImageFinetuneTrainer.suggest_steps(config, args.suggest_steps))

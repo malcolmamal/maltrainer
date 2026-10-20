@@ -8,6 +8,7 @@ import pytest
 import torch
 
 import train_moss_image_lora as lora
+from maltrainer.training.steps import plan_training_steps
 
 from .runs import prepared_lora, progress_lines, run_lora
 from .world import Workspace
@@ -29,7 +30,7 @@ from .world import Workspace
 def test_the_plan_gives_steps_per_epoch_epochs_and_total_steps(
     samples: int, train: dict[str, Any], expected: tuple[int, int, int]
 ) -> None:
-    assert lora.plan_training_steps(samples, train) == expected
+    assert plan_training_steps(samples, train) == expected
 
 
 def test_max_steps_stops_mid_epoch_and_the_log_counts_every_step(workspace: Workspace) -> None:

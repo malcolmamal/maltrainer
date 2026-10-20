@@ -30,6 +30,5 @@
   "scripts/qwen_2_1_sweep_checkpoints.py": 204,
   "train_krea2_finetune.py": 446,
   "train_moss_image_finetune.py": 813,
-  "train_moss_image_lora.py": 812,
   "train_zimage_embedding.py": 641
 }

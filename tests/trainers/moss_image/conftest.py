@@ -13,7 +13,6 @@ import torch
 from accelerate.state import AcceleratorState, GradientState
 
 import train_moss_image_finetune
-import train_moss_image_lora
 
 from .fakes import Fakes, install_fakes, skip_housekeeping
 from .world import Workspace, write_layout_checkpoint
@@ -48,5 +47,5 @@ def workspace(tmp_path: Path) -> Workspace:
 
 @pytest.fixture(autouse=True)
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
-    skip_housekeeping(monkeypatch, train_moss_image_lora, train_moss_image_finetune)
-    return install_fakes(monkeypatch, train_moss_image_lora)
+    skip_housekeeping(monkeypatch, train_moss_image_finetune)
+    return install_fakes(monkeypatch)

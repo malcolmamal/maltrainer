@@ -14,6 +14,8 @@ import pytest
 import torch
 from torch.nn import functional
 
+from maltrainer.trainers.moss_image import cache, previews
+from maltrainer.training import session
 from maltrainer.utils.keyboard import KeyCommands
 
 LATENT_CHANNELS = 128
@@ -62,8 +64,8 @@ class Fakes:
     text_loads: list[torch.device] = field(default_factory=list)
 
 
-def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
-    """Replace the loaders ``module`` (the LoRA trainer's) imported with ones returning the fakes."""
+def install_fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
+    """Replace the loaders the trainers' caching and preview parts import with ones returning the fakes."""
     fakes = Fakes()
 
     def vae_encoder(_path: str, _device: torch.device) -> FakeVAEEncoder:
@@ -78,9 +80,10 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
         fakes.text_loads.append(device)
         return fakes.text
 
-    monkeypatch.setattr(module, "load_flux2_vae_encoder", vae_encoder)
-    monkeypatch.setattr(module, "load_flux2_vae_decoder", vae_decoder)
-    monkeypatch.setattr(module, "load_moss_image_text_encoder", text_encoder)
+    monkeypatch.setattr(cache, "load_flux2_vae_encoder", vae_encoder)
+    monkeypatch.setattr(previews, "load_flux2_vae_decoder", vae_decoder)
+    monkeypatch.setattr(cache, "load_moss_image_text_encoder", text_encoder)  # the caption cache
+    monkeypatch.setattr(previews, "load_moss_image_text_encoder", text_encoder)  # prompts added mid-run
     return fakes
 
 
@@ -89,9 +92,9 @@ def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, *modules: object, commit:
 
     Only the trainers' own references are replaced, so the rest of the process keeps the real ``gc``.
     """
-    for module in modules:
+    for module in (session, *modules):
         monkeypatch.setattr(module, "gc", SimpleNamespace(collect=lambda: 0))
-    monkeypatch.setattr(modules[0], "git_commit", lambda: commit)
+    monkeypatch.setattr(session, "git_commit", lambda: commit)
 
 
 def capture_menu(monkeypatch: pytest.MonkeyPatch, module: Any) -> io.StringIO:

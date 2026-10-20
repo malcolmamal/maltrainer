@@ -18,8 +18,6 @@
   "scripts/train_from_template.py::main": 13,
   "train_krea2_finetune.py::train": 20,
   "train_moss_image_finetune.py::train": 32,
-  "train_moss_image_lora.py::precache_dataset": 24,
-  "train_moss_image_lora.py::train": 14,
   "train_zimage_embedding.py::setup_optimizer": 16,
   "train_zimage_embedding.py::train": 14
 }

@@ -11,6 +11,7 @@ import pytest
 
 import train_moss_image_finetune as finetune
 import train_moss_image_lora as lora
+from maltrainer.trainers.moss_image import previews as moss_previews
 
 from .fakes import capture_menu, script_keys
 from .runs import run_finetune, same_values
@@ -98,8 +99,8 @@ def test_e_opens_the_preview_menu_and_enter_applies_its_changes(
 ) -> None:
     workspace.add_images("p", 2)
     typed = iter(["right", "space", "enter"])
-    monkeypatch.setattr(lora, "read_key", lambda: next(typed))
-    screen = capture_menu(monkeypatch, lora)
+    monkeypatch.setattr(moss_previews, "read_key", lambda: next(typed))
+    screen = capture_menu(monkeypatch, moss_previews)
     press([["e"]])
 
     with caplog.at_level(logging.INFO):
@@ -117,8 +118,8 @@ def test_a_menu_that_fails_is_logged_and_training_goes_on(
     def broken() -> str:
         raise RuntimeError("no console")
 
-    monkeypatch.setattr(lora, "read_key", broken)
-    capture_menu(monkeypatch, lora)
+    monkeypatch.setattr(moss_previews, "read_key", broken)
+    capture_menu(monkeypatch, moss_previews)
     press([["e"]])
 
     with caplog.at_level(logging.ERROR):
