@@ -17,28 +17,36 @@ logger = logging.getLogger(__name__)
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
-def make_loader(config: dict[str, Any]) -> tuple[ZImageDataset, DataLoader[Any]]:
-    """The training dataset and its shuffling loader."""
+def image_loader(config: dict[str, Any], trigger: str | None) -> tuple[ZImageDataset, DataLoader[Any]]:
+    """The images with their captions (the ``trigger`` in front) and a shuffling loader."""
     dataset_config = config["dataset"]
     dataset = ZImageDataset(
         data_root=dataset_config["path"],
         resolution=dataset_config.get("resolution", 512),
         center_crop=dataset_config.get("center_crop", True),
         random_flip=dataset_config.get("random_flip", False),
-        trigger_token=dataset_config.get("trigger", None),
+        trigger_token=trigger,
         repeats=dataset_config.get("repeats", 1),
     )
-    default_caption = dataset_config.get("default_caption", "")
-    if default_caption:
-        dataset.captions = with_default_captions(
-            dataset.captions, (dataset_config.get("trigger") or "").strip(), default_caption
-        )
     loader = DataLoader(
         dataset,
         batch_size=config["train"].get("batch_size", 1),
         shuffle=True,
         num_workers=dataset_config.get("num_workers", 0),
     )
+    return dataset, loader
+
+
+def make_loader(config: dict[str, Any]) -> tuple[ZImageDataset, DataLoader[Any]]:
+    """The LoRA trainer's dataset: ``dataset.default_caption`` for captions that are empty or just the trigger,
+    and a warning for empty captions without a trigger."""
+    dataset_config = config["dataset"]
+    dataset, loader = image_loader(config, dataset_config.get("trigger", None))
+    default_caption = dataset_config.get("default_caption", "")
+    if default_caption:
+        dataset.captions = with_default_captions(
+            dataset.captions, (dataset_config.get("trigger") or "").strip(), default_caption
+        )
     empty_captions = sum(1 for c in dataset.captions if not c)
     if not dataset_config.get("trigger", None) and empty_captions > 0:
         logger.warning(

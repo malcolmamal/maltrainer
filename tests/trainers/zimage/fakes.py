@@ -145,8 +145,8 @@ def _tokenizer(fakes: Fakes) -> Any:
 
 
 def install_fakes(monkeypatch: pytest.MonkeyPatch, lora: object, embedding: object) -> Fakes:
-    """Put the loaders where the LoRA trainer's model module and the embedding trainer import them; ``fakes`` is
-    shared by both."""
+    """Put the loaders where the shared model module imports them (``lora``), and the embedding trainer's own
+    text encoder class; ``fakes`` is shared by both."""
     fakes = Fakes()
     loaders = {
         "transformer": Loader("transformer", fakes, lambda: make_transformer(fakes)),
@@ -159,10 +159,10 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch, lora: object, embedding: obje
         fakes.downloads.append((repo_id, filename))
         return filename
 
-    for module, text_encoder in ((lora, "AutoModelForCausalLM"), (embedding, "Qwen3ForCausalLM")):
-        monkeypatch.setattr(module, "ZImageTransformer2DModel", loaders["transformer"])
-        monkeypatch.setattr(module, "AutoTokenizer", loaders["tokenizer"])
-        monkeypatch.setattr(module, "AutoencoderKL", loaders["vae"])
-        monkeypatch.setattr(module, text_encoder, loaders["text_encoder"])
+    monkeypatch.setattr(lora, "ZImageTransformer2DModel", loaders["transformer"])
+    monkeypatch.setattr(lora, "AutoTokenizer", loaders["tokenizer"])
+    monkeypatch.setattr(lora, "AutoencoderKL", loaders["vae"])
+    monkeypatch.setattr(lora, "AutoModelForCausalLM", loaders["text_encoder"])
+    monkeypatch.setattr(embedding, "Qwen3ForCausalLM", loaders["text_encoder"])
     monkeypatch.setattr(lora, "hf_hub_download", download)
     return fakes

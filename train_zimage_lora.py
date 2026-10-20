@@ -6,13 +6,12 @@ Trains LoRA adapters for Z-Image (base) models with YAML configuration support.
 
 import logging
 import math
-import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import torch
 from accelerate import Accelerator
-from accelerate.utils import set_seed
 from safetensors.torch import save_file
 from tqdm import tqdm
 
@@ -23,6 +22,7 @@ from maltrainer.trainers.zimage.data import count_dataset_samples, make_loader
 from maltrainer.trainers.zimage.model import load_components
 from maltrainer.trainers.zimage.noise import sample_timesteps
 from maltrainer.trainers.zimage.optimizer import build_optimizer
+from maltrainer.trainers.zimage.pipeline import Pipeline
 from maltrainer.trainers.zimage.step import batch_step
 from maltrainer.training.cli import training_arguments
 from maltrainer.training.optimizer import linear_warmup
@@ -33,8 +33,11 @@ from maltrainer.utils.logging_utils import setup_logging
 logger = logging.getLogger(__name__)
 
 
-class ZImageLoRATrainer:
+class ZImageLoRATrainer(Pipeline):
     """Trainer for Z-Image LoRA models (base or turbo)."""
+
+    def _stages(self) -> list[Callable[[], None]]:
+        return [self.load_model, self.create_lora_network, self.create_dataset, self.setup_optimizer, self.train]
 
     def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         self.config = config
@@ -146,33 +149,6 @@ class ZImageLoRATrainer:
         save_file(self.lora_network.get_state_dict(), str(save_path), metadata=metadata)
         self.last_saved_path = str(save_path)
         logger.info(f"Saved checkpoint to {save_path}")
-
-    def _log_summary(self, start_time: float) -> None:
-        elapsed = max(time.time() - start_time, 0.0)
-        output_path = self.last_saved_path or self.config.get("output", {}).get("path", "")
-        logger.info("Summary: ran for %.2fs, last output saved to %s", elapsed, output_path)
-
-    def run(self) -> None:
-        """Run the complete training pipeline."""
-        try:
-            set_seed(self.config.get("seed", 42))
-            start_time = time.time()
-            if self.dry_run:
-                self.dry_run_training()
-                self._log_summary(start_time)
-                return
-            self.load_model()
-            self.create_lora_network()
-            self.create_dataset()
-            self.setup_optimizer()
-            self.train()
-            self._log_summary(start_time)
-        except KeyboardInterrupt:
-            logger.info("Training interrupted by user. Exiting...")
-            torch.cuda.empty_cache()
-        except Exception as e:
-            logger.error(f"An error occurred: {e}", exc_info=True)
-            raise e
 
 
 def main() -> None:

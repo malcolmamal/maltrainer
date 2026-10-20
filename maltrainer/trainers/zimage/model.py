@@ -56,12 +56,20 @@ def merge_lora(transformer: torch.nn.Module, lora_state_dict: dict[str, Any], me
     return merged
 
 
-def load_components(config: dict[str, Any], device: torch.device, dtype: torch.dtype) -> tuple[Any, Any, Any, Any]:
-    """(transformer, text encoder, tokenizer, VAE), frozen and on ``device``; the VAE in float32."""
+def load_components(
+    config: dict[str, Any], device: torch.device, dtype: torch.dtype, text_encoder_cls: Any = None
+) -> tuple[Any, Any, Any, Any]:
+    """(transformer, text encoder, tokenizer, VAE), frozen and on ``device``; the VAE in float32.
+
+    The LoRA trainer's default loads the extras from ``model.extras_name_or_path`` and merges
+    ``model.assistant_lora_path``; a ``text_encoder_cls`` (the embedding trainer's) loads everything from
+    ``model.name_or_path`` and merges nothing.
+    """
     model_config = config.get("model", {})
     model_path = model_config["name_or_path"]
-    base_model_path = model_config.get("extras_name_or_path", model_path)
-    assistant_lora_path = model_config.get("assistant_lora_path", None)
+    lora = text_encoder_cls is None
+    base_model_path = model_config.get("extras_name_or_path", model_path) if lora else model_path
+    assistant_lora_path = model_config.get("assistant_lora_path", None) if lora else None
 
     transformer = ZImageTransformer2DModel.from_pretrained(model_path, subfolder="transformer", torch_dtype=dtype)
     transformer.enable_gradient_checkpointing()
@@ -69,7 +77,7 @@ def load_components(config: dict[str, Any], device: torch.device, dtype: torch.d
         merged = merge_lora(transformer, load_file(resolve_hf_path(str(assistant_lora_path))), merge_weight=1.0)
         logger.info("Merged %d adapter layers from %s", merged, assistant_lora_path)
 
-    text_encoder: Any = cast(Any, AutoModelForCausalLM).from_pretrained(
+    text_encoder: Any = cast(Any, text_encoder_cls or AutoModelForCausalLM).from_pretrained(
         base_model_path, subfolder="text_encoder", torch_dtype=dtype
     )
     tokenizer: Any = AutoTokenizer.from_pretrained(base_model_path, subfolder="tokenizer")

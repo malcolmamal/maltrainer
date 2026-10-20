@@ -47,15 +47,17 @@ def to_bool(value: Any, default: bool) -> bool:
 
 
 def build_optimizer(
-    params: Iterable[torch.nn.Parameter], train_config: dict[str, Any], default_lr: float
+    params: Iterable[torch.nn.Parameter], train_config: dict[str, Any], default_lr: float, lora: bool = True
 ) -> torch.optim.Optimizer:
+    """``lora``: the LoRA trainer's extras, the 8-bit optimizers and ``weight_decay_exclude_lora`` (the embedding
+    trainer has neither: an unknown or 8-bit name is plain AdamW there)."""
     params = list(params)  # a fall back after a failed Prodigy gets them all again
     lr = to_float(train_config.get("learning_rate", default_lr), default_lr)
     betas = (to_float(train_config.get("adam_beta1", 0.9), 0.9), to_float(train_config.get("adam_beta2", 0.999), 0.999))
     weight_decay = to_float(train_config.get("weight_decay", 0.01), 0.01)
     eps = to_float(train_config.get("adam_epsilon", 1e-8), 1e-8)
     optimizer_name = str(train_config.get("optimizer", "adamw")).lower()
-    use_weight_decay = 0.0 if train_config.get("weight_decay_exclude_lora", False) else weight_decay
+    use_weight_decay = 0.0 if lora and train_config.get("weight_decay_exclude_lora", False) else weight_decay
     adam: dict[str, Any] = {"lr": lr, "betas": betas, "weight_decay": use_weight_decay, "eps": eps}
 
     if optimizer_name.startswith("prodigy"):
@@ -64,7 +66,7 @@ def build_optimizer(
         except (ImportError, OSError, RuntimeError) as e:
             logger.warning("Failed to load prodigy optimizer (%s). Falling back to AdamW. Error: %s", optimizer_name, e)
             return AdamW(params, **adam)
-    if optimizer_name in {"adamw8bit", "adam8bit"}:
+    if lora and optimizer_name in {"adamw8bit", "adam8bit"}:
         try:
             import bitsandbytes as bnb
 

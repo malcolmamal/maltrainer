@@ -22,9 +22,9 @@ def _module(kind: str) -> Any:
     return lora if kind == "lora" else embedding
 
 
-def _device_logger(kind: str) -> str:
-    """Where the trainer's device lines come from (the LoRA trainer reports through the shared session)."""
-    return "maltrainer.training.session" if kind == "lora" else embedding.__name__
+def _device_logger(_kind: str) -> str:
+    """Where the trainers' device lines come from: the shared session."""
+    return "maltrainer.training.session"
 
 
 def _trainer(ws: Workspace, kind: str) -> Any:

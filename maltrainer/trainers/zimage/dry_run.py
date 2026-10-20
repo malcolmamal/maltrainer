@@ -20,9 +20,17 @@ def grad_accum_steps(config: dict[str, Any]) -> Any:
     return config.get("train", {}).get("gradient_accumulation_steps", config.get("gradient_accumulation_steps", 1))
 
 
-def simulate(config: dict[str, Any], num_samples: int, step_time: float, kind: str, show: bool) -> str:
+def simulate(
+    config: dict[str, Any],
+    num_samples: int,
+    step_time: float,
+    kind: str,
+    show: bool,
+    derived: dict[str, Any] | None = None,
+) -> str:
     """Simulate training without loading or downloading models; returns the last record's path. ``kind``: the
-    records' "kind" and file-name prefix ("lora" -> zimage_lora_step_<N>.safetensors)."""
+    records' "kind" and file-name prefix ("lora" -> zimage_lora_step_<N>.safetensors); ``derived``: more fields for
+    the records' "derived" section, before the output path."""
     train_config = config.get("train", {})
     num_epochs = int(train_config.get("num_epochs", 10) or 1)
     batch_size = int(train_config.get("batch_size", 1) or 1)
@@ -44,7 +52,7 @@ def simulate(config: dict[str, Any], num_samples: int, step_time: float, kind: s
         grad_accum,
         step_time,
     )
-    run = (kind, total_steps, steps_per_epoch, num_epochs, time.time(), raw_step_time)
+    run = (kind, total_steps, steps_per_epoch, num_epochs, time.time(), raw_step_time, derived or {})
     progress_bar = tqdm(total=total_steps, desc="Dry Run Steps", disable=not show)
     for step in range(1, total_steps + 1):
         if step_time > 0:
@@ -59,9 +67,9 @@ def simulate(config: dict[str, Any], num_samples: int, step_time: float, kind: s
 
 
 def _write_record(
-    config: dict[str, Any], output_dir: Path, step: Any, run: tuple[str, int, int, int, float, float]
+    config: dict[str, Any], output_dir: Path, step: Any, run: tuple[str, int, int, int, float, float, dict[str, Any]]
 ) -> str:
-    kind, total_steps, steps_per_epoch, num_epochs, start_time, step_time = run
+    kind, total_steps, steps_per_epoch, num_epochs, start_time, step_time, extra = run
     dataset_config, train_config = config.get("dataset", {}), config.get("train", {})
     elapsed = max(time.time() - start_time, 0.0)
     completed_steps = total_steps if step == "final" else int(step)
@@ -89,6 +97,7 @@ def _write_record(
             "save_every": train_config.get("save_every", 500),
             "dtype": str(config.get("dtype", "bfloat16")),
             "mixed_precision": str(config.get("mixed_precision", "bf16")),
+            **extra,
             "output_path": str(output_dir),
         },
     }
