@@ -334,6 +334,12 @@ the tests (pytest), and the coverage floor. `ruff format .` fixes formatting; `r
 Every gate runs even after one fails; the failed ones are listed at the end. A tool that isn't
 installed in the interpreter you launched it with fails its gate.
 
+**Enforcement.** The `gate` job of `.github/workflows/quality.yml` runs this same command on every pull request and every
+push to `main`, but it is not a *required* check: the repository is private on a plan without branch protection (GitHub
+answers 403 for it), so nothing blocks a merge on a red gate. The rule is therefore a convention (AGENTS.md): run the
+gate before every commit and do not merge a red one. If the repository becomes public or the plan changes, require the
+`gate` job on `main` (Settings, Branches).
+
 **Limits:** at most 200 lines per Python or shell file, complexity 10 per function, and no mypy error
 anywhere in the checked tree. They are hard limits with no exceptions list: split the file or the function
 instead of working around the gate. The coverage floor (`fail_under` in `pyproject.toml`) is a floor on purpose
