@@ -62,7 +62,7 @@ is therefore a small runner of our own:
   disk, so the checkout and `output/` are untouched and a concurrent edit of the checkout cannot disturb a run.
 - `mutation_pool.py`: the workers and the pool. A mutant that makes the tests run past a time limit (6 times
   the unmutated run, at least 30 s: an endless loop) or kills the worker counts as killed; the worker is replaced.
-- `mutation_targets.py`: the table of target modules, their tests and floors. `mutation_select.py`: `--changed`.
+- `mutation_targets.py` (rows in `mutation_targets_logic.py`, `_models.py` and `_optimizers.py`): the table of target modules, their tests and floors. `mutation_select.py`: `--changed`.
 - Before mutating a module, its unmutated tests must pass in a worker, or the run stops with pytest's output.
 
 The tests of a module are the unit tests that pin its maths (found with coverage contexts: which test files
@@ -93,8 +93,14 @@ assertions added in the same commit as this document. The floor is the measured 
 | `finetune/selection.py` | 11 / 11 | 100.0 | 11 / 11 | 100.0 | 98 |
 | `finetune/classes.py` | 14 / 15 | 93.3 | 14 / 15 | 93.3 | 91 |
 | `models/minimax_h3/int8_rotation.py` | 66 / 77 | 85.7 | 70 / 77 | 90.9 | 88 |
+| `optimizers/automagic3_resume.py` (b) | 39 / 47 | 83.0 | 45 / 47 | 95.7 | 93 |
+| `optimizers/automagic3_base.py` (b) | 3 / 3 | 100.0 | 3 / 3 | 100.0 | 98 |
+| `models/moss_image/model_config.py` (b) | 23 / 31 | 74.2 | 30 / 31 | 96.8 | 94 |
+| `utils/ema.py` (b) | 51 / 73 | 69.9 | 56 / 73 | 76.7 | 74 |
 
 (a) Added to the set after the first run; its tests did not change.
+
+(b) Added later, tests only (these cover MOSS-Image finetune and Automagic3 code: no product code was touched).
 
 All 17 modules: 682 / 795 killed (85.8 %) before, 797 / 824 (96.7 %) after; the remaining 27 survivors are the
 equivalent mutants below.
@@ -130,6 +136,13 @@ Judged by reading the code. Line numbers are those of the measured commit. Add a
 | `optimizers/automagic3_ops.py` 38, 43 | `sum(-1)` to `sum(1)`; `unsqueeze(-1)` to `unsqueeze(1)` | A 2-D `[n, 8]` tensor and a 1-D byte tensor. |
 | `optimizers/automagic3_update.py` 104, `automagic3_stats.py` 34 | `device !=` to `==` (and the reverse) | A guard that only moves a scalar between devices; indistinguishable on CPU. Needs a second device to test. |
 | `utils/step_planner.py` 75 | `default=0` to `1` | The width is only used by folder rows, and there are none when the default applies. |
+| `optimizers/automagic3_resume.py` 29 | `zip(..., strict=False)` to `True` | `param_groups` and the saved `_built` always have the same length (torch refuses a state with another group count first). |
+| `optimizers/automagic3_resume.py` 45 | the `"lr"` key of the assignment | The rate was already restored as fp32 under `"lr"` a few lines above, so the cast stores the same tensor. |
+| `models/moss_image/model_config.py` 32 | `split(".", 2)` to `3` | `layers.<i>.rest`: element 1 is the index for either limit. |
+| `utils/ema.py` 37, 46, 52, 102, 115, 123, 132, 136, 142, 155 (x10) | `zip(..., strict=False)` to `True` | The lists zipped are built together from the same parameters, so they always have equal length. |
+| `utils/ema.py` 103, 133, 137, 143 (x4) | `non_blocking=True` to `False` | Only changes how a CUDA copy is queued; on CPU the copy is the same. |
+| `utils/ema.py` 108 | `daemon=True` to `False` | The thread is always joined by `wait()` before its result is read; the flag only matters at interpreter exit. |
+| `utils/ema.py` 111 (x2) | `chunk = 1 << 20` plus one on either operand | The chunk size is a cache-blocking choice; any size gives the same averages. |
 | `finetune/classes.py` 22 | `"t0"` to another string | `match.lastgroup` is always set after a match; the fallback is unreachable. |
 | `models/minimax_h3/int8_rotation.py` 16 (x2) | `value > 1` to `>= 1`; `1` to `2` | `1 % 4` and `2 % 4` are not 0, so the loop stops at either. |
 | `models/minimax_h3/int8_rotation.py` 30, 33 | the loop counter starts at 5 or grows by 5 | The loop runs the same number of times for every power of four up to 4^8. |
