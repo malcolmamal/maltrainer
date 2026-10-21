@@ -1,5 +1,9 @@
 # Z-Image Textual Inversion (Embeddings)
 
+> **Deprecated.** Z-Image textual inversion was a proof of concept that did not give usable results. The trainer
+> (`train_zimage_embedding.py`) still runs, is tested and logs a deprecation warning when started, and the approach
+> may be reused with other models later. For Z-Image, train a LoRA instead.
+
 ## Overview
 Textual Inversion (TI) is a technique for teaching a model new concepts (objects, styles, faces) by finding a new "word" in the text encoder's vocabulary that represents that concept. Unlike LoRA, which modifies the model's *processing* weights, TI only optimizes the *input* vector for a specific token.
 

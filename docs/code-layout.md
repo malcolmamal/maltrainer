@@ -27,7 +27,7 @@ The package layers are a guide, not a strict hierarchy: `models`, `finetune` and
 
 | Path | What it is |
 |---|---|
-| `train_<model>_lora.py`, `train_krea2_finetune.py`, `train_moss_image_finetune.py`, `train_zimage_embedding.py` | One entry point per trainer: FLUX.3 [klein], Krea 2, MOSS-Image, MiniMax H3, Qwen-Image 2.1, Z-Image (LoRA and textual inversion), and the two full finetunes. Each also has a `run_*.bat` launcher. |
+| `train_<model>_lora.py`, `train_krea2_finetune.py`, `train_moss_image_finetune.py`, `train_zimage_embedding.py` (deprecated) | One entry point per trainer: FLUX.3 [klein], Krea 2, MOSS-Image, MiniMax H3, Qwen-Image 2.1, Z-Image (LoRA and textual inversion), and the two full finetunes. Each also has a `run_*.bat` launcher. |
 | `check_weights.py`, `compare_loras.py`, `inspect_lora.py` | Small root-level LoRA inspection tools. |
 | `scripts/` | Command-line tools that are not trainers: merge, resize and extract LoRAs, inspect metadata, inference, the Qwen 2.1 benchmark, `train_from_template.py`. Helper modules sit next to the script that uses them (`scripts` has no package). |
 | `backend/` | The web UI's FastAPI service (see below). |

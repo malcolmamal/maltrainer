@@ -1,5 +1,9 @@
 # Textual Inversion and Z-Image Support
 
+> **Deprecated.** Z-Image textual inversion was a proof of concept that did not give usable results. The trainer
+> (`train_zimage_embedding.py`) still runs, is tested and logs a deprecation warning when started, and the approach
+> may be reused with other models later. For Z-Image, train a LoRA instead.
+
 ## Background
 - Textual inversion (TI) embeddings are the tiny files used in the SD1.5 era: they don’t contain new weights for the UNet or text encoder, just a learned vector that lives within the text encoder embedding table. When the token is inserted into a prompt, the model uses that vector instead of a CLIP token id, so the embedding works like a lightweight concept replacement.
 - The vector looks like a single high-dimensional tensor (e.g., 768 dimensions for SD1.5) and is serialized either as safetensors or PyTorch (`.pt`/`.bin`) files that mostly hold one entry such as `string_to_param = {'*': tensor(...)}`.

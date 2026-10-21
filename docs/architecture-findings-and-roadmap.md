@@ -1,5 +1,9 @@
 # Architecture Findings and Roadmap (Maltrainer)
 
+> **Historical plan.** This is a design proposal from early in the project. It was not implemented as described:
+> there is no `ModelAdapter`, `GenericTrainer`, `losses/` or `config/` package. What exists is described in
+> [code-layout.md](code-layout.md) and [architecture.md](architecture.md).
+
 This is a working document to capture findings and recommended next steps so we can resume later with full context.
 
 ## What We Implemented So Far

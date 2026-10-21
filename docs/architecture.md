@@ -10,7 +10,7 @@ render on GitHub.
 
 ## 1. Purpose and scope
 
-maltrainer trains LoRAs, textual-inversion embeddings and full finetunes of modern image (and, for MiniMax H3,
+maltrainer trains LoRAs, full finetunes and (deprecated, a proof of concept) textual-inversion embeddings of modern image (and, for MiniMax H3,
 video and audio) diffusion models on one local GPU. It works directly on the single-file checkpoints that ComfyUI
 uses (bf16, fp8, INT8 ConvRot, NVFP4), writes its results as safetensors files that ComfyUI loads, and offers the
 same trainers through a command line and a small web UI that queues jobs and follows their progress. It
@@ -529,6 +529,10 @@ Further gates: ruff lint and format, dead-code check (vulture), tests with a 99 
 `requirements.lock` consistency, and a pip audit. CI (`.github/workflows/quality.yml`) runs the same command as a
 developer does.
 
+Mutation testing is not a gate: `python -m maltrainer_quality.mutation` (its own runner, `maltrainer_quality/mutation*.py`)
+mutates the pure-math modules and checks that the unit tests notice, against a per-module score floor. It runs before a
+merge that touches such a module and as an optional CI job; the policy is in [mutation-testing.md](mutation-testing.md).
+
 ### 6.3 Data flow and file formats
 
 ```mermaid
@@ -628,6 +632,7 @@ flowchart LR
     gate --> vu[dead code: vulture]
     gate --> pt[tests: pytest + coverage floor]
     gate --> lk[uv.lock, requirements.lock, pip-audit]
+    dev -.->|optional, pre-merge or CI job| mut[mutation testing of the pure-math modules]
 ```
 
 ### 6.6 Known limits and risks
@@ -645,6 +650,8 @@ flowchart LR
 - **Big files**: a MOSS-Image finetune save is about 10 GB plus a resume state of similar size (hard-linked when the
   weights are identical); saves are skipped, not failed, when the disk is too full, and the final save waits.
 - **Single points of loading**: a Hub download is a runtime network dependency of the Z-Image path only.
+- **Deprecated trainer**: `train_zimage_embedding.py` (Z-Image textual inversion) was a proof of concept that did not give
+  usable results. It still runs and is tested, logs a deprecation warning, and is not offered by the web UI.
 - **Platform**: Windows is the primary platform (`.bat` launchers, rename-with-retry in `utils/fsutil.py`); CI runs
   on Linux with CPU torch.
 

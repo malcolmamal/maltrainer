@@ -2,6 +2,9 @@
 """
 Z-Image Textual Inversion Training Script
 Trains textual inversion embeddings for Z-Image (base) models with YAML configuration support.
+
+DEPRECATED: a proof of concept that did not give usable results for Z-Image. It is kept, working and tested, for
+reference and because the approach may be reused with other models. See docs/textual-inversion-z-image.md.
 """
 
 import logging
@@ -185,6 +188,7 @@ def main() -> None:
     args = training_arguments("Train Z-Image Textual Inversion Embedding").parse_args()
     config = load_config(args.config)
     setup_logging(config.get("logging", {}))
+    logger.warning("Z-Image textual inversion is deprecated: a proof of concept that did not give usable results.")
     if config.get("output"):
         save_config_to_output(config, config["output"]["path"])
     ZImageEmbeddingTrainer(config, dry_run=args.dry_run, dry_run_step_time=args.dry_run_step_time).run()

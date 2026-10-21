@@ -9,7 +9,7 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   ~1500 steps, ≈ 13–16 min on an RTX 5090. Training is currently **square 512×512**; more resolutions and
   aspect-ratio bucketing are planned. See the [Qwen-Image 2.1 training guide](docs/qwen-image-2.1-lora-training.md).
 - **Z-Image LoRA Training**: Train LoRA adapters for Z-Image (base) models
-- **Z-Image Textual Inversion**: Train textual inversion embeddings for Z-Image
+- **Z-Image Textual Inversion (deprecated)**: a proof of concept that did not give usable results; kept for reference and possible reuse with other models
 - **Krea 2 LoRA Training**: trains from ComfyUI's single files (the fp8 RAW DiT, the Qwen-Image VAE
   and Qwen3-VL-4B), with an Automagic3 template, a Prodigy template that mirrors OneTrainer's
   recipe and an AdamW 8-bit template after Fizgig's Standard preset. Optional DOP keeps the
@@ -49,7 +49,7 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
 - **Web UI**: Pick a dataset, model and optimizer, train for a number of epochs or an exact number of steps, and
   follow live progress from a job queue
 - **YAML Configuration**: Simple YAML-based configuration system
-- **Modern Architecture**: Clean, modular codebase built on PyTorch and Diffusers
+- **Modern Architecture**: Clean, modular codebase built on PyTorch. Most models load local ComfyUI single files; only the Z-Image path uses Diffusers and the Hugging Face Hub
 
 ## Installation
 
@@ -178,17 +178,11 @@ See [Watching a run](docs/qwen-image-2.1-lora-training.md#watching-a-run) for wh
    python train_zimage_lora.py --config config/my_lora.yaml
    ```
 
-### Textual Inversion Training
+### Textual Inversion Training (deprecated)
 
-1. Prepare your dataset (images with optional `.txt` caption files)
-2. Copy and edit the example config:
-   ```bash
-   cp config/train_zimage_embedding_example.yaml config/my_embedding.yaml
-   ```
-3. Run training:
-   ```bash
-   python train_zimage_embedding.py --config config/my_embedding.yaml
-   ```
+Z-Image textual inversion was a proof of concept that did not give usable results. `train_zimage_embedding.py` still
+runs and logs a deprecation warning; there is no example config any more. See
+[docs/textual-inversion-z-image.md](docs/textual-inversion-z-image.md) if you want to experiment.
 
 ## Training
 
@@ -212,8 +206,7 @@ my_dataset/
 ### Configuring Training
 
 1. **Choose the right config template**:
-   - For LoRA training: `templates/examples/train_zimage_lora_example.yaml`
-   - For Textual Inversion: `config/train_zimage_embedding_example.yaml`
+   - For LoRA training: `templates/examples/train_zimage_lora_example.yaml` (other models: the files in `templates/`)
 
 2. **Edit the configuration**:
    - Set `dataset.path` to your dataset directory
@@ -224,7 +217,7 @@ my_dataset/
 3. **Key parameters to customize**:
    - `model.name_or_path`: Path to Z-Image model
    - `dataset.resolution`: Training resolution
-   - `train.learning_rate`: Learning rate (higher for embeddings)
+   - `train.learning_rate`: Learning rate
    - `train.num_epochs`: Number of training epochs
    - `output.path`: Where to save checkpoints
 
@@ -249,9 +242,6 @@ Execute the training script with your config:
 ```bash
 # For LoRA training
 python train_zimage_lora.py --config config/my_lora.yaml
-
-# For Textual Inversion
-python train_zimage_embedding.py --config config/my_embedding.yaml
 ```
 
 For testing, you can simulate training without downloading the model:
@@ -259,9 +249,6 @@ For testing, you can simulate training without downloading the model:
 ```bash
 # Dry run (default 0.025s per step)
 python train_zimage_lora.py --config config/my_lora.yaml --dry-run
-
-# Dry run with custom step time
-python train_zimage_embedding.py --config config/my_embedding.yaml --dry-run --dry-run-step-time 0.1
 ```
 
 ### Monitoring Training
@@ -280,7 +267,7 @@ Training produces:
 
 ## Configuration
 
-All training parameters are configured via YAML files. See `config/` directory for examples.
+All training parameters are configured via YAML files. Your own run configs go in `config/` (create it; it is git-ignored on purpose), copied from `templates/`.
 
 ### Key Configuration Sections
 
