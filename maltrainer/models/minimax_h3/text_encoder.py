@@ -21,6 +21,7 @@ from maltrainer.models.minimax_h3.text_encoder_config import (
 from maltrainer.models.minimax_h3.text_encoder_config import (
     text_encoder_key as _text_encoder_key,
 )
+from maltrainer.models.minimax_h3.text_encoder_rotary import rebuild_text_rotary, rebuild_vision_rotary
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,27 @@ class MiniMaxH3TextEncoder(nn.Module):
         return cast(torch.Tensor, res)
 
 
+def _load_plain_state_dict(model: Any, path: Path, dtype: torch.dtype) -> None:
+    """Assign a plain safetensors file onto the meta-built model.
+
+    The model is built on the meta device, so the weights have to be assigned (an in-place copy into a
+    meta tensor does nothing). The checkpoint may hold more layers than the truncated text tower (extra
+    keys are ignored); a text-tower weight it lacks is an error, not a silent hole.
+    """
+    from safetensors.torch import load_file
+
+    mapped_sd = {}
+    for k, v in load_file(str(path)).items():
+        if k.startswith(("visual.", "model.")):
+            prefix, _, suffix = k.rpartition(".")
+            mapped_sd[f"{_text_encoder_key(prefix)}.{suffix}"] = v.to(dtype) if v.is_floating_point() else v
+    result = model.load_state_dict(mapped_sd, strict=False, assign=True)
+    if result.missing_keys:
+        raise ValueError(
+            f"{path} lacks {len(result.missing_keys)} text-encoder weights, e.g. {result.missing_keys[:3]}"
+        )
+
+
 def load_minimax_h3_text_encoder(
     text_encoder_path: str | Path,
     tokenizer_path: str | Path | None = None,
@@ -165,21 +187,10 @@ def load_minimax_h3_text_encoder(
         load_comfy_quantized_state_dict(model, text_encoder_path, key_map=_text_encoder_key, output_dtype=dtype)
     else:
         logger.info("Loading text encoder safetensors from %s", text_encoder_path)
-        from safetensors.torch import load_file
+        _load_plain_state_dict(model, text_encoder_path, dtype)
 
-        sd = load_file(str(text_encoder_path))
-        mapped_sd = {}
-        for k, v in sd.items():
-            if k.startswith(("visual.", "model.")):
-                prefix, _, suffix = k.rpartition(".")
-                target_key = f"{_text_encoder_key(prefix)}.{suffix}"
-                mapped_sd[target_key] = v
-        model.load_state_dict(mapped_sd, strict=False)
-
-    vision_config: Any = config.vision_config
-    vision_head_dim = vision_config.hidden_size // vision_config.num_heads
-    model.visual.rotary_pos_emb = type(model.visual.rotary_pos_emb)(vision_head_dim // 2).to(device)
-    model.language_model.rotary_emb = type(model.language_model.rotary_emb)(text_config, device=device)
+    model.visual.rotary_pos_emb = rebuild_vision_rotary(model.visual.rotary_pos_emb, config.vision_config, device)
+    model.language_model.rotary_emb = rebuild_text_rotary(model.language_model.rotary_emb, text_config, device)
 
     model.to(device)
     model.eval()

@@ -44,6 +44,7 @@ class _FakeQwen(nn.Module):
 
     def load_state_dict(self, state, strict=True, **_options):
         self.loaded, self.strict = state, strict
+        return SimpleNamespace(missing_keys=[], unexpected_keys=[])
 
 
 @pytest.fixture
