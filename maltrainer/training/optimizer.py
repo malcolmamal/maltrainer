@@ -60,8 +60,16 @@ def build_lora_optimizer(
 
 def linear_warmup(optimizer: Any, steps: int, from_zero: bool = False) -> Any:
     """The rate ramps linearly up to the configured one over ``steps`` steps, starting at 1 / steps (at 0 with
-    ``from_zero``); None when ``steps`` is 0."""
+    ``from_zero``); None when ``steps`` is 0, or for Automagic3, which reads the group rate once and then adapts each
+    parameter's own: a warmup would only leave every parameter starting at 1 / steps of the configured rate."""
     if steps <= 0:
+        return None
+    from maltrainer.optimizers import Automagic3
+
+    if isinstance(optimizer, Automagic3):
+        logger.warning(
+            "Learning-rate warmup is ignored with Automagic3 (it adapts its own rate); remove it from the config."
+        )
         return None
     if from_zero:
         return torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min(1.0, float(step) / float(max(1, steps))))

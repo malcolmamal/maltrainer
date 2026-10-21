@@ -55,3 +55,17 @@ def test_warmup_ramps_the_rate_over_its_steps_and_is_absent_without_it() -> None
         optimizer.step()
         scheduler.step()
     assert rates == [0.25, 0.5, 0.75, 1.0, 1.0]
+
+
+def test_automagic3_gets_no_warmup_because_it_would_only_lower_its_start_rate(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Automagic3 reads the group rate once, when a parameter's state is created, then adapts it by itself:
+    # a scheduler would not ramp it up, it would leave every parameter starting at lr / steps for good.
+    optimizer, _ = build_lora_optimizer(_Adapters(), {"learning_rate": 1e-4}, 8, strict=True)
+
+    with caplog.at_level("WARNING"):
+        assert warmup_scheduler(optimizer, {"learning_rate_warmup_steps": 10}) is None
+
+    assert optimizer.param_groups[0]["lr"] == 1e-4
+    assert "Automagic3" in caplog.text
