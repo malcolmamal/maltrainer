@@ -115,3 +115,14 @@ def test_attention_with_zeroed_queries_and_keys_averages_the_values_over_the_seq
     assert out.shape == (B, N, dim)
     expected = v.view(B, N, heads, -1).mean(dim=1, keepdim=True).expand(B, N, heads, dim // heads).reshape(B, N, dim)
     torch.testing.assert_close(out, expected)
+
+
+def test_rope_from_ids_rotates_each_axis_with_the_10000_theta() -> None:
+    ids = torch.tensor([[0.0, 3.0, 1000.0, -800.0], [0.0, 1.0, 20.0, 400.0]])
+
+    pe = rope_from_ids(ids, head_dim=16)
+
+    for axis in range(4):
+        torch.testing.assert_close(
+            pe[0, :, 0, 2 * axis : 2 * axis + 2], rope(ids[:, axis], 4, 10000), atol=2e-6, rtol=0
+        )

@@ -145,3 +145,35 @@ def test_the_same_seed_renders_the_same_latents() -> None:
 
     torch.testing.assert_close(first, second, atol=0, rtol=0)
     assert first.shape == (1, 128, 1, 2)
+
+
+def test_the_defaults_are_30_steps_seed_42_and_cfg_3() -> None:
+    dit = Recorder(_by_context)
+
+    out = sample(dit, POS, 16, 16, negative=NEG)
+
+    # positive 3.0, negative 1.0: v = 1 + cfg * (3 - 1), and the sigma decrements add up to 1
+    torch.testing.assert_close(out, initial_noise(42, 16, 16) - 7.0, atol=1e-4, rtol=0)
+    assert len(dit.calls) == 2 * (len(schedule(30)) - 1)
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_a_negative_is_given_to_the_dit_as_a_batch_of_one(batched: bool) -> None:
+    dit = Recorder()
+
+    sample(dit, POS, 16, 16, steps=1, cfg=2.0, negative=NEG[None] if batched else NEG)
+
+    assert dit.calls[1]["context"].shape == (1, 3, 4)
+
+
+def test_the_latents_are_made_on_the_device_asked_for_not_the_one_of_the_context() -> None:
+    seen: list[torch.device] = []
+
+    def dit(x: torch.Tensor, sigma: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+        seen.extend([x.device, context.device, sigma.device])
+        return torch.zeros_like(x)
+
+    out = sample(dit, POS, 16, 16, steps=1, cfg=1.0, device=torch.device("meta"))
+
+    assert out.device.type == "meta"
+    assert {device.type for device in seen} == {"meta"}
