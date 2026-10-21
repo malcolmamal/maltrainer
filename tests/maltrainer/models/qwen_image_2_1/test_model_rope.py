@@ -81,3 +81,11 @@ def test_the_rotation_depends_on_the_token_position() -> None:
     rotated = apply_rotary_emb_qwen(x, freqs)
 
     torch.testing.assert_close(rotated[0, :, 0], torch.tensor([[1.0, 1.0], [-1.0, 1.0]]), atol=1e-6, rtol=0)
+
+
+def test_the_frequencies_of_each_axis_fall_off_with_theta_10000() -> None:
+    rotary = build_rope_frequencies(600, 2, 2, axes_dim=(4, 4, 4))
+
+    # a text token turns by its index * 10000 ** (-2k / 4) on pair k of the frame axis
+    angles = torch.arange(600.0)[:, None] * torch.tensor([1.0, 0.01])
+    torch.testing.assert_close(rotary[:600, :2], torch.polar(torch.ones_like(angles), angles), atol=5e-5, rtol=0)

@@ -116,3 +116,12 @@ def test_the_config_of_a_plain_checkpoint_has_split_projections_and_no_flow_map(
 def test_a_state_dict_without_the_flux3_blocks_is_not_a_flux3_checkpoint() -> None:
     with pytest.raises(ValueError, match=re.escape("Not a FLUX.3 DiT checkpoint")):
         Flux3Config.from_state_dict({"single_blocks.0.q_proj.weight": torch.zeros(1)})
+
+
+def test_rope_from_ids_is_each_axis_rope_at_theta_10000_over_32_dims() -> None:
+    ids = torch.tensor([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [0.5, 0.0, 9.0, 1.5]])
+
+    pe = rope_from_ids(ids)
+
+    for axis in range(4):
+        torch.testing.assert_close(pe[0, 0, :, 16 * axis : 16 * axis + 16], rope(ids[:, axis], 32, 10000))

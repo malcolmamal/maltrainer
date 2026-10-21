@@ -113,3 +113,11 @@ def test_simple_modulation_gives_scale_and_shift_rows():
     assert scale.shape == shift.shape == (2, 1, 3)
     assert scale[0, 0].tolist() == [1.0, 2.0, 3.0]
     assert shift[1, 0].tolist() == [10.0, 20.0, 30.0]
+
+
+def test_timestep_embedding_uses_a_max_period_of_10000_and_a_time_factor_of_1000_by_default():
+    out = timestep_embedding(torch.tensor([0.25]), 8)
+
+    frequencies = [10000 ** (-k / 4) for k in range(4)]
+    expected = [math.cos(250 * f) for f in frequencies] + [math.sin(250 * f) for f in frequencies]
+    torch.testing.assert_close(out[0], torch.tensor(expected), atol=2e-5, rtol=0)

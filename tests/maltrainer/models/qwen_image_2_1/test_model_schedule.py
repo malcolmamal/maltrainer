@@ -53,3 +53,10 @@ def test_the_flow_shift_keeps_the_dtype_and_stays_monotonic() -> None:
 
     assert shifted.dtype == torch.float64
     assert bool((shifted[1:] > shifted[:-1]).all())
+
+
+def test_the_flow_shift_defaults_to_mu_one_half() -> None:
+    t = torch.tensor([0.25, 0.5])
+    shift = math.exp(0.5)
+
+    torch.testing.assert_close(apply_flow_shift(t), shift * t / (1 + (shift - 1) * t))

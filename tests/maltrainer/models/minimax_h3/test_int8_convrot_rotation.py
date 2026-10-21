@@ -158,3 +158,32 @@ def test_int_mm_without_torch_support_asks_for_a_cuda_build(monkeypatch: pytest.
 
     with pytest.raises(RuntimeError, match=re.escape("requires torch._int_mm")):
         int8_convrot._int_mm(torch.zeros(2, 4, dtype=torch.int8), torch.zeros(4, 2, dtype=torch.int8))
+
+
+@pytest.mark.parametrize(("rows", "seen"), [(1, 17), (3, 17), (16, 17), (17, 17), (40, 40)])
+def test_int_mm_is_given_at_least_17_rows_and_only_the_requested_ones_come_back(
+    monkeypatch: pytest.MonkeyPatch, rows: int, seen: int
+) -> None:
+    shapes: list[int] = []
+    real = torch._int_mm
+
+    def recording(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
+        shapes.append(left.shape[0])
+        return real(left, right)
+
+    monkeypatch.setattr(torch, "_int_mm", recording)
+
+    out = _int_mm(torch.ones(rows, 16, dtype=torch.int8), torch.ones(16, 8, dtype=torch.int8))
+
+    assert shapes == [seen]
+    assert out.shape == (rows, 8)
+
+
+def test_the_scale_is_per_row_of_the_last_axis_whatever_the_leading_axes() -> None:
+    value = torch.tensor([[[4.0, -2.0], [1.0, 0.5]], [[8.0, 8.0], [0.0, 127.0]]])
+
+    quantized, scale = _quantize_rows(value)
+
+    assert scale.shape == (2, 2, 1)
+    torch.testing.assert_close(scale.flatten(), torch.tensor([4.0, 1.0, 8.0, 127.0]) / 127)
+    assert quantized[1, 1].tolist() == [0, 127]

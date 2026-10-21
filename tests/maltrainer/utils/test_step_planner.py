@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from maltrainer.utils.step_planner import Group, folder_counts, report
 
 
@@ -94,3 +96,24 @@ def test_an_empty_dataset_still_counts_one_step_per_epoch() -> None:
         "Suggested for 22 epochs:  train.max_steps: 22",
         "Configured now:  max_steps 0, so num_epochs 1 = 1 steps",
     ]
+
+
+@pytest.mark.parametrize("accumulation", [0, None, -3, 1])
+def test_a_missing_or_nonsense_accumulation_counts_as_one_and_is_not_mentioned(accumulation: object) -> None:
+    lines = report(
+        [Group("Subjects", "/data", 1, [("a", 7)])], {"gradient_accumulation_steps": accumulation}
+    ).splitlines()
+
+    assert "One epoch: 7 samples = 7 steps" in lines
+
+
+def test_two_accumulation_steps_are_mentioned_and_halve_the_steps() -> None:
+    lines = report([Group("Subjects", "/data", 1, [("a", 7)])], {"gradient_accumulation_steps": 2}).splitlines()
+
+    assert "One epoch: 7 samples = 4 steps (gradient_accumulation_steps 2)" in lines
+
+
+def test_one_configured_step_is_shown_as_configured() -> None:
+    lines = report([Group("Subjects", "/data", 1, [("a", 4)])], {"max_steps": 1}).splitlines()
+
+    assert lines[-1] == "Configured now:  max_steps 1 = 0.2 epochs"
