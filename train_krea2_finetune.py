@@ -53,6 +53,7 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
             raise ValueError("Krea 2 finetuning runs on one GPU")
         if int(config.get("train", {}).get("gradient_accumulation_steps", 1) or 1) != 1:
             raise ValueError("fused Automagic3 steps inside backward, so gradient_accumulation_steps must be 1")
+        self._rotate_every()  # a bad window length stops the run here, before the model is loaded
         resume = config.get("train", {}).get("resume_from")
         self.resume_dir = Path(resume) if resume else None
         self.resume_state: dict[str, Any] | None = None
@@ -68,7 +69,12 @@ class Krea2FinetuneTrainer(Krea2LoRATrainer):
         load_for_finetune(self, lambda text: print(text, flush=True))
 
     def _rotate_every(self) -> int:
-        return max(int((self.config.get("finetune", {}) or {}).get("rotate_every", 100) or 100), 1)
+        """``finetune.rotate_every`` steps per window; left out or null it is 100, below 1 it is an error."""
+        value = (self.config.get("finetune", {}) or {}).get("rotate_every")
+        every = 100 if value is None else int(value)
+        if every < 1:
+            raise ValueError(f"finetune.rotate_every must be at least 1 step (leave it out for 100), got {value}")
+        return every
 
     def _automagic_kwargs(self) -> dict[str, Any]:
         train_config = self.config["train"]

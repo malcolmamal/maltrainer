@@ -30,7 +30,7 @@ def test_the_window_follows_the_step_through_the_cycle_of_four_every_rotate_ever
 
 
 @pytest.mark.parametrize(
-    ("finetune", "every"), [({}, 100), ({"rotate_every": 0}, 100), ({"rotate_every": 7}, 7), (None, 100)]
+    ("finetune", "every"), [({}, 100), ({"rotate_every": None}, 100), ({"rotate_every": 7}, 7), (None, 100)]
 )
 def test_rotate_every_defaults_to_one_hundred_steps(workspace: Workspace, finetune: Any, every: int) -> None:
     workspace.add_images(1)
@@ -38,6 +38,17 @@ def test_rotate_every_defaults_to_one_hundred_steps(workspace: Workspace, finetu
     config["finetune"] = finetune
 
     assert Krea2FinetuneTrainer(config)._rotate_every() == every
+
+
+@pytest.mark.parametrize("value", [0, -3])
+def test_a_rotate_every_below_one_is_refused_at_construction_not_read_as_the_default(
+    workspace: Workspace, value: int
+) -> None:
+    workspace.add_images(1)
+    config = workspace.finetune_config(finetune={"rotate_every": value})
+
+    with pytest.raises(ValueError, match=r"finetune\.rotate_every must be at least 1"):
+        Krea2FinetuneTrainer(config)
 
 
 def test_each_window_comes_up_in_turn_and_the_log_says_which(
