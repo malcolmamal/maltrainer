@@ -24,6 +24,7 @@ from typing import Any
 
 import torch
 
+from maltrainer.control.launch import make_preview_host_keys
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.models.moss_image.lora import DEFAULT_SKIP_BLOCKS, MOSSImageLoRANetwork
 from maltrainer.trainers.moss_image.advice import StepAdvice
@@ -151,7 +152,7 @@ class MOSSImageLoRATrainer(PreviewHooks, StepAdvice, ImageLoRATrainer):
     # speed leaves out previews and pauses; previews and the sample: reload run at the step boundaries.
 
     def _make_keys(self) -> KeyCommands | None:
-        return KeyCommands(menu=self._preview_menu)
+        return make_preview_host_keys(KeyCommands, self)
 
     def _before_loop(self, total_steps: int) -> None:
         self.monitor = TrainMonitor(every=int(self.config["train"].get("monitor_every", 100) or 100))

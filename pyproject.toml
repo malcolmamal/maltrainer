@@ -81,10 +81,18 @@ paths = [
 ]
 min_confidence = 60
 # FastAPI registers the handlers it decorates (on the app, and on the job routes' router).
-ignore_decorators = ["@app.get", "@app.post", "@app.websocket", "@router.get", "@router.post", "@router.websocket"]
+ignore_decorators = [
+    "@app.get", "@app.post", "@app.websocket", "@router.get", "@router.post", "@router.websocket",
+    # The control API: PATCH routes, and pydantic runs a model_validator by decoration (maltrainer/control/).
+    "@router.patch", "@model_validator",
+]
 ignore_names = [
     # Pydantic response fields and dataclass fields: read by FastAPI / by the garbage collector, not by name.
     "models_root", "missing_files", "estimated_minutes", "reader_task", "monitor_task",
+    # The control API's response fields (read by pydantic when it builds RunStatus from the stats dict), and the
+    # uvicorn.Server flag that stops the server (uvicorn reads it).
+    "window_steps", "window_loss", "window_loss_bands", "window_prior", "seconds_per_step", "percent",
+    "eta_seconds", "published_seconds_ago", "should_exit",
     # nn.Module signatures that overrides must keep (load_state_dict, parameters), and its repr hook.
     "assign", "strict", "recurse", "extra_repr",
     # Attributes set on objects other libraries read: PyAV streams, transformers configs and tokenizers.

@@ -161,9 +161,12 @@ class PreviewHooks:
     def _preview_menu(self) -> None:
         """Key e: the preview settings menu. Rows to choose from are the labelled variants (a
         finetune with EMA: raw and ema); prompts added mid-run are encoded first if needed."""
-        labels = [label for label, _ in self._preview_variants() if label]
-        run_menu(self.previews, labels, read_key, ready=self._preview_ready)
+        run_menu(self.previews, self._preview_row_labels(), read_key, ready=self._preview_ready)
         self._encode_new_prompts()
+
+    def _preview_row_labels(self) -> list[str]:
+        """The rows the preview settings can switch (the menu's, and the control API's)."""
+        return [label for label, _ in self._preview_variants() if label]
 
     def _preview_ready(self, prompt: str) -> bool:
         p = self.previews

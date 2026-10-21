@@ -157,3 +157,20 @@ def test_a_finite_loss_resets_the_non_finite_count() -> None:
 
     assert monitor.bad_in_a_row == 1
     assert monitor.losses == [0.3]
+
+
+def test_the_monitor_snapshot_is_the_window_as_numbers() -> None:
+    monitor = TrainMonitor(every=100)
+    assert monitor.snapshot()["window_loss"] is None
+    assert monitor.snapshot()["seconds_per_step"] is None
+
+    monitor.record(0.2, 0.1, prior=0.01)
+    monitor.record(0.6, 0.9, prior=0.03)
+    monitor.record(float("nan"), 0.5)
+    snapshot = monitor.snapshot()
+
+    assert snapshot["last_loss"] == 0.6
+    assert snapshot["window_loss"] == pytest.approx(0.4)
+    assert snapshot["window_loss_bands"] == {"low": 0.2, "high": 0.6}
+    assert snapshot["window_prior"] == pytest.approx(0.02)
+    assert snapshot["window_steps"] == 0

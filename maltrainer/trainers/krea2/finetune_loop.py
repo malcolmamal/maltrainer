@@ -12,6 +12,8 @@ from typing import Any, cast
 import torch
 from tqdm import tqdm
 
+from maltrainer.control.launch import make_keys
+from maltrainer.control.stats import RunView
 from maltrainer.trainers.krea2.finetune_host import FinetuneHost
 from maltrainer.training.steps import plan_training_steps
 from maltrainer.utils.keyboard import KeyCommands
@@ -53,8 +55,8 @@ def train(host: FinetuneHost) -> None:
     progress_bar = tqdm(
         total=total_steps, initial=host.global_step, desc="Training Steps", disable=not host.is_main_process
     )
-    keys = KeyCommands() if host.is_main_process else None
     monitor = TrainMonitor(every=int(train_config.get("monitor_every", 100) or 100))
+    keys = make_keys(KeyCommands, host.config, RunView(host, monitor)) if host.is_main_process else None
     stopped = _epochs(host, (resume, same_data), (num_epochs, total_steps), (progress_bar, keys, monitor))
 
     progress_bar.close()

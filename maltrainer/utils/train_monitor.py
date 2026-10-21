@@ -83,6 +83,10 @@ class WeightDrift:
         return text
 
 
+def _mean(values: Sequence[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
 class TrainMonitor:
     def __init__(self, every: int = 100, stop_after: int = 3, drift: WeightDrift | None = None):
         self.every = max(int(every), 1)
@@ -90,6 +94,7 @@ class TrainMonitor:
         self.drift = drift
         self.bad_in_a_row = 0
         self.steps_total = 0  # optimizer steps since this monitor (and the drift's W0) started
+        self.last_loss: float | None = None  # the latest finite micro-step loss, kept across windows
         self._reset()
 
     def _reset(self) -> None:
@@ -114,6 +119,7 @@ class TrainMonitor:
                 )
             return
         self.bad_in_a_row = 0
+        self.last_loss = loss
         self.losses.append(loss)
         for name, lo, hi in BANDS:
             if lo <= sigma < hi:
@@ -134,6 +140,19 @@ class TrainMonitor:
             return
         logger.info("[monitor] %s", self.summary(step, total, optimizer))
         self._reset()
+
+    def snapshot(self) -> dict[str, Any]:
+        """The window since the last summary as numbers (the control API's stats): mean loss, the loss per noise
+        band, the prior's mean, seconds per optimizer step. A key is None until the window has data for it."""
+        elapsed = time.time() - self.started - self.excluded
+        return {
+            "window_steps": self.steps,
+            "last_loss": self.last_loss,
+            "window_loss": _mean(self.losses),
+            "window_loss_bands": {name: sum(values) / len(values) for name, values in self.bands.items() if values},
+            "window_prior": _mean(self.priors),
+            "seconds_per_step": elapsed / self.steps if self.steps else None,
+        }
 
     def summary(self, step: int, total: int, optimizer: Any = None) -> str:
         parts = [f"step {step}/{total}"]

@@ -14,6 +14,7 @@ from typing import Any, cast
 import torch
 from tqdm import tqdm
 
+from maltrainer.control.launch import make_preview_host_keys
 from maltrainer.finetune.regularisation import set_step_scale
 from maltrainer.trainers.moss_image.finetune_resume import accumulation, build_monitor, resume_position, start_ema
 from maltrainer.training.steps import plan_training_steps
@@ -71,8 +72,8 @@ def train(host: Any) -> None:
     progress_bar = tqdm(
         total=total_steps, initial=host.global_step, desc="Training Steps", disable=not host.is_main_process
     )
-    keys = KeyCommands(menu=host._preview_menu, gallery=host._run_gallery if host.gallery.enabled else None)
     monitor = build_monitor(host, train_config)
+    keys = make_preview_host_keys(KeyCommands, host, monitor, host._run_gallery if host.gallery.enabled else None)
     if resume is None:
         monitor.exclude(host._maybe_preview(0, total_steps))  # the base model: what later previews compare with
     stopped = _epochs(host, (resume, same_data), (num_epochs, total_steps), (progress_bar, keys, monitor))

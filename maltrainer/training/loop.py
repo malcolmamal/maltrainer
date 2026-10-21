@@ -9,6 +9,8 @@ from typing import Any, ClassVar
 import torch
 from tqdm import tqdm
 
+from maltrainer.control.launch import make_keys
+from maltrainer.control.stats import RunView
 from maltrainer.training.progress import log_step
 from maltrainer.training.steps import plan_training_steps
 from maltrainer.utils.ema import OffloadedParameterEMA, ParameterEMA
@@ -94,7 +96,7 @@ class StepLoop:
         )
 
     def _make_keys(self) -> KeyCommands | None:
-        return KeyCommands() if self.key_commands else None
+        return make_keys(KeyCommands, self.config, RunView(self)) if self.key_commands else None
 
     def _loop(
         self, network: Any, num_epochs: int, total_steps: int, bar: Any, keys: KeyCommands | None

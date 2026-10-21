@@ -13,11 +13,12 @@ ROOT = Path(__file__).resolve().parents[2] / "maltrainer"
 ALLOWED = {
     "data": set(),
     "optimizers": set(),
-    "training": {"data", "optimizers", "utils"},
+    "control": {"utils"},
+    "training": {"control", "data", "optimizers", "utils"},
     "utils": {"data", "finetune"},
     "finetune": {"data", "models", "utils"},
     "models": {"finetune", "training"},
-    "trainers": {"data", "finetune", "models", "optimizers", "training", "utils"},
+    "trainers": {"control", "data", "finetune", "models", "optimizers", "training", "utils"},
 }
 
 

@@ -464,6 +464,7 @@ Top to bottom, a package may import from the ones below it:
 train_*.py               entry points (also: scripts/, backend/ for its own needs)
 maltrainer/trainers/     one model's pipeline
 maltrainer/training/     shared trainer machinery
+maltrainer/control/      the control API (REST, served from the trainer process)
 maltrainer/models/  maltrainer/finetune/  maltrainer/optimizers/  maltrainer/data/  maltrainer/utils/
 ```
 
@@ -474,11 +475,12 @@ non-test code; a function-level import counts):
 |---|---|
 | `data` | nothing |
 | `optimizers` | nothing |
-| `training` | `data`, `optimizers`, `utils` |
+| `control` | `utils` |
+| `training` | `control`, `data`, `optimizers`, `utils` |
 | `utils` | `data`, `finetune` |
 | `finetune` | `data`, `models`, `utils` |
 | `models` | `finetune`, `training` (one import each, see below) |
-| `trainers` | `data`, `finetune`, `models`, `optimizers`, `training`, `utils` |
+| `trainers` | `control`, `data`, `finetune`, `models`, `optimizers`, `training`, `utils` |
 | `train_*.py` | all of the above, and `trainers` |
 | `scripts/` | `data`, `finetune`, `models`, `utils` |
 | `backend/` | `data.walk` only |
