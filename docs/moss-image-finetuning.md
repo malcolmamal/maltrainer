@@ -458,6 +458,8 @@ In a console window, at the next step:
   `dataset.trigger`); that is deliberate: it costs nothing until `g` is pressed except encoding its prompts once at the
   start (cached), and it never changes the training or a resume. Turn it off with `sample.gallery: false`.
 - `h` lists the keys.
+- The same actions, and the run's stats, are available over HTTP while it trains: set `control_api.enabled: true` and
+  open `/docs` on the port the log names. See the [control API](control-api.md).
 
 Each save of a full model takes ~10-20 s, with 10 GB per checkpoint.
 

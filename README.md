@@ -46,6 +46,9 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   video clips with sound, and audio-only recordings, using ComfyUI's single-file checkpoints. It
   includes Fizgig's default recipe. See the [MiniMax H3 training guide](docs/minimax-h3-lora-training.md).
 - **Optimizers**: AdamW 8-bit, Prodigy, and Automagic3 (self-tuning learning rate)
+- **Control API**: an opt-in REST API with Swagger, served by the running trainer itself, to check a run's stats
+  and steer it: pause and resume, save, save and stop, render the gallery, and change which prompts render
+  previews and how often. See the [control API](docs/control-api.md).
 - **Web UI**: Pick a dataset, model and optimizer, train for a number of epochs or an exact number of steps, and
   follow live progress from a job queue
 - **YAML Configuration**: Simple YAML-based configuration system
