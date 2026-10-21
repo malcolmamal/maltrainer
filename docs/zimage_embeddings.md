@@ -7,7 +7,7 @@
 ## Overview
 Textual Inversion (TI) is a technique for teaching a model new concepts (objects, styles, faces) by finding a new "word" in the text encoder's vocabulary that represents that concept. Unlike LoRA, which modifies the model's *processing* weights, TI only optimizes the *input* vector for a specific token.
 
-For Z-Image, which uses the powerful **Qwen2** LLM as its text encoder, Textual Inversion is particularly interesting. Because the text encoder is a full language model, the embedding space is rich and semantically dense, potentially allowing TI to be more effective than in older SD1.5/SDXL models.
+Z-Image uses a Qwen2 LLM as its text encoder, so the hope was that its rich embedding space would make a single trained vector effective. In practice it did not: the vectors this trainer produced did not carry a usable likeness or concept, which is why the trainer is deprecated. The rest of this page describes what the trainer does, for anyone reusing it.
 
 ## How it Works
 1.  **Architecture**: Z-Image typically uses a Transformer for image generation and Qwen2 for text encoding.
@@ -35,8 +35,8 @@ For Z-Image, which uses the powerful **Qwen2** LLM as its text encoder, Textual 
 | **Concept Bleed** | Can sometimes "overcook" the model or bleed into other concepts if not regularized. | minimal. The model itself remains unchanged. |
 
 ### Recommendation
-*   **Use LoRA** if you need high-fidelity character likeness (e.g., a specific person's face), complex styles, or if the model struggles to generate the concept at all.
-*   **Use Embedding** if you want a lightweight solution for an artistic style, a simple object, or if you want to share a concept easily without large downloads.
+*   **Use LoRA** for Z-Image: character likeness, styles and objects (see [zimage_lora_training.md](zimage_lora_training.md)).
+*   The embedding trainer is kept only as a starting point for other models; the small file size is its one real advantage, and on Z-Image it did not pay for the missing fidelity.
 
 ## Usage in Maltrainer
 
