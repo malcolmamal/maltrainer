@@ -12,6 +12,11 @@ Run the quality gate before every commit: `.venv/Scripts/python -m maltrainer_qu
   (`train_moss_image_finetune.py`, `maltrainer/finetune/`, `maltrainer/models/moss_image/`) must be called out
   separately: it is in daily use, and the exact-resume tests in `tests/trainers/moss_image/` must keep passing.
 - **Tests** run real trainer code on tiny CPU models; only loaders are faked. Keep them annotated like the product code.
+- **Mutation testing** covers the pure-math modules (`maltrainer_quality/mutation_targets.py`). If a change touches
+  one of them or a test mapped to it, run `.venv/Scripts/python -m maltrainer_quality.mutation --changed` before
+  merging: a module below its floor fails, a surviving mutant that is not equivalent gets an assertion (never a
+  product-code edit), floors are only raised. It is not in the default gate. Rules and the scores:
+  `docs/mutation-testing.md`.
 - Shared helpers live in `maltrainer/` (optimizers, finetune, data, utils); reuse them instead of copying between
   trainers.
 

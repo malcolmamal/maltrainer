@@ -97,6 +97,8 @@ ignore_names = [
     # (MiniMaxH3VideoMidBlock3d) and its latent rate. Candidates for deletion in phase 7.
     "epoch_order", "load_weights", "from_dict", "disable_gradient_checkpointing", "align_frame_count",
     "MiniMaxH3VideoMidBlock3d", "LATENTS_PER_SECOND",
+    # importlib calls the loader hook that serves a mutant's code (maltrainer_quality/mutation_worker.py).
+    "get_code",
 ]
 
 [tool.ruff]

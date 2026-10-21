@@ -365,6 +365,11 @@ python -m maltrainer_quality.requirements --write
 The gate fails when either lock is stale (`uv lock --check`, then a byte comparison with `uv export`) and when
 `pip-audit` finds a known vulnerability in `requirements.lock`; the audit needs network access, like `uv lock --check`.
 
+**Mutation testing** (not in the gate, it takes about five minutes): `python -m maltrainer_quality.mutation --changed`
+changes the pure-math modules one expression at a time and checks that the tests notice. Run it when a change touches
+one of those modules or their tests; see [docs/mutation-testing.md](docs/mutation-testing.md) for the policy, the
+scores and the equivalent mutants.
+
 ## Code layout
 
 A run goes from a thin `train_<model>_*.py` entry point to `maltrainer/trainers/<model>/` (that model's pipeline),
@@ -379,6 +384,7 @@ C4 diagrams.
 
 See `docs/` directory for detailed documentation:
 - [Code layout: where things live](docs/code-layout.md)
+- [Mutation testing: policy, scores, how to run](docs/mutation-testing.md)
 - [Architecture: C4 diagrams and description](docs/architecture.md)
 - [Finetuning walkthrough: setup, commands, troubleshooting](docs/finetune-tutorial.md)
 - [Krea 2 full finetuning on 32 GB (rotating windows)](docs/krea2-finetuning.md)

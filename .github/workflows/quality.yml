@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: quality-${{ github.ref }}
@@ -36,6 +37,41 @@ jobs:
         with:
           name: quality-reports
           path: reports/
+          if-no-files-found: ignore
+
+  # Not part of the gate: about five minutes. On a pull request it checks the targets whose module or tests
+  # changed (--changed); by hand (workflow_dispatch) it runs every target. Policy: docs/mutation-testing.md.
+  mutation:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra cpu --group dev --python 3.12
+
+      - name: Mutation testing, the targets this pull request touches
+        if: github.event_name == 'pull_request'
+        run: uv run --frozen --extra cpu python -m maltrainer_quality.mutation --changed --base origin/${{ github.base_ref }} --json mutation.json
+
+      - name: Mutation testing, every target
+        if: github.event_name == 'workflow_dispatch'
+        run: uv run --frozen --extra cpu python -m maltrainer_quality.mutation --all --json mutation.json
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation
+          path: mutation.json
           if-no-files-found: ignore
 
   frontend:
