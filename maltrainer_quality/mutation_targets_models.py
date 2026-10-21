@@ -71,4 +71,22 @@ MODELS_TARGETS: tuple[Target, ...] = (
         ),
         94.0,
     ),
+    Target(
+        "maltrainer/models/embedding.py",
+        ("tests/maltrainer/models/test_embedding.py",),
+        78.0,
+    ),
+    Target(
+        "maltrainer/models/minimax_h3/packing.py",
+        (
+            "tests/trainers/minimax_h3/test_packed_geometry.py",
+            "tests/maltrainer/models/minimax_h3/test_packing_math.py",
+        ),
+        97.0,
+    ),
+    Target(
+        "maltrainer/models/minimax_h3/video_frames.py",
+        ("tests/maltrainer/models/minimax_h3/test_video_vae_constants.py",),
+        94.0,
+    ),
 )

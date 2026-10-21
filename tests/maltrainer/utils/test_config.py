@@ -29,3 +29,11 @@ def test_the_saved_config_keeps_key_order_and_round_trips(tmp_path: Path) -> Non
     saved = tmp_path / "run" / "out" / "config.yaml"
     assert list(yaml.safe_load(saved.read_text(encoding="utf-8"))) == ["train", "model"]
     assert load_config(str(saved)) == config
+
+
+def test_the_saved_config_is_block_style_and_goes_into_a_folder_that_already_exists(tmp_path: Path) -> None:
+    save_config_to_output({"train": {"steps": 10}}, str(tmp_path))
+    save_config_to_output({"train": {"steps": 20}}, str(tmp_path))
+
+    expected = "train:" + chr(10) + "  steps: 20" + chr(10)
+    assert (tmp_path / "config.yaml").read_text(encoding="utf-8") == expected

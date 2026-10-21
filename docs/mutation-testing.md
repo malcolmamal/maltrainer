@@ -8,14 +8,14 @@ on the pure-math modules only (RoPE, sigma and schedule maths, optimizer maths, 
 rotation): fast CPU tests, no model weights, and a wrong constant there trains a worse model without raising
 anything.
 
-It is **not** in the default gate (`python -m maltrainer_quality`): the whole set takes about five minutes.
+It is **not** in the default gate (`python -m maltrainer_quality`): the whole set takes five to eight minutes.
 When it must be run is under "Policy" below.
 
 ## Running it
 
 ```bash
 .venv/Scripts/python -m maltrainer_quality.mutation --changed        # the targets a change touches (git)
-.venv/Scripts/python -m maltrainer_quality.mutation --all            # every target, about 5 minutes
+.venv/Scripts/python -m maltrainer_quality.mutation --all            # every target, 5 to 8 minutes
 .venv/Scripts/python -m maltrainer_quality.mutation maltrainer/training/sigma.py   # one or more modules
 .venv/Scripts/python -m maltrainer_quality.mutation --list           # targets, floors and the tests of each
 ```
@@ -97,13 +97,29 @@ assertions added in the same commit as this document. The floor is the measured 
 | `optimizers/automagic3_base.py` (b) | 3 / 3 | 100.0 | 3 / 3 | 100.0 | 98 |
 | `models/moss_image/model_config.py` (b) | 23 / 31 | 74.2 | 30 / 31 | 96.8 | 94 |
 | `utils/ema.py` (b) | 51 / 73 | 69.9 | 56 / 73 | 76.7 | 74 |
+| `training/progress.py` (c) | 15 / 41 | 36.6 | 40 / 41 | 97.6 | 95 |
+| `training/dop.py` (c) | 17 / 19 | 89.5 | 19 / 19 | 100.0 | 98 |
+| `finetune/regularisation.py` (c) | 7 / 7 | 100.0 | 7 / 7 | 100.0 | 98 |
+| `finetune/resume.py` (c) | 8 / 8 | 100.0 | 8 / 8 | 100.0 | 98 |
+| `finetune/extract.py` (c) | 87 / 98 | 88.8 | 97 / 98 | 99.0 | 97 |
+| `data/walk.py` (c) | 4 / 4 | 100.0 | 4 / 4 | 100.0 | 98 |
+| `data/media.py` (c) | 45 / 59 | 76.3 | 54 / 59 | 91.5 | 89 |
+| `utils/batching.py` (c) | 5 / 5 | 100.0 | 5 / 5 | 100.0 | 98 |
+| `utils/config.py` (c) | 10 / 12 | 83.3 | 12 / 12 | 100.0 | 98 |
+| `models/embedding.py` (c) | 14 / 20 | 70.0 | 16 / 20 | 80.0 | 78 |
+| `models/minimax_h3/packing.py` (c) | 123 / 127 | 96.9 | 126 / 127 | 99.2 | 97 |
+| `models/minimax_h3/video_frames.py` (c) | 24 / 25 | 96.0 | 24 / 25 | 96.0 | 94 |
 
 (a) Added to the set after the first run; its tests did not change.
 
 (b) Added later, tests only (these cover MOSS-Image finetune and Automagic3 code: no product code was touched).
 
-All 17 modules: 682 / 795 killed (85.8 %) before, 797 / 824 (96.7 %) after; the remaining 27 survivors are the
-equivalent mutants below.
+(c) Added in the second round (pure logic: progress line, DOP, finetune extraction and resume checks, media timing,
+packing). Before is the first run on the tests as they were; `video_frames.py` was mapped to the tests that already
+pinned it (a first run with a wrong mapping gave 0 / 25). No product code was touched.
+
+All 33 modules: 1157 / 1374 killed (84.2 %) before, 1343 / 1403 (95.7 %) after; the remaining 60 survivors are the
+equivalent mutants below (the first 17 modules: 682 / 795 before, 797 / 824 after).
 
 `training/steps.py` was 15 % because `plan_training_steps` and `epoch_order` were only exercised through trainer
 runs with a default config. The other gaps were the RoPE theta (10000 against 10001 changes an angle by about
@@ -112,8 +128,8 @@ defaults of `sample` (steps, seed, cfg, device), the batched negative prompt, th
 second moments (never run with a non-trivial state), the bit packing of the sign history and the vote masks,
 weight decay of exactly 1, and the batch dimension of the factored moments.
 
-Runtime for the full set: 4 to 5.5 minutes wall time (4 or 6 workers, on a machine that was also running other
-work); one module takes 5 s to 1 min, so `--changed` is usually under two minutes. Adding workers helps until the
+Runtime for the full set: 4 to 5.5 minutes wall time for the first 17 modules, 7.5 minutes for all 33 (4 workers, on a
+machine that was also running other work); one module takes 5 s to 1 min, so `--changed` is usually under two minutes. Adding workers helps until the
 cores or the memory run out.
 
 ## Equivalent mutants
@@ -143,6 +159,15 @@ Judged by reading the code. Line numbers are those of the measured commit. Add a
 | `utils/ema.py` 103, 133, 137, 143 (x4) | `non_blocking=True` to `False` | Only changes how a CUDA copy is queued; on CPU the copy is the same. |
 | `utils/ema.py` 108 | `daemon=True` to `False` | The thread is always joined by `wait()` before its result is read; the flag only matters at interpreter exit. |
 | `utils/ema.py` 111 (x2) | `chunk = 1 << 20` plus one on either operand | The chunk size is a cache-blocking choice; any size gives the same averages. |
+| `training/progress.py` 41 | `zip(..., strict=False)` to `True` | The groups and the rates come from the same optimizer: equal length. |
+| `finetune/extract.py` 97 | `full_matrices=False` to `True` | The factors use only the first `k` columns and rows of `u` and `vh`, and `s` is the same. |
+| `data/media.py` 42 | `last_time = 0.0` to `1.0` | `last_time` is read only after a frame was pushed, which sets it. |
+| `data/media.py` 56 | `<` to `<=` against `end - 1e-06` | A tick time equal to the end minus a millionth of a second is not reachable. |
+| `data/media.py` 132, 134, 137 | `copy=False` to `True`; the mono `repeat(wav, 2)` and `wav[:2]` to 3 | A copy has the same values; three repeated rows cut to `[:2]` are the two of the original; the resampler already gives at most 2 channels. |
+| `models/embedding.py` 45 | `num_vectors > 1` to `>= 1` | With one vector the extra-token range `range(1, 1)` is empty. |
+| `models/embedding.py` 97 (x2), 102 | the defaults `strict=True`, `assign=False`, `recurse=True` | Unused arguments of `nn.Module` signatures (`ARG002`). |
+| `models/minimax_h3/packing.py` 80 | `stack(..., dim=-1)` to `1` | Two 1-D tensors: the result is 2-D either way. |
+| `models/minimax_h3/video_frames.py` 19 | `frames - 5` to `frames + 5` | Only for clips on the 17k + 5 grid (its documented input) both give `k`; `align_frame_count` produces such counts. |
 | `finetune/classes.py` 22 | `"t0"` to another string | `match.lastgroup` is always set after a match; the fallback is unreachable. |
 | `models/minimax_h3/int8_rotation.py` 16 (x2) | `value > 1` to `>= 1`; `1` to `2` | `1 % 4` and `2 % 4` are not 0, so the loop stops at either. |
 | `models/minimax_h3/int8_rotation.py` 30, 33 | the loop counter starts at 5 or grows by 5 | The loop runs the same number of times for every power of four up to 4^8. |

@@ -79,6 +79,21 @@ def test_extra_vectors_get_numbered_tokens_and_reuse_the_last_init_token() -> No
     torch.testing.assert_close(embedding.get_embeddings(), torch.stack([_row("a"), _row("photo"), _row("photo")]))
 
 
+def test_the_defaults_are_the_sks_trigger_with_one_vector_started_from_a_photo() -> None:
+    tokenizer, _, embedding = _embedding()
+
+    assert tokenizer.convert_tokens_to_ids(["sks"]) == embedding.token_ids
+    torch.testing.assert_close(embedding.get_embeddings(), _row("a").unsqueeze(0))
+
+
+def test_vectors_past_the_init_text_repeat_its_last_token_not_its_second() -> None:
+    _, _, embedding = _embedding(num_vectors=4, init_text="a photo of")
+
+    torch.testing.assert_close(
+        embedding.get_embeddings(), torch.stack([_row("a"), _row("photo"), _row("of"), _row("of")])
+    )
+
+
 def test_a_trigger_already_in_the_vocabulary_is_rejected() -> None:
     with pytest.raises(ValueError, match="Token 'dog' may already exist"):
         _embedding(trigger_token="dog")

@@ -57,4 +57,57 @@ LOGIC_TARGETS: tuple[Target, ...] = (
         ),
         74.0,
     ),
+    Target(
+        "maltrainer/training/progress.py",
+        ("tests/maltrainer/training/test_base.py", "tests/maltrainer/training/test_progress.py"),
+        95.0,
+    ),
+    Target(
+        "maltrainer/training/dop.py",
+        ("tests/maltrainer/training/test_dop.py", "tests/trainers/krea2/test_lora_dop.py"),
+        98.0,
+    ),
+    Target(
+        "maltrainer/finetune/regularisation.py",
+        ("tests/maltrainer/finetune/test_regularisation.py",),
+        98.0,
+    ),
+    Target(
+        "maltrainer/finetune/resume.py",
+        ("tests/maltrainer/finetune/test_resume.py",),
+        98.0,
+    ),
+    Target(
+        "maltrainer/finetune/extract.py",
+        (
+            "tests/maltrainer/finetune/test_extract.py",
+            "tests/maltrainer/finetune/test_extract_ranks.py",
+            "tests/maltrainer/finetune/test_extract_pins.py",
+        ),
+        97.0,
+    ),
+    Target(
+        "maltrainer/data/walk.py",
+        ("tests/maltrainer/data/test_walk.py",),
+        98.0,
+    ),
+    Target(
+        "maltrainer/data/media.py",
+        (
+            "tests/maltrainer/data/test_media.py",
+            "tests/maltrainer/data/test_media_timing.py",
+            "tests/maltrainer/data/test_media_clock.py",
+        ),
+        89.0,
+    ),
+    Target(
+        "maltrainer/utils/batching.py",
+        ("tests/maltrainer/utils/test_batching.py",),
+        98.0,
+    ),
+    Target(
+        "maltrainer/utils/config.py",
+        ("tests/maltrainer/utils/test_config.py",),
+        98.0,
+    ),
 )
