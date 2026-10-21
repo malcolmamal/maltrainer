@@ -110,7 +110,18 @@ describe('JobPage', () => {
     http.expectOne('/api/jobs/j1').flush('boom', { status: 500, statusText: 'Server Error' });
     fixture.detectChanges();
 
-    expect(text(fixture, '.error')).toContain('500');
+    expect(text(fixture, '.error')).toBe('Failed to load job (HTTP 500)');
+  });
+
+  it('shows the backend detail when the job cannot be loaded', () => {
+    const fixture = setup('j1');
+    http
+      .expectOne('/api/jobs/j1')
+      .flush({ detail: 'Job not found' }, { status: 404, statusText: 'x' });
+    fixture.detectChanges();
+
+    expect(text(fixture, '.error')).toBe('Job not found');
+    expect(fixture.nativeElement.querySelector('.error').getAttribute('role')).toBe('alert');
   });
 
   it('appends log lines and marks stderr lines', () => {

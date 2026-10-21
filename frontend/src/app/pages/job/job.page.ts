@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal, OnDestroy } from '@
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 
+import { describeHttpError } from '../../services/http-error';
 import { JobStatusResponse, TrainerApiService } from '../../services/trainer-api.service';
 
 interface LogMessage {
@@ -46,7 +47,7 @@ export class JobPage implements OnDestroy {
         this.progressStep.set(job.progress?.step ?? 0);
         this.progressTotal.set(job.progress?.total ?? 0);
       },
-      error: (err) => this.error.set(err?.message ?? 'Failed to load job')
+      error: (err) => this.error.set(describeHttpError(err, 'Failed to load job'))
     });
 
     this.connectSocket(id);

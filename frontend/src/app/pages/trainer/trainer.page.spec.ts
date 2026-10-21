@@ -220,7 +220,7 @@ describe('TrainerPage', () => {
       fixture.detectChanges();
 
       expect(page.loading()).toBe(false);
-      expect(text('.error')).toContain('500');
+      expect(text('.error')).toBe('Failed to load datasets (HTTP 500)');
     });
 
     it('reports a model load failure using the backend detail', () => {
@@ -234,6 +234,19 @@ describe('TrainerPage', () => {
       fixture.detectChanges();
 
       expect(text('.error')).toBe('models broken');
+    });
+
+    it('reports a dataset load failure using the backend detail', () => {
+      fixture = TestBed.createComponent(TrainerPage);
+      page = fixture.componentInstance;
+      http
+        .expectOne('/api/datasets')
+        .flush({ detail: 'datasets root missing' }, { status: 500, statusText: 'x' });
+      http.expectOne('/api/models').flush([qwen]);
+      http.expectOne('/api/jobs').flush({ items: [] });
+      fixture.detectChanges();
+
+      expect(text('.error')).toBe('datasets root missing');
     });
   });
 
@@ -496,7 +509,7 @@ describe('TrainerPage', () => {
       start();
       jest.advanceTimersByTime(250);
       http.expectOne('/api/plan').flush({ detail: [] }, { status: 422, statusText: 'x' });
-      expect(page.planError()).toBe('Could not plan this run');
+      expect(page.planError()).toBe('Could not plan this run (HTTP 422)');
     });
 
     it('clears the plan and sends nothing when there is no dataset', () => {
@@ -593,13 +606,42 @@ describe('TrainerPage', () => {
       expect(page.jobs()[0].status).toBe('running');
     });
 
-    it('ignores a failure to start a job', () => {
+    it('shows the backend detail when starting a job fails', () => {
       start({ jobs: [queued] });
       answerPlan();
       page.startJob('q1');
-      http.expectOne('/api/jobs/q1/start').flush('x', { status: 409, statusText: 'Conflict' });
+      http
+        .expectOne('/api/jobs/q1/start')
+        .flush({ detail: 'Another job is running' }, { status: 409, statusText: 'Conflict' });
       http.expectNone('/api/jobs');
+      fixture.detectChanges();
+
+      const alert = root().querySelector('.jobActionError');
+      expect(alert?.textContent?.trim()).toBe('Another job is running');
+      expect(alert?.getAttribute('role')).toBe('alert');
       expect(page.error()).toBeNull();
+    });
+
+    it('falls back to a generic message with the status when starting a job fails', () => {
+      start({ jobs: [queued] });
+      answerPlan();
+      page.startJob('q1');
+      http.expectOne('/api/jobs/q1/start').flush('x', { status: 500, statusText: 'x' });
+      fixture.detectChanges();
+      expect(text('.jobActionError')).toBe('Failed to start the job (HTTP 500)');
+    });
+
+    it('clears the start error when the next start is attempted', () => {
+      start({ jobs: [queued] });
+      answerPlan();
+      page.startJob('q1');
+      http.expectOne('/api/jobs/q1/start').flush('x', { status: 500, statusText: 'x' });
+      page.startJob('q1');
+      expect(page.jobActionError()).toBeNull();
+      http.expectOne('/api/jobs/q1/start').flush({ status: 'started' });
+      http.expectOne('/api/jobs').flush({ items: [] });
+      fixture.detectChanges();
+      expect(root().querySelector('.jobActionError')).toBeNull();
     });
 
     it('starts the next job with the queue button and reloads', () => {
@@ -623,12 +665,89 @@ describe('TrainerPage', () => {
       expect(page.startingQueue()).toBe(false);
     });
 
-    it('refreshes jobs on demand and keeps the old list when loading fails', () => {
+    it('shows why starting the next job failed, preferring the backend detail', () => {
+      start();
+      answerPlan();
+      page.startNext();
+      http
+        .expectOne('/api/jobs/start-next')
+        .flush({ detail: 'Queue is empty' }, { status: 404, statusText: 'x' });
+      fixture.detectChanges();
+      expect(text('.jobActionError')).toBe('Queue is empty');
+
+      page.startNext();
+      http.expectOne('/api/jobs/start-next').flush('x', { status: 500, statusText: 'x' });
+      fixture.detectChanges();
+      expect(text('.jobActionError')).toBe('Failed to start the next job (HTTP 500)');
+    });
+
+    it('refreshes jobs on demand, keeps the old list and shows the error when loading fails', () => {
       start({ jobs: [queued] });
       answerPlan();
       all('.cardActions button')[0].click();
       http.expectOne('/api/jobs').flush('x', { status: 500, statusText: 'x' });
+      fixture.detectChanges();
+
       expect(page.jobs()).toHaveLength(1);
+      const alert = root().querySelector('.jobsError');
+      expect(alert?.textContent?.trim()).toBe('Failed to load jobs (HTTP 500)');
+      expect(alert?.getAttribute('role')).toBe('alert');
+    });
+
+    it('shows the backend detail when the job list cannot be loaded', () => {
+      start();
+      answerPlan();
+      page.loadJobs();
+      http.expectOne('/api/jobs').flush({ detail: 'db down' }, { status: 503, statusText: 'x' });
+      fixture.detectChanges();
+      expect(text('.jobsError')).toBe('db down');
+    });
+
+    it('shows a failing poll once, without duplicating it, and clears it on success', () => {
+      start();
+      answerPlan();
+      for (let i = 0; i < 3; i++) {
+        jest.advanceTimersByTime(3000);
+        http.expectOne('/api/jobs').flush('x', { status: 500, statusText: 'x' });
+        fixture.detectChanges();
+        expect(all('.jobsError')).toHaveLength(1);
+      }
+      const shown = root().querySelector('.jobsError');
+
+      jest.advanceTimersByTime(3000);
+      http.expectOne('/api/jobs').flush('x', { status: 500, statusText: 'x' });
+      fixture.detectChanges();
+      expect(root().querySelector('.jobsError')).toBe(shown);
+
+      jest.advanceTimersByTime(3000);
+      http.expectOne('/api/jobs').flush({ items: [running] });
+      fixture.detectChanges();
+      expect(root().querySelector('.jobsError')).toBeNull();
+      expect(page.jobsError()).toBeNull();
+    });
+
+    it('keeps polling after a failure and shows a later failure again', () => {
+      start();
+      answerPlan();
+      jest.advanceTimersByTime(3000);
+      http.expectOne('/api/jobs').flush('x', { status: 500, statusText: 'x' });
+      jest.advanceTimersByTime(3000);
+      http.expectOne('/api/jobs').flush({ items: [] });
+      jest.advanceTimersByTime(3000);
+      http.expectOne('/api/jobs').flush('x', { status: 502, statusText: 'x' });
+      fixture.detectChanges();
+      expect(text('.jobsError')).toBe('Failed to load jobs (HTTP 502)');
+    });
+
+    it('keeps the list error when a start action succeeds but the reload fails', () => {
+      start({ jobs: [queued] });
+      answerPlan();
+      page.startJob('q1');
+      http.expectOne('/api/jobs/q1/start').flush({ status: 'started' });
+      http.expectOne('/api/jobs').flush('x', { status: 500, statusText: 'x' });
+      fixture.detectChanges();
+      expect(text('.jobsError')).toBe('Failed to load jobs (HTTP 500)');
+      expect(root().querySelector('.jobActionError')).toBeNull();
     });
 
     it('polls the job list every three seconds and stops after destroy', () => {

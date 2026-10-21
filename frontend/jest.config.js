@@ -7,7 +7,7 @@ module.exports = {
     '!src/**/*.d.ts'
   ],
   coverageThreshold: {
-    global: { statements: 97, branches: 87, functions: 95, lines: 97 }
+    global: { statements: 98, branches: 92, functions: 96, lines: 98 }
   },
   preset: 'jest-preset-angular',
   setupFilesAfterEnv: ['<rootDir>/setup-jest.ts'],
