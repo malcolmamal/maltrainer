@@ -499,7 +499,9 @@ What holds, and what does not:
   - `models` reaches up into `training` once: `models/krea2/timesteps.py` imports `training.sigma`.
 
   Treat `models`, `finetune` and `utils` as one band of peers that must stay acyclic at module level, not at
-  package level.
+  package level. `tests/maltrainer/test_layering.py` enforces this: it pins the table above (a new dependency
+  between packages fails the test until the table in the test and here are changed together), forbids the library
+  importing `trainers` or an entry point, and fails on any import cycle between modules.
 - **Models know each other.** The shared INT8 ConvRot layers live in `models/minimax_h3/int8_*.py` and
   `comfy_quant*.py`, and `flux3`, `qwen_image_2_1` and `moss_image` import them (and each other's VAE, LoRA layer or
   text encoder pieces). The rule is: reuse, do not copy; the cost is that `minimax_h3` is more of a platform
@@ -646,7 +648,7 @@ flowchart LR
 - **Square or bucketed resolution depends on the model.** Qwen-Image 2.1 trains square 512x512 only; FLUX.3, Krea 2
   and MOSS-Image bucket on a 16 px grid around 512x512.
 - **Cross-package coupling**: the cycles and the model-to-model imports in 6.1. The `finetune`, `models` and `utils`
-  band can still grow import cycles at module level; nothing but review prevents it.
+  band is held acyclic at module level by `tests/maltrainer/test_layering.py`; the package-level back-edges stay as listed.
 - **Big files**: a MOSS-Image finetune save is about 10 GB plus a resume state of similar size (hard-linked when the
   weights are identical); saves are skipped, not failed, when the disk is too full, and the final save waits.
 - **Single points of loading**: a Hub download is a runtime network dependency of the Z-Image path only.

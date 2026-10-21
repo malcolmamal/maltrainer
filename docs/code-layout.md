@@ -21,7 +21,8 @@ maltrainer/utils/                  config, logging, previews and the preview men
 The root `train_*.py` files stay small on purpose (200 lines at most, like every Python file). Anything reusable
 moves into `maltrainer/`.
 The package layers are a guide, not a strict hierarchy: `models`, `finetune` and `utils` import each other in a few places
-(see the import table in [architecture.md](architecture.md)).
+(see the import table in [architecture.md](architecture.md) section 6.1; `tests/maltrainer/test_layering.py` pins that
+table and forbids module-level import cycles).
 
 ## Top level
 
