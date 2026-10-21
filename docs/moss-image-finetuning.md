@@ -454,6 +454,9 @@ In a console window, at the next step:
   encoder, and the gallery has its own random generator, so pressing it does not change a resume.
   Set `sample.gallery.count`, `sample.gallery.prompts` (per class word, `{trigger}` / `{class}`
   filled in) or `sample.gallery: false` in the config; maltrainer/utils/gallery.py has the defaults.
+  The gallery is on by default for any finetune that has people to show (`prior.classes`, or `prior.class_word` with
+  `dataset.trigger`); that is deliberate: it costs nothing until `g` is pressed except encoding its prompts once at the
+  start (cached), and it never changes the training or a resume. Turn it off with `sample.gallery: false`.
 - `h` lists the keys.
 
 Each save of a full model takes ~10-20 s, with 10 GB per checkpoint.
