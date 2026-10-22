@@ -7,14 +7,21 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Union
+from typing import Any, cast
 
 import torch
-from torch import nn
-from transformers import AutoTokenizer, Qwen3VLConfig, Qwen3VLModel
 from accelerate import init_empty_weights
+from torch import nn
+from transformers import AutoTokenizer, PreTrainedTokenizerBase, Qwen3VLConfig, Qwen3VLModel
 
 from maltrainer.models.minimax_h3.comfy_quant import has_comfy_quantized_layers, load_comfy_quantized_state_dict
+from maltrainer.models.minimax_h3.text_encoder_config import (
+    describe_text_config as _describe_text_config,
+)
+from maltrainer.models.minimax_h3.text_encoder_config import (
+    text_encoder_key as _text_encoder_key,
+)
+from maltrainer.models.minimax_h3.text_encoder_rotary import rebuild_text_rotary, rebuild_vision_rotary
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +33,7 @@ QWEN3VL_BOS_TOKEN_ID = 151643
 BUNDLED_TOKENIZER_ASSETS = Path(__file__).resolve().parent / "assets" / "text_encoder"
 
 
-def _resolve_tokenizer_assets(explicit: Union[str, Path, None]) -> Path:
+def _resolve_tokenizer_assets(explicit: str | Path | None) -> Path:
     """Return the directory holding the Qwen3-VL tokenizer assets."""
     candidate = Path(explicit) if explicit is not None else BUNDLED_TOKENIZER_ASSETS
     if not (candidate / "tokenizer.json").exists():
@@ -44,37 +51,10 @@ def _resolve_tokenizer_assets(explicit: Union[str, Path, None]) -> Path:
 MINIMAX_H3_TEXT_LAYERS = 50
 
 
-def _describe_text_config(text_config) -> str:
-    """Compact summary of the resolved text tower, for a startup sanity check.
-
-    Read defensively: transformers has reshuffled where RoPE settings live between
-    versions (rope_theta/rope_scaling vs. a merged rope_parameters dict), and a log line
-    must never be the thing that fails a training run.
-    """
-    fields = ["num_hidden_layers", "hidden_size", "num_attention_heads", "num_key_value_heads", "head_dim"]
-    parts = [f"{name}={getattr(text_config, name, '?')}" for name in fields]
-    rope = getattr(text_config, "rope_parameters", None)
-    if rope is None:
-        theta = getattr(text_config, "rope_theta", "?")
-        rope = {"rope_theta": theta, "rope_scaling": getattr(text_config, "rope_scaling", None)}
-    parts.append(f"rope={rope}")
-    return " ".join(parts)
-
-
-def _text_encoder_key(source_prefix: str) -> str:
-    if source_prefix.startswith("visual"):
-        return source_prefix
-    if source_prefix == "model":
-        return "language_model"
-    if source_prefix.startswith("model."):
-        return f"language_model.{source_prefix.removeprefix('model.')}"
-    return source_prefix
-
-
 class MiniMaxH3TextEncoder(nn.Module):
     """Wrapper for Qwen3-VL text encoder extracting layer-50 hidden states."""
 
-    def __init__(self, text_encoder_model: Qwen3VLModel, tokenizer: AutoTokenizer):
+    def __init__(self, text_encoder_model: Qwen3VLModel, tokenizer: PreTrainedTokenizerBase):
         super().__init__()
         self.model = text_encoder_model
         self.tokenizer = tokenizer
@@ -85,7 +65,7 @@ class MiniMaxH3TextEncoder(nn.Module):
     @torch.no_grad()
     def encode_prompts(
         self,
-        prompts: List[str],
+        prompts: list[str],
         device: torch.device,
         dtype: torch.dtype = torch.bfloat16,
         max_length: int = 1024,
@@ -145,13 +125,34 @@ class MiniMaxH3TextEncoder(nn.Module):
 
         res = hidden_states.to(dtype=dtype)
         self._prompt_cache[cache_key] = res
-        return res
+        return cast(torch.Tensor, res)
+
+
+def _load_plain_state_dict(model: Any, path: Path, dtype: torch.dtype) -> None:
+    """Assign a plain safetensors file onto the meta-built model.
+
+    The model is built on the meta device, so the weights have to be assigned (an in-place copy into a
+    meta tensor does nothing). The checkpoint may hold more layers than the truncated text tower (extra
+    keys are ignored); a text-tower weight it lacks is an error, not a silent hole.
+    """
+    from safetensors.torch import load_file
+
+    mapped_sd = {}
+    for k, v in load_file(str(path)).items():
+        if k.startswith(("visual.", "model.")):
+            prefix, _, suffix = k.rpartition(".")
+            mapped_sd[f"{_text_encoder_key(prefix)}.{suffix}"] = v.to(dtype) if v.is_floating_point() else v
+    result = model.load_state_dict(mapped_sd, strict=False, assign=True)
+    if result.missing_keys:
+        raise ValueError(
+            f"{path} lacks {len(result.missing_keys)} text-encoder weights, e.g. {result.missing_keys[:3]}"
+        )
 
 
 def load_minimax_h3_text_encoder(
-    text_encoder_path: Union[str, Path],
-    tokenizer_path: Union[str, Path, None] = None,
-    device: Union[str, torch.device] = "cuda",
+    text_encoder_path: str | Path,
+    tokenizer_path: str | Path | None = None,
+    device: str | torch.device = "cuda",
     dtype: torch.dtype = torch.bfloat16,
 ) -> MiniMaxH3TextEncoder:
     """Load Qwen3-VL text encoder (BF16 or NVFP4/AWQ) and tokenizer."""
@@ -172,41 +173,24 @@ def load_minimax_h3_text_encoder(
     # installed transformers expects, which hand-written kwargs do not. The only H3-specific
     # change is truncating the text tower to the layer it conditions on.
     config = Qwen3VLConfig.from_pretrained(str(asset_dir))
-    config.text_config.num_hidden_layers = MINIMAX_H3_TEXT_LAYERS
-    config.text_config.use_cache = False
-    logger.info("H3 text tower: %s", _describe_text_config(config.text_config))
+    text_config: Any = config.text_config
+    text_config.num_hidden_layers = MINIMAX_H3_TEXT_LAYERS
+    text_config.use_cache = False
+    logger.info("H3 text tower: %s", _describe_text_config(text_config))
 
     with init_empty_weights(include_buffers=True):
-        model = Qwen3VLModel(config)
+        model: Any = cast(Any, Qwen3VLModel)(config)  # PreTrainedModel.to is typed as an unbound _Wrapped
         model.language_model.norm = nn.Identity()
 
     if has_comfy_quantized_layers(text_encoder_path):
         logger.info("Loading Comfy NVFP4/AWQ quantized text encoder from %s", text_encoder_path)
-        load_comfy_quantized_state_dict(
-            model,
-            text_encoder_path,
-            key_map=_text_encoder_key,
-            output_dtype=dtype,
-        )
+        load_comfy_quantized_state_dict(model, text_encoder_path, key_map=_text_encoder_key, output_dtype=dtype)
     else:
         logger.info("Loading text encoder safetensors from %s", text_encoder_path)
-        from safetensors.torch import load_file
-        sd = load_file(str(text_encoder_path))
-        mapped_sd = {}
-        for k, v in sd.items():
-            if k.startswith(("visual.", "model.")):
-                prefix, _, suffix = k.rpartition(".")
-                target_key = f"{_text_encoder_key(prefix)}.{suffix}"
-                mapped_sd[target_key] = v
-        model.load_state_dict(mapped_sd, strict=False)
+        _load_plain_state_dict(model, text_encoder_path, dtype)
 
-    vision_config = config.vision_config
-    vision_head_dim = vision_config.hidden_size // vision_config.num_heads
-    model.visual.rotary_pos_emb = type(model.visual.rotary_pos_emb)(vision_head_dim // 2).to(device)
-    model.language_model.rotary_emb = type(model.language_model.rotary_emb)(
-        config.text_config,
-        device=device,
-    )
+    model.visual.rotary_pos_emb = rebuild_vision_rotary(model.visual.rotary_pos_emb, config.vision_config, device)
+    model.language_model.rotary_emb = rebuild_text_rotary(model.language_model.rotary_emb, text_config, device)
 
     model.to(device)
     model.eval()

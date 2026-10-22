@@ -20,6 +20,7 @@ import {
   TrainerApiService,
   TrainPlan
 } from '../../services/trainer-api.service';
+import { describeHttpError } from '../../services/http-error';
 
 @Component({
   selector: 'app-trainer-page',
@@ -41,6 +42,10 @@ export class TrainerPage implements OnDestroy {
   readonly starting = signal(false);
   readonly jobs = signal<JobStatusResponse[]>([]);
   readonly startingQueue = signal(false);
+  /** Why the last list refresh failed; cleared by the next successful one. */
+  readonly jobsError = signal<string | null>(null);
+  /** Why the last Start / Start next click failed; cleared by the next attempt. */
+  readonly jobActionError = signal<string | null>(null);
 
   readonly models = signal<ModelInfo[]>([]);
   readonly selectedModelId = signal<string>('');
@@ -98,7 +103,7 @@ export class TrainerPage implements OnDestroy {
           },
           error: (err) => {
             this.plan.set(null);
-            this.planError.set(this.describeError(err, 'Could not plan this run'));
+            this.planError.set(describeHttpError(err, 'Could not plan this run'));
           }
         });
       }, 250);
@@ -118,7 +123,7 @@ export class TrainerPage implements OnDestroy {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err?.message ?? 'Failed to load datasets');
+        this.error.set(describeHttpError(err, 'Failed to load datasets'));
         this.loading.set(false);
       }
     });
@@ -133,7 +138,7 @@ export class TrainerPage implements OnDestroy {
           this.selectModel(preferred.id);
         }
       },
-      error: (err) => this.error.set(this.describeError(err, 'Failed to load models'))
+      error: (err) => this.error.set(describeHttpError(err, 'Failed to load models'))
     });
   }
 
@@ -158,20 +163,25 @@ export class TrainerPage implements OnDestroy {
 
   loadJobs() {
     this.api.listJobs().subscribe({
-      next: (resp) => this.jobs.set(resp.items),
-      error: () => undefined
+      next: (resp) => {
+        this.jobs.set(resp.items);
+        this.jobsError.set(null);
+      },
+      error: (err) => this.jobsError.set(describeHttpError(err, 'Failed to load jobs'))
     });
   }
 
   startNext() {
     this.startingQueue.set(true);
+    this.jobActionError.set(null);
     this.api.startNextJob().subscribe({
       next: () => {
         this.startingQueue.set(false);
         this.loadJobs();
       },
-      error: () => {
+      error: (err) => {
         this.startingQueue.set(false);
+        this.jobActionError.set(describeHttpError(err, 'Failed to start the next job'));
       }
     });
   }
@@ -216,36 +226,22 @@ export class TrainerPage implements OnDestroy {
         this.planRevision.update((v) => v + 1);
       },
       error: (err) => {
-        this.error.set(this.describeError(err, 'Failed to start training'));
+        this.error.set(describeHttpError(err, 'Failed to start training'));
         this.starting.set(false);
       }
     });
   }
 
   startJob(jobId: string) {
+    this.jobActionError.set(null);
     this.api.startJob(jobId).subscribe({
       next: () => this.loadJobs(),
-      error: () => undefined
+      error: (err) => this.jobActionError.set(describeHttpError(err, 'Failed to start the job'))
     });
   }
 
   modelLabel(id: string): string {
     return this.models().find((m) => m.id === id)?.label ?? id;
-  }
-
-  private describeError(err: unknown, fallback: string): string {
-    const e = err as { error?: { detail?: unknown }; message?: string };
-    const detail = e?.error?.detail;
-    if (typeof detail === 'string') return detail;
-    if (Array.isArray(detail)) {
-      return (
-        detail
-          .map((d: { msg?: string }) => d?.msg ?? '')
-          .filter(Boolean)
-          .join('; ') || fallback
-      );
-    }
-    return e?.message ?? fallback;
   }
 
   ngOnDestroy() {

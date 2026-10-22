@@ -14,26 +14,32 @@ posterior mean with ``(z - mean) / std`` (Wan21.process_in, scale_factor 1.0).
 
 from __future__ import annotations
 
+import itertools
 import logging
 from pathlib import Path
-from typing import Union
+from typing import cast
 
 import torch
 import torch.nn.functional as F
 from safetensors.torch import load_file
 from torch import nn
 
+from maltrainer.models.krea2.vae_constants import LATENTS_MEAN, LATENTS_STD
+
 logger = logging.getLogger(__name__)
 
-# comfy/latent_formats.py Wan21
-LATENTS_MEAN = (
-    -0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508,
-    0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503, -0.2921,
-)
-LATENTS_STD = (
-    2.8184, 1.4541, 2.3275, 2.6558, 1.2196, 1.7708, 2.6052, 2.0743,
-    3.2687, 2.1526, 2.8652, 1.5579, 1.6382, 1.1253, 2.8251, 1.9160,
-)
+__all__ = [
+    "LATENTS_MEAN",
+    "LATENTS_STD",
+    "AttentionBlock",
+    "CausalConv2d",
+    "Krea2VAE",
+    "RMSNorm",
+    "Resample",
+    "ResidualBlock",
+    "WanImageEncoder",
+    "load_krea2_vae",
+]
 
 
 class CausalConv2d(nn.Module):
@@ -54,25 +60,30 @@ class RMSNorm(nn.Module):
 
     def __init__(self, dim: int, images: bool):
         super().__init__()
-        self.scale = dim ** 0.5
+        self.scale = dim**0.5
         self.gamma = nn.Parameter(torch.ones((dim, 1, 1) if images else (dim, 1, 1, 1)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gamma = self.gamma.reshape(-1, 1, 1).to(x.dtype)
-        return F.normalize(x, dim=1) * self.scale * gamma
+        return cast(torch.Tensor, F.normalize(x, dim=1) * self.scale * gamma)
 
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int):
         super().__init__()
         self.residual = nn.Sequential(
-            RMSNorm(in_dim, images=False), nn.SiLU(), CausalConv2d(in_dim, out_dim, 3, padding=1),
-            RMSNorm(out_dim, images=False), nn.SiLU(), nn.Dropout(0.0), CausalConv2d(out_dim, out_dim, 3, padding=1),
+            RMSNorm(in_dim, images=False),
+            nn.SiLU(),
+            CausalConv2d(in_dim, out_dim, 3, padding=1),
+            RMSNorm(out_dim, images=False),
+            nn.SiLU(),
+            nn.Dropout(0.0),
+            CausalConv2d(out_dim, out_dim, 3, padding=1),
         )
         self.shortcut = CausalConv2d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
-    def forward(self, x):
-        return self.residual(x) + self.shortcut(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return cast(torch.Tensor, self.residual(x) + self.shortcut(x))
 
 
 class AttentionBlock(nn.Module):
@@ -82,13 +93,12 @@ class AttentionBlock(nn.Module):
         self.to_qkv = nn.Conv2d(dim, dim * 3, 1)
         self.proj = nn.Conv2d(dim, dim, 1)
 
-    def forward(self, x):
-        identity = x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, h, w = x.shape
         q, k, v = self.to_qkv(self.norm(x)).chunk(3, dim=1)
         q, k, v = (t.reshape(b, 1, c, h * w).transpose(-1, -2) for t in (q, k, v))
         out = F.scaled_dot_product_attention(q, k, v).transpose(-1, -2).reshape(b, c, h, w)
-        return self.proj(out) + identity
+        return cast(torch.Tensor, self.proj(out) + x)
 
 
 class Resample(nn.Module):
@@ -99,29 +109,38 @@ class Resample(nn.Module):
         self.resample = nn.Sequential(nn.ZeroPad2d((0, 1, 0, 1)), nn.Conv2d(dim, dim, 3, stride=2))
         self.temporal = temporal
 
-    def forward(self, x):
-        return self.resample(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return cast(torch.Tensor, self.resample(x))
 
 
 class WanImageEncoder(nn.Module):
-    def __init__(self, dim: int = 96, z_dim: int = 16, dim_mult=(1, 2, 4, 4), num_res_blocks: int = 2,
-                 temporal_downsample=(False, True, True), image_channels: int = 3):
+    def __init__(
+        self,
+        dim: int = 96,
+        z_dim: int = 16,
+        dim_mult: tuple[int, ...] = (1, 2, 4, 4),
+        num_res_blocks: int = 2,
+        temporal_downsample: tuple[bool, ...] = (False, True, True),
+        image_channels: int = 3,
+    ) -> None:
         super().__init__()
-        dims = [dim * u for u in (1,) + tuple(dim_mult)]
+        dims = [dim * u for u in (1, *tuple(dim_mult))]
         self.conv1 = CausalConv2d(image_channels, dims[0], 3, padding=1)
-        layers = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
-            for _ in range(num_res_blocks):
-                layers.append(ResidualBlock(in_dim, out_dim))
-                in_dim = out_dim
+        layers: list[nn.Module] = []
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
+            layers += [ResidualBlock(in_dim if j == 0 else out_dim, out_dim) for j in range(num_res_blocks)]
             if i != len(dim_mult) - 1:
                 layers.append(Resample(out_dim, temporal_downsample[i]))
         self.downsamples = nn.Sequential(*layers)
-        self.middle = nn.Sequential(ResidualBlock(out_dim, out_dim), AttentionBlock(out_dim), ResidualBlock(out_dim, out_dim))
-        self.head = nn.Sequential(RMSNorm(out_dim, images=False), nn.SiLU(), CausalConv2d(out_dim, z_dim * 2, 3, padding=1))
+        self.middle = nn.Sequential(
+            ResidualBlock(out_dim, out_dim), AttentionBlock(out_dim), ResidualBlock(out_dim, out_dim)
+        )
+        self.head = nn.Sequential(
+            RMSNorm(out_dim, images=False), nn.SiLU(), CausalConv2d(out_dim, z_dim * 2, 3, padding=1)
+        )
 
-    def forward(self, x):
-        return self.head(self.middle(self.downsamples(self.conv1(x))))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return cast(torch.Tensor, self.head(self.middle(self.downsamples(self.conv1(x)))))
 
 
 class Krea2VAE(nn.Module):
@@ -140,17 +159,18 @@ class Krea2VAE(nn.Module):
         dtype = self.conv1.weight.dtype
         x = (images * 2.0 - 1.0).to(dtype)
         mu = self.conv1(self.encoder(x)).chunk(2, dim=1)[0].float()
-        return (mu - self.latents_mean.to(mu.device)) / self.latents_std.to(mu.device)
+        return cast(torch.Tensor, (mu - self.latents_mean.to(mu.device)) / self.latents_std.to(mu.device))
 
 
-def load_krea2_vae(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.float32) -> Krea2VAE:
+def load_krea2_vae(path: str | Path, device: torch.device, dtype: torch.dtype = torch.float32) -> Krea2VAE:
     """Load the encoder from ComfyUI's wan_2.1_vae.safetensors (decoder tensors are ignored)."""
     state = load_file(str(path))
     dim = int(state["encoder.conv1.weight"].shape[0]) if "encoder.conv1.weight" in state else 96
     model = Krea2VAE(dim=dim)
     wanted = {
-        key: value for key, value in state.items()
-        if (key.startswith("encoder.") or key.startswith("conv1.")) and ".time_conv." not in key
+        key: value
+        for key, value in state.items()
+        if key.startswith(("encoder.", "conv1.")) and ".time_conv." not in key
     }
     info = model.load_state_dict(wanted, strict=False)
     if info.missing_keys or info.unexpected_keys:

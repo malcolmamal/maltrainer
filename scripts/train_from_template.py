@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -47,7 +48,10 @@ MODELS = {
     "moss_image": (
         "train_moss_image_lora.py",
         "templates/moss_image_automagic_template.yaml",
-        {"prodigy": "templates/moss_image_prodigy_template.yaml", "adamw8bit": "templates/moss_image_adamw_template.yaml"},
+        {
+            "prodigy": "templates/moss_image_prodigy_template.yaml",
+            "adamw8bit": "templates/moss_image_adamw_template.yaml",
+        },
         {
             "transformer_path": ("diffusion_models", "moss_image_base_bf16.safetensors"),
             "vae_path": ("vae", "flux2_vae.safetensors"),
@@ -74,6 +78,39 @@ def find_model(root: Path, subfolder: str, name: str) -> Path | None:
     return next((p for p in base.rglob(name) if p.is_file()), None) if base.is_dir() else None
 
 
+def _place_models(
+    args: argparse.Namespace, config: dict[str, Any], files: dict[str, tuple[str, str]], text: str
+) -> int | None:
+    """Point the config at the ComfyUI model files. A message and exit code 1 when they cannot be found."""
+    if args.comfyui_models:
+        missing = []
+        for key, (subfolder, name) in files.items():
+            found = find_model(Path(args.comfyui_models), subfolder, name)
+            if found:
+                config["model"][key] = str(found)
+            else:
+                missing.append(f"{subfolder}/{name}")
+        if missing and not args.dry_run:
+            print(f"Not found under {args.comfyui_models}: {', '.join(missing)}", file=sys.stderr)
+            return 1
+    elif "[comfyui_models]" in text and not args.dry_run:
+        print("Set COMFYUI_MODELS_PATH (or --comfyui-models) to your ComfyUI models folder.", file=sys.stderr)
+        return 1
+    return None
+
+
+def _apply_overrides(args: argparse.Namespace, config: dict[str, Any]) -> None:
+    train = config.setdefault("train", {})
+    if args.optimizer:
+        train["optimizer"] = args.optimizer
+    if args.learning_rate:
+        train["learning_rate"] = args.learning_rate
+    if args.epochs:
+        train["num_epochs"], train["max_steps"] = args.epochs, 0
+    if args.max_steps:
+        train["max_steps"] = args.max_steps
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("model", choices=sorted(MODELS))
@@ -95,7 +132,7 @@ def main() -> int:
         text = text.replace("[comfyui_models]", Path(args.comfyui_models).as_posix())
     config = yaml.safe_load(text)
 
-    dataset_path = Path(args.datasets) / args.dataset
+    dataset_path = (Path(args.datasets) / args.dataset).resolve()  # the trainer runs from ROOT, not from here
     if not dataset_path.is_dir():
         print(f"Dataset folder not found: {dataset_path}", file=sys.stderr)
         return 1
@@ -104,30 +141,11 @@ def main() -> int:
         config["dataset"]["trigger"] = args.trigger
         config["dataset"]["default_caption"] = f"a photo of {args.trigger}"
 
-    if args.comfyui_models:
-        missing = []
-        for key, (subfolder, name) in files.items():
-            found = find_model(Path(args.comfyui_models), subfolder, name)
-            if found:
-                config["model"][key] = str(found)
-            else:
-                missing.append(f"{subfolder}/{name}")
-        if missing and not args.dry_run:
-            print(f"Not found under {args.comfyui_models}: {', '.join(missing)}", file=sys.stderr)
-            return 1
-    elif "[comfyui_models]" in text and not args.dry_run:
-        print("Set COMFYUI_MODELS_PATH (or --comfyui-models) to your ComfyUI models folder.", file=sys.stderr)
-        return 1
+    code = _place_models(args, config, files, text)
+    if code is not None:
+        return code
 
-    train = config.setdefault("train", {})
-    if args.optimizer:
-        train["optimizer"] = args.optimizer
-    if args.learning_rate:
-        train["learning_rate"] = args.learning_rate
-    if args.epochs:
-        train["num_epochs"], train["max_steps"] = args.epochs, 0
-    if args.max_steps:
-        train["max_steps"] = args.max_steps
+    _apply_overrides(args, config)
 
     output = Path(config["output"]["path"])
     output.mkdir(parents=True, exist_ok=True)
@@ -135,7 +153,10 @@ def main() -> int:
     rendered.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     print(f"Config written to {rendered}")
 
-    command = [sys.executable, str(ROOT / script), "--config", str(rendered)] + (["--dry-run"] if args.dry_run else [])
+    # absolute: the trainer runs from ROOT, so a path relative to where this was launched would not be found
+    command = [sys.executable, str(ROOT / script), "--config", str(rendered.resolve())] + (
+        ["--dry-run"] if args.dry_run else []
+    )
     return subprocess.call(command, cwd=ROOT)
 
 

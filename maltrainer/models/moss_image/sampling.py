@@ -16,7 +16,8 @@ there. Our DiT takes sigma in [0, 1] (it embeds 1000 sigma itself).
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import torch
 
@@ -49,12 +50,14 @@ def initial_noise(seed: int, height: int, width: int) -> torch.Tensor:
     if height % DOWNSAMPLING or width % DOWNSAMPLING:
         raise ValueError("height and width must be multiples of 16")
     generator = torch.Generator("cpu").manual_seed(int(seed))
-    return torch.randn((1, 128, height // DOWNSAMPLING, width // DOWNSAMPLING), generator=generator, dtype=torch.float32)
+    return torch.randn(
+        (1, 128, height // DOWNSAMPLING, width // DOWNSAMPLING), generator=generator, dtype=torch.float32
+    )
 
 
 @torch.no_grad()
 def sample(
-    dit: Callable,
+    dit: Callable[..., Any],
     context: torch.Tensor,
     height: int,
     width: int,
@@ -62,11 +65,11 @@ def sample(
     steps: int = 30,
     seed: int = 42,
     cfg: float = 3.0,
-    negative: Optional[torch.Tensor] = None,
+    negative: torch.Tensor | None = None,
     shift: float = SHIFT,
     uncond_skip: Sequence[int] = UNCOND_SKIP,
-    device: Optional[torch.device] = None,
-    on_step: Optional[Callable[[int, int], None]] = None,
+    device: torch.device | None = None,
+    on_step: Callable[[int, int], None] | None = None,
 ) -> torch.Tensor:
     """Denoised latents [1, 128, h, w] fp32. ``dit(x, sigma [1], context, skip_layers=...)`` is the
     DiT; context / negative: [L, 4096] or [1, L, 4096] text states. ``on_step(done, total)`` is
@@ -75,7 +78,7 @@ def sample(
     x = initial_noise(seed, height, width).to(device)
     pos = (context if context.dim() == 3 else context[None]).to(device)
     use_cfg = cfg != 1.0 and negative is not None
-    neg = (negative if negative.dim() == 3 else negative[None]).to(device) if use_cfg else None
+    neg = (negative if negative.dim() == 3 else negative[None]).to(device) if use_cfg and negative is not None else None
     sigmas = schedule(steps, shift)
     total = len(sigmas) - 1
     for i in range(total):

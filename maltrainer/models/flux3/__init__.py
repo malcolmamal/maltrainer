@@ -9,12 +9,12 @@ from maltrainer.models.flux3.text_encoder import Flux3TextEncoder, load_flux3_te
 from maltrainer.models.flux3.vae import Flux2VAEEncoder, load_flux2_vae_encoder
 
 __all__ = [
+    "Flux2VAEEncoder",
     "Flux3Config",
-    "Flux3Transformer",
     "Flux3LoRANetwork",
     "Flux3TextEncoder",
-    "Flux2VAEEncoder",
-    "load_flux3_transformer",
-    "load_flux3_text_encoder",
+    "Flux3Transformer",
     "load_flux2_vae_encoder",
+    "load_flux3_text_encoder",
+    "load_flux3_transformer",
 ]

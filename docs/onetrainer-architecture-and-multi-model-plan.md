@@ -1,5 +1,9 @@
 # OneTrainer Architecture and a Multi-Model Plan for Maltrainer
 
+> **Historical plan.** This is a design proposal from early in the project. It was not implemented as described:
+> there is no `ModelAdapter`, `GenericTrainer`, `losses/` or `config/` package. What exists is described in
+> [code-layout.md](code-layout.md) and [architecture.md](architecture.md).
+
 This document explains how OneTrainer uses a single `train.py` entry point to handle many model types, and proposes a clean, modern architecture for expanding maltrainer to Flux2 (Klein 4/9), SDXL, and LTX2.
 
 ## How OneTrainer Handles Multiple Models

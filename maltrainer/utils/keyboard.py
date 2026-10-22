@@ -1,11 +1,10 @@
 """
-Single-key commands while training runs in a console:
+Single-key commands while training runs in a console (training waits while ``e`` / ``g`` work):
 
-- ``s`` saves a checkpoint now; training continues
-- ``q`` saves a checkpoint and stops (only once the save succeeded)
-- ``p`` pauses training until ``p`` is pressed again; ``s``, ``q`` and ``h`` still work while paused
-- ``e`` opens the trainer's menu, if it has one (the MOSS-Image trainers: the preview settings);
-  training waits while it is open
+- ``s`` saves a checkpoint now; ``q`` saves and stops (only once the save succeeded)
+- ``p`` pauses until ``p`` again; ``s``, ``q`` and ``h`` still work while paused
+- ``e`` opens the trainer's menu, if it has one (MOSS-Image: the preview settings)
+- ``g`` renders a gallery, if it has one (MOSS-Image finetune: maltrainer/utils/gallery.py)
 - ``h`` lists the keys
 
 Keys are read without blocking at each optimizer step, so a press acts at the next step
@@ -21,48 +20,36 @@ import logging
 import os
 import sys
 import time
-from typing import Callable, List, Optional
+from collections.abc import Callable
+from importlib import import_module
 
 logger = logging.getLogger(__name__)
 
-SAVE, QUIT, PAUSE, MENU, HELP = "s", "q", "p", "e", "h"
+SAVE, QUIT, PAUSE, MENU, GALLERY, HELP = "s", "q", "p", "e", "g", "h"
+KEY_ORDER = (SAVE, QUIT, PAUSE, MENU, GALLERY, HELP)
 HELP_TEXT = {
     SAVE: "save a checkpoint now (training continues)",
     QUIT: "save a checkpoint and stop",
     PAUSE: "pause training; press p again to resume (s, q and h still work while paused)",
     MENU: "preview settings: prompts on/off, the interval, the raw/EMA rows (training waits)",
+    GALLERY: "gallery: render a few trained people at random with generic prompts (training waits)",
     HELP: "list these keys",
 }
 
 
-def read_key() -> str:
-    """One key press, blocking: "up", "down", "left", "right", "enter", "esc", "space", or the
-    character itself (lower case)."""
-    if os.name == "nt":
-        import msvcrt
-
-        char = msvcrt.getwch()
-        if char in ("\x00", "\xe0"):
-            return {"H": "up", "P": "down", "K": "left", "M": "right"}.get(msvcrt.getwch(), "")
-    else:
-        import select
-
-        char = sys.stdin.read(1)
-        if char == "\x1b":
-            if not select.select([sys.stdin], [], [], 0.05)[0]:
-                return "esc"
-            if sys.stdin.read(1) != "[":
-                return "esc"
-            return {"A": "up", "B": "down", "C": "right", "D": "left"}.get(sys.stdin.read(1), "")
-    return {"\r": "enter", "\n": "enter", "\x1b": "esc", " ": "space"}.get(char, char.lower())
-
-
 class KeyCommands:
-    def __init__(self, keys: str = SAVE + QUIT + PAUSE + HELP, menu: Optional[Callable[[], None]] = None):
-        """``menu``: opened by ``e`` (the key exists only when a trainer offers one)."""
+    def __init__(
+        self,
+        keys: str = SAVE + QUIT + PAUSE + HELP,
+        menu: Callable[[], None] | None = None,
+        gallery: Callable[[], None] | None = None,
+    ):
+        """``menu``: opened by ``e``; ``gallery``: run by ``g`` (each key exists only when a trainer
+        offers it)."""
         self.menu = menu
-        self.keys = set(keys) | ({MENU} if menu is not None else set())
-        self._restore = None
+        self.gallery = gallery
+        self.keys = set(keys) | ({MENU} if menu is not None else set()) | ({GALLERY} if gallery is not None else set())
+        self._restore: Callable[[], None] | None = None
         self.paused_seconds = 0.0  # time spent paused since take_paused_seconds() last read it
         try:
             self.enabled = sys.stdin is not None and sys.stdin.isatty()
@@ -70,28 +57,29 @@ class KeyCommands:
             self.enabled = False
         if self.enabled and os.name != "nt":
             try:
-                import termios
-                import tty
-
+                termios = import_module("termios")  # by name: the stubs omit termios on Windows
+                tty = import_module("tty")
                 fd = sys.stdin.fileno()
                 saved = termios.tcgetattr(fd)
                 tty.setcbreak(fd)
                 self._restore = lambda: termios.tcsetattr(fd, termios.TCSADRAIN, saved)
                 atexit.register(self.close)
-            except Exception as e:  # pragma: no cover - depends on the terminal
+            except (ImportError, OSError, ValueError) as e:
                 logger.info("Key commands unavailable: %s", e)
                 self.enabled = False
         if self.enabled:
-            logger.info("Keys: %s", ", ".join(f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}"
-                                              for k in (SAVE, QUIT, PAUSE, MENU, HELP) if k in self.keys))
+            shown = [k for k in KEY_ORDER if k in self.keys]
+            logger.info(
+                "Keys: %s", ", ".join(f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}" for k in shown)
+            )
 
-    def poll(self) -> List[str]:
+    def poll(self) -> list[str]:
         """The command keys pressed since the last poll, in order."""
         if not self.enabled:
             return []
-        pressed: List[str] = []
+        pressed: list[str] = []
         if os.name == "nt":
-            import msvcrt
+            msvcrt = import_module("msvcrt")  # by name: the stubs omit msvcrt off Windows
 
             while msvcrt.kbhit():
                 char = msvcrt.getwch()
@@ -113,16 +101,15 @@ class KeyCommands:
 
     def show_help(self) -> None:
         logger.info("Keys (act at the next step):")
-        for key in (SAVE, QUIT, PAUSE, MENU, HELP):
-            if key in self.keys:
-                logger.info("  [%s] %s", key, HELP_TEXT[key])
+        for key in (k for k in KEY_ORDER if k in self.keys):
+            logger.info("  [%s] %s", key, HELP_TEXT[key])
 
     def take_paused_seconds(self) -> float:
         """Seconds spent paused since the last call (for the monitor's s/step)."""
         seconds, self.paused_seconds = self.paused_seconds, 0.0
         return seconds
 
-    def _save_keys(self, pressed: List[str], step: int, save: Callable[[int], None]) -> bool:
+    def _save_keys(self, pressed: list[str], step: int, save: Callable[[int], bool | None]) -> bool:
         """``s`` / ``q`` among ``pressed``: at most one save, so ``s`` then ``q`` does not write the
         same step twice. True when the run should stop."""
         if SAVE not in pressed and QUIT not in pressed:
@@ -136,30 +123,36 @@ class KeyCommands:
             return False
         return stop
 
-    def _open_menu(self, count_time: bool = True) -> None:
-        """``count_time``: add the menu's time to paused_seconds (not when called from a pause,
-        whose own total already covers it)."""
-        started = time.time()
-        try:
-            self.menu()
-        except Exception as error:  # a menu problem must not end the run
-            logger.error("The menu failed (%s); training continues", error)
-        finally:
-            if count_time:
-                self.paused_seconds += time.time() - started
+    def _run_extras(self, pressed: list[str], count_time: bool = True) -> None:
+        """Run the menu / gallery the keys asked for. A failure is logged and training goes on.
+        ``count_time``: add the time to paused_seconds (not from a pause, whose own total covers it)."""
+        for key, name, action in ((MENU, "menu", self.menu), (GALLERY, "gallery", self.gallery)):
+            if key not in pressed or action is None:
+                continue
+            started = time.time()
+            try:
+                action()
+            except Exception:  # a menu or gallery problem must not end the run
+                logger.exception("The %s failed; training continues", name)
+            finally:
+                if count_time:
+                    self.paused_seconds += time.time() - started
 
-    def _pause(self, step: int, save: Callable[[int], None]) -> bool:
+    def _pause(self, step: int, save: Callable[[int], bool | None]) -> bool:
         """Wait at this step until ``p`` again; True if ``q`` (with a successful save) ends the run."""
-        logger.info("Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s", step,
-                    ", [e] preview settings" if self.menu is not None else "")
+        logger.info(
+            "Paused at step %d: [p] resume, [s] save, [q] save and stop, [h] help%s%s",
+            step,
+            ", [e] preview settings" if self.menu is not None else "",
+            ", [g] gallery" if self.gallery is not None else "",
+        )
         started = time.time()
         try:
             while True:
                 pressed = self.poll()
                 if HELP in pressed:
                     self.show_help()
-                if MENU in pressed and self.menu is not None:
-                    self._open_menu(count_time=False)
+                self._run_extras(pressed, count_time=False)
                 if self._save_keys(pressed, step, save):
                     return True
                 if PAUSE in pressed:
@@ -169,15 +162,14 @@ class KeyCommands:
         finally:
             self.paused_seconds += time.time() - started
 
-    def handle(self, step: int, save: Callable[[int], None]) -> bool:
+    def handle(self, step: int, save: Callable[[int], bool | None]) -> bool:
         """Act on pending keys at a step boundary; True when the run should stop."""
         pressed = self.poll()
         if not pressed:
             return False
         if HELP in pressed:
             self.show_help()
-        if MENU in pressed and self.menu is not None:
-            self._open_menu()
+        self._run_extras(pressed)
         if self._save_keys(pressed, step, save):
             return True
         if PAUSE in pressed:

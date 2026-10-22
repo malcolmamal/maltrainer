@@ -23,6 +23,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 from safetensors import safe_open
@@ -31,40 +32,55 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from maltrainer.finetune.extract import GENERIC, MODES, extract, strip_prefix  # noqa: E402
-from maltrainer.models.moss_image.finetune import EXTRACT_PROFILE as MOSS_IMAGE  # noqa: E402
+from maltrainer.finetune.extract import GENERIC, MODES, ExtractProfile, extract, strip_prefix
+from maltrainer.models.moss_image.finetune import EXTRACT_PROFILE as MOSS_IMAGE
 
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 PROFILES = {"moss_image": MOSS_IMAGE, "generic": GENERIC}
 
 
-def detect_profile(path: Path):
+def detect_profile(path: Path) -> ExtractProfile:
     with safe_open(str(path), framework="pt", device="cpu") as handle:
         keys = list(handle.keys())
     prefix = strip_prefix(keys)
-    names = [k[len(prefix):] for k in keys]
+    names = [k[len(prefix) :] for k in keys]
     for profile in PROFILES.values():
         if profile.detect(names):
             return profile
     return GENERIC
 
 
-def main() -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("base", type=Path, help="the base checkpoint the finetune started from")
     parser.add_argument("finetuned", type=Path, help="the finetuned checkpoint")
-    parser.add_argument("--rank", type=int, nargs="+", default=[64], help="rank (cap) per layer; several = several files (default 64)")
-    parser.add_argument("--mode", choices=MODES, default="fixed", help="how each layer's rank is chosen (default fixed)")
-    parser.add_argument("--value", type=float, default=None,
-                        help="fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; threshold: absolute")
-    parser.add_argument("--model", choices=["auto", *PROFILES], default="auto", help="checkpoint layout (default: detected)")
+    parser.add_argument(
+        "--rank", type=int, nargs="+", default=[64], help="rank (cap) per layer; several = several files (default 64)"
+    )
+    parser.add_argument(
+        "--mode", choices=MODES, default="fixed", help="how each layer's rank is chosen (default fixed)"
+    )
+    parser.add_argument(
+        "--value",
+        type=float,
+        default=None,
+        help=(
+            "fro: share of the change to keep (e.g. 0.9); ratio: share of the largest singular value; "
+            "threshold: absolute"
+        ),
+    )
+    parser.add_argument(
+        "--model", choices=["auto", *PROFILES], default="auto", help="checkpoint layout (default: detected)"
+    )
     parser.add_argument("--dtype", choices=sorted(DTYPES), default="bfloat16", help="saved dtype (default bfloat16)")
     parser.add_argument("--device", default=None, help="cuda or cpu for the SVDs (default: cuda if available)")
     parser.add_argument("--output-dir", type=Path, help="where to write (default: next to the finetune)")
     parser.add_argument("--name", help="output name stem (default: <finetuned>_lora)")
     parser.add_argument("--force", action="store_true", help="overwrite existing output files")
-    args = parser.parse_args()
+    return parser
 
+
+def _validate(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     for path in (args.base, args.finetuned):
         if not path.is_file():
             parser.error(f"not found: {path}")
@@ -74,23 +90,78 @@ def main() -> int:
         parser.error(f"--mode {args.mode} needs --value")
     if args.mode == "fro" and not 0.0 < args.value <= 1.0:
         parser.error("--mode fro needs --value in (0, 1]")
-    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    profile = PROFILES[args.model] if args.model != "auto" else detect_profile(args.base)
 
+
+def _output_targets(parser: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[Path, dict[int, Path]]:
     out_dir = args.output_dir or args.finetuned.parent
     stem = args.name or f"{args.finetuned.stem}_lora"
     targets = {rank: out_dir / f"{stem}_r{rank}.safetensors" for rank in sorted(set(args.rank))}
     for target in targets.values():
         if target.exists() and not args.force:
             parser.error(f"{target} exists; pass --force to overwrite")
+    return out_dir, targets
 
-    print(f"{args.finetuned.name} - {args.base.name}: {profile.name} layout, mode {args.mode}"
-          f"{f' {args.value:g}' if args.value is not None else ''}, rank {sorted(targets)} on {device}")
+
+def _write_outputs(
+    args: argparse.Namespace,
+    profile: ExtractProfile,
+    states: dict[int, Any],
+    report: dict[str, Any],
+    out_dir: Path,
+    targets: dict[int, Path],
+) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for rank, target in targets.items():
+        info = report["per_cap"][rank]
+        metadata = {
+            "ss_network_dim": str(info["rank_max"]),
+            "ss_network_alpha": str(info["rank_max"]),
+            "maltrainer_architecture": f"{profile.name}_extracted",
+            "maltrainer_extract": json.dumps(
+                {
+                    "method": "SVD per layer of finetuned - base",
+                    "mode": args.mode,
+                    "value": args.value,
+                    "rank_cap": rank,
+                    "profile": profile.name,
+                    "save_dtype": args.dtype,
+                    "base": {"file": args.base.name, "bytes": args.base.stat().st_size},
+                    "finetuned": {"file": args.finetuned.name, "bytes": args.finetuned.stat().st_size},
+                }
+            ),
+        }
+        save_file(states[rank], str(target), metadata=metadata)
+        print(
+            f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} "
+            f"(mean {info['rank_mean']:.1f}), "
+            f"dropped norm per layer: mean {info['dropped_mean']:.1%}, worst {info['dropped_worst']:.1%}"
+        )
+        print(f"       wrote {target} ({target.stat().st_size / 1024**2:.0f} MB)")
+
+
+def main() -> int:
+    parser = _build_parser()
+    args = parser.parse_args()
+    _validate(parser, args)
+    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    profile = PROFILES[args.model] if args.model != "auto" else detect_profile(args.base)
+    out_dir, targets = _output_targets(parser, args)
+
+    print(
+        f"{args.finetuned.name} - {args.base.name}: {profile.name} layout, mode {args.mode}"
+        f"{f' {args.value:g}' if args.value is not None else ''}, rank {sorted(targets)} on {device}"
+    )
     started = time.time()
     try:
         states, report = extract(
-            args.base, args.finetuned, list(targets), mode=args.mode, value=args.value or 0.0,
-            profile=profile, device=device, dtype=DTYPES[args.dtype],
+            args.base,
+            args.finetuned,
+            list(targets),
+            mode=args.mode,
+            value=args.value or 0.0,
+            profile=profile,
+            device=device,
+            dtype=DTYPES[args.dtype],
             progress=lambda names: tqdm(names, desc="SVD per layer"),
         )
     except ValueError as error:
@@ -101,28 +172,7 @@ def main() -> int:
     if report["changed_but_not_extracted"]:
         skipped = report["changed_but_not_extracted"]
         print(f"  {len(skipped)} changed tensors are not LoRA targets and are left out, e.g. {skipped[:3]}")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for rank, target in targets.items():
-        info = report["per_cap"][rank]
-        metadata = {
-            "ss_network_dim": str(info["rank_max"]),
-            "ss_network_alpha": str(info["rank_max"]),
-            "maltrainer_architecture": f"{profile.name}_extracted",
-            "maltrainer_extract": json.dumps({
-                "method": "SVD per layer of finetuned - base",
-                "mode": args.mode,
-                "value": args.value,
-                "rank_cap": rank,
-                "profile": profile.name,
-                "save_dtype": args.dtype,
-                "base": {"file": args.base.name, "bytes": args.base.stat().st_size},
-                "finetuned": {"file": args.finetuned.name, "bytes": args.finetuned.stat().st_size},
-            }),
-        }
-        save_file(states[rank], str(target), metadata=metadata)
-        print(f"  r{rank}: {info['modules']} modules, rank {info['rank_min']}..{info['rank_max']} (mean {info['rank_mean']:.1f}), "
-              f"dropped norm per layer: mean {info['dropped_mean']:.1%}, worst {info['dropped_worst']:.1%}")
-        print(f"       wrote {target} ({target.stat().st_size / 1024 ** 2:.0f} MB)")
+    _write_outputs(args, profile, states, report, out_dir, targets)
     print(f"  done in {time.time() - started:.0f}s")
     return 0
 

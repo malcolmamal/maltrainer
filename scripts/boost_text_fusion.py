@@ -27,12 +27,11 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from merge_loras import sha256_prefix
+from merge_loras_io import sha256_prefix
 
 # the four blocks, in dotted (ComfyUI) or underscored (kohya) spelling
 TEXT_FUSION_BLOCK = re.compile(r"txtfusion[._](layerwise|refiner)[._]blocks[._](\d)")
@@ -54,15 +53,18 @@ def boost_file(source: Path, target: Path, factor: float) -> None:
             f"{source.name}: no text-fusion block adapters (txtfusion.layerwise_blocks / refiner_blocks); "
             "was it trained with lora.targets attn-mlp, or is it not a Krea 2 LoRA?"
         )
-    blocks = sorted({"txtfusion.{}_blocks.{}".format(*TEXT_FUSION_BLOCK.search(key).groups()) for key in boosted})
+    matches = (TEXT_FUSION_BLOCK.search(key) for key in boosted)
+    blocks = sorted({"txtfusion.{}_blocks.{}".format(*m.groups()) for m in matches if m})
 
     meta = dict(metadata)
-    meta["maltrainer_text_fusion_boost"] = json.dumps({
-        "factor": factor,
-        "blocks": blocks,
-        "adapters": len(boosted),
-        "source": {"file": source.name, "sha256": sha256_prefix(source)},
-    })
+    meta["maltrainer_text_fusion_boost"] = json.dumps(
+        {
+            "factor": factor,
+            "blocks": blocks,
+            "adapters": len(boosted),
+            "source": {"file": source.name, "sha256": sha256_prefix(source)},
+        }
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
     save_file(state, str(target), metadata=meta)
     print(f"  x{factor:g} on {len(boosted)} adapters in {len(blocks)} blocks: {', '.join(blocks)}")
@@ -84,7 +86,7 @@ def main() -> int:
         parser.error("--output works with a single input; use --suffix for several")
     suffix = args.suffix if args.suffix is not None else f"_txt{args.factor:g}"
 
-    jobs: List[Tuple[Path, Path]] = []
+    jobs: list[tuple[Path, Path]] = []
     for source in args.inputs:
         if not source.is_file():
             parser.error(f"not found: {source}")

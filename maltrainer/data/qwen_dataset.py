@@ -5,14 +5,14 @@ Dataset loader for Qwen-Image-2.1 image datasets.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+
+from maltrainer.data.walk import walk_visible
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,14 @@ def align_to_multiple(val: int, multiple: int = 16) -> int:
     return ((val + multiple - 1) // multiple) * multiple
 
 
-class QwenImage21Dataset(Dataset):
+class QwenImage21Dataset(Dataset[dict[str, torch.Tensor | str]]):
     """Image and caption dataset loader for Qwen-Image-2.1 training."""
 
     def __init__(
         self,
-        data_root: Union[str, Path],
-        resolution: Union[int, Tuple[int, int]] = 512,
-        trigger_token: Optional[str] = None,
+        data_root: str | Path,
+        resolution: int | tuple[int, int] = 512,
+        trigger_token: str | None = None,
         default_caption: str = "",
         repeats: int = 1,
     ):
@@ -48,51 +48,59 @@ class QwenImage21Dataset(Dataset):
             self.height = align_to_multiple(resolution[0], 16)
             self.width = align_to_multiple(resolution[1], 16)
 
-        self.image_paths: List[Path] = []
-        self.captions: List[str] = []
+        self.image_paths: list[Path] = []
+        self.captions: list[str] = []
         self._load_dataset()
 
-        self.transform = transforms.Compose([
-            transforms.Resize((self.height, self.width), interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.ToTensor(),  # Convert PIL Image [0, 255] to [3, H, W] in [0.0, 1.0]
-        ])
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((self.height, self.width), interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor(),  # Convert PIL Image [0, 255] to [3, H, W] in [0.0, 1.0]
+            ]
+        )
 
-    def _load_dataset(self):
-        if not self.data_root.exists():
-            logger.warning("Dataset root does not exist: %s", self.data_root)
-            return
-
-        base_images: List[Path] = []
-        for root, _, files in os.walk(self.data_root):
+    def _find_images(self) -> list[Path]:
+        base_images: list[Path] = []
+        for root, _, files in walk_visible(self.data_root):
             for file in files:
                 ext = Path(file).suffix.lower()
                 if ext in SUPPORTED_IMAGE_EXTENSIONS:
                     base_images.append(Path(root) / file)
 
         base_images.sort()
+        return base_images
 
-        for img_path in base_images:
-            txt_path = img_path.with_suffix(".txt")
-            caption = ""
-            if txt_path.exists():
-                try:
-                    caption = txt_path.read_text(encoding="utf-8").strip()
-                except Exception as e:
-                    logger.warning("Error reading caption for %s: %s", img_path, e)
+    def _caption_for(self, img_path: Path) -> str:
+        """The sidecar ``.txt`` caption (trigger prepended if missing), else the default caption."""
+        txt_path = img_path.with_suffix(".txt")
+        caption = ""
+        if txt_path.exists():
+            try:
+                caption = txt_path.read_text(encoding="utf-8").strip()
+            except (OSError, ValueError) as e:
+                logger.warning("Error reading caption for %s: %s", img_path, e)
 
-            if caption:
-                if self.trigger_token and self.trigger_token.lower() not in caption.lower():
-                    caption = f"{self.trigger_token} {caption}"
+        if caption:
+            if self.trigger_token and self.trigger_token.lower() not in caption.lower():
+                caption = f"{self.trigger_token} {caption}"
+        elif self.trigger_token and self.default_caption:
+            # "a photo of sks" already names the subject; otherwise prepend the trigger to it
+            if self.trigger_token.lower() in self.default_caption.lower():
+                caption = self.default_caption
             else:
-                if self.trigger_token and self.default_caption and self.trigger_token.lower() not in self.default_caption.lower():
-                    caption = f"{self.trigger_token} {self.default_caption}"
-                elif self.trigger_token:
-                    caption = self.trigger_token
-                elif self.default_caption:
-                    caption = self.default_caption
-                else:
-                    caption = ""
+                caption = f"{self.trigger_token} {self.default_caption}"
+        else:
+            caption = self.trigger_token or self.default_caption
+        return caption
 
+    def _load_dataset(self) -> None:
+        if not self.data_root.exists():
+            logger.warning("Dataset root does not exist: %s", self.data_root)
+            return
+
+        base_images = self._find_images()
+        for img_path in base_images:
+            caption = self._caption_for(img_path)
             for _ in range(self.repeats):
                 self.image_paths.append(img_path)
                 self.captions.append(caption)
@@ -108,14 +116,14 @@ class QwenImage21Dataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, index: int) -> Dict[str, Union[torch.Tensor, str]]:
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor | str]:
         img_path = self.image_paths[index]
         caption = self.captions[index]
 
         try:
             image = Image.open(img_path).convert("RGB")
             pixel_values = self.transform(image)
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error("Failed to load image %s: %s", img_path, e)
             pixel_values = torch.zeros((3, self.height, self.width), dtype=torch.float32)
 

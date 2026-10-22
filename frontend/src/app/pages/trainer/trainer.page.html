@@ -272,6 +272,12 @@
           </button>
         </div>
       </div>
+      @if (jobsError()) {
+        <div class="error jobsError" role="alert">{{ jobsError() }}</div>
+      }
+      @if (jobActionError()) {
+        <div class="error jobActionError" role="alert">{{ jobActionError() }}</div>
+      }
       @if (jobs().length === 0) {
         <p class="placeholder">No active jobs yet.</p>
       } @else {

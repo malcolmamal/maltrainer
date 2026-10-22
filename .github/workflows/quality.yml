@@ -1,0 +1,103 @@
+# The quality gate on every push and pull request: the same command as `quality.sh` locally,
+# so what CI enforces and what runs before a push are the same thing.
+name: quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.13"
+          enable-cache: true
+
+      # CPU torch: the tests need no GPU, and the CUDA wheels are several GB.
+      - name: Install dependencies
+        run: uv sync --frozen --extra cpu --group dev --python 3.12
+
+      - name: Quality gate
+        run: uv run --frozen --extra cpu python -m maltrainer_quality --junit reports
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: reports/
+          if-no-files-found: ignore
+
+  # Not part of the gate: about five minutes. On a pull request it checks the targets whose module or tests
+  # changed (--changed); by hand (workflow_dispatch) it runs every target. Policy: docs/mutation-testing.md.
+  mutation:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra cpu --group dev --python 3.12
+
+      - name: Mutation testing, the targets this pull request touches
+        if: github.event_name == 'pull_request'
+        run: uv run --frozen --extra cpu python -m maltrainer_quality.mutation --changed --base origin/${{ github.base_ref }} --json mutation.json
+
+      - name: Mutation testing, every target
+        if: github.event_name == 'workflow_dispatch'
+        run: uv run --frozen --extra cpu python -m maltrainer_quality.mutation --all --json mutation.json
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation
+          path: mutation.json
+          if-no-files-found: ignore
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests with coverage
+        run: npm run test:coverage
+
+      # Type-checks the templates too, which lint and Jest do not.
+      - name: Build
+        run: npm run build

@@ -1,5 +1,9 @@
 # Z-Image Textual Inversion ComfyUI Node
 
+> **Deprecated.** Z-Image textual inversion was a proof of concept that did not give usable results. The trainer
+> (`train_zimage_embedding.py`) still runs, is tested and logs a deprecation warning when started, and the approach
+> may be reused with other models later. For Z-Image, train a LoRA instead.
+
 This document describes the custom ComfyUI node for Z-Image textual inversion support, enabling visual workflow integration with embeddings trained using maltrainer.
 
 ## Overview
@@ -24,14 +28,14 @@ The Z-Image Textual Inversion node allows you to use textual inversion embedding
 
 1. **Copy Node Files**:
    ```bash
-   # Files are located in maltrainer/comfyui_nodes/
-   cp maltrainer/comfyui_nodes/zimage_textual_inversion.py /path/to/ComfyUI/custom_nodes/
-   cp maltrainer/comfyui_nodes/__init__.py /path/to/ComfyUI/custom_nodes/
+   # Files are located in comfyui-zimage-embedding/
+   cp comfyui-zimage-embedding/zimage_textual_inversion.py /path/to/ComfyUI/custom_nodes/
+   cp comfyui-zimage-embedding/__init__.py /path/to/ComfyUI/custom_nodes/
    ```
 
 2. **Install Dependencies**:
    ```bash
-   pip install -r maltrainer/comfyui_nodes/requirements.txt
+   pip install -r comfyui-zimage-embedding/requirements.txt
    ```
 
 3. **Restart ComfyUI**:
@@ -189,9 +193,8 @@ The node expects embeddings in safetensors format with the following structure:
 ```
 maltrainer/
 ├── train_zimage_embedding.py
-├── config/train_zimage_embedding_example.yaml
 ├── output/zimage_embedding/final_embedding.safetensors
-└── comfyui_nodes/
+└── comfyui-zimage-embedding/
     ├── zimage_textual_inversion.py
     └── requirements.txt
 ```

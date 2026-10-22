@@ -23,9 +23,9 @@ import argparse
 import gc
 import logging
 import math
-import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 from PIL import Image, ImageDraw
@@ -37,6 +37,7 @@ from maltrainer.models.qwen_image_2_1.model import calculate_shift, load_qwen_im
 from maltrainer.models.qwen_image_2_1.text_encoder import load_qwen_image_2_1_text_encoder
 from maltrainer.models.qwen_image_2_1.vae import load_qwen_image_2_1_vae
 from maltrainer.utils.config import load_config
+from qwen_2_1_sweep_adapter import label_of, sort_key, swap_adapter
 
 VAE_SCALE_FACTOR = 16
 SHIFT_TERMINAL = 0.02
@@ -51,46 +52,12 @@ def build_sigmas(num_steps: int, image_seq_len: int, device: torch.device) -> to
     return torch.cat([sigmas, sigmas.new_zeros(1)])
 
 
-def sort_key(path: Path):
-    """`..._step_600` -> 600; the unsuffixed final checkpoint sorts last."""
-    match = re.search(r"_step_(\d+)$", path.stem)
-    return (0, int(match.group(1))) if match else (1, 0)
-
-
-def label_of(path: Path) -> str:
-    match = re.search(r"_step_(\d+)$", path.stem)
-    return f"step {match.group(1)}" if match else "final"
-
-
-def swap_adapter(network: QwenImage21LoRANetwork, path: Path, scale: float) -> None:
-    """Copy one checkpoint's weights into the adapter layers already attached to `network`.
-
-    Every snapshot of a run shares rank and module list, so the attached layers never need
-    rebuilding. `scale` multiplies alpha/rank; 0 reproduces the base model exactly.
-    """
-    from safetensors.torch import load_file
-
-    layers = network.assistant_layers
-    state = load_file(str(path))
-    for key in state:
-        if not key.endswith(".lora_A.weight"):
-            continue
-        module_path = key[len(network.prefix): -len(".lora_A.weight")]
-        layer = layers[module_path.replace(".", "_")]
-        layer.lora_down.weight.data.copy_(state[key].to(layer.lora_down.weight.dtype))
-        up = state[key.replace(".lora_A.", ".lora_B.")]
-        layer.lora_up.weight.data.copy_(up.to(layer.lora_up.weight.dtype))
-        alpha = state.get(key.replace(".lora_A.weight", ".alpha"))
-        rank = state[key].shape[0]
-        layer.scale = (float(alpha.item()) if alpha is not None else float(rank)) / rank * scale
-
-
-def sample_latents(transformer, embeds, sigmas, seed, latent_h, latent_w, dtype, device) -> torch.Tensor:
+def sample_latents(
+    transformer: Any, embeds: Any, sigmas: Any, seed: int, latent_h: int, latent_w: int, dtype: Any, device: Any
+) -> torch.Tensor:
     """Euler flow-matching sample from pure noise; returns normalized latents [1, 64, h, w]."""
     generator = torch.Generator(device=device).manual_seed(seed)
-    latents = torch.randn(
-        (1, 64, latent_h, latent_w), device=device, dtype=torch.float32, generator=generator
-    )
+    latents = torch.randn((1, 64, latent_h, latent_w), device=device, dtype=torch.float32, generator=generator)
     for i in range(len(sigmas) - 1):
         packed = latents.to(dtype).permute(0, 2, 3, 1).reshape(1, latent_h * latent_w, 64)
         with torch.no_grad():
@@ -136,10 +103,7 @@ def main() -> None:
     latent_h = latent_w = edge // VAE_SCALE_FACTOR
 
     text_encoder = load_qwen_image_2_1_text_encoder(
-        model_config["text_encoder_path"],
-        asset_dir=model_config.get("tokenizer_path"),
-        device=device,
-        dtype=dtype,
+        model_config["text_encoder_path"], asset_dir=model_config.get("tokenizer_path"), device=device
     )
     with torch.no_grad():
         embeds = text_encoder.encode_prompts([args.prompt], device=device).to(device, dtype)
@@ -147,13 +111,10 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    transformer = load_qwen_image_2_1_transformer(
-        model_config["transformer_path"], device=device, dtype=dtype
-    )
-    network = QwenImage21LoRANetwork(transformer, target_modules=["__none__"])
+    transformer: Any = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
+    network: Any = QwenImage21LoRANetwork(transformer, target_modules=["__none__"])
     network.load_assistant_adapter(checkpoints[0], multiplier=1.0, device=device, dtype=dtype)
-    layers = network.assistant_layers
-    print(f"adapter attached: {len(layers)} modules")
+    print(f"adapter attached: {len(network.assistant_layers)} modules")
 
     def load_checkpoint(path: Path, scale: float) -> None:
         swap_adapter(network, path, scale)
@@ -173,20 +134,19 @@ def main() -> None:
         rows.append((label_of(path), [sample(s) for s in args.seeds]))
         print(f"  {label_of(path)} done")
 
-    del transformer, network
+    # Not `del`: load_checkpoint and sample close over both names.
+    transformer = network = None
     gc.collect()
     torch.cuda.empty_cache()
 
-    vae = load_qwen_image_2_1_vae(
-        model_config["vae_path"], device=device, dtype=dtype, include_decoder=True
-    )
+    vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype, include_decoder=True)
     grid: list[tuple[str, list[Image.Image]]] = []
     for label, latents_list in rows:
         images = []
-        for seed, latents in zip(args.seeds, latents_list):
+        for seed, latents in zip(args.seeds, latents_list, strict=False):
             with torch.no_grad():
                 decoded = vae.decode(latents.to(dtype))
-            array = (decoded[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255)
+            array = decoded[0].float().clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255
             image = Image.fromarray(array.round().astype("uint8"))
             image.save(outdir / f"{label.replace(' ', '_')}_seed{seed}.png")
             images.append(image)
@@ -194,8 +154,7 @@ def main() -> None:
 
     pad, header = 4, 22
     cell = grid[0][1][0].width
-    sheet = Image.new("RGB", (len(args.seeds) * (cell + pad) + pad,
-                              len(grid) * (cell + pad + header) + pad), "white")
+    sheet = Image.new("RGB", (len(args.seeds) * (cell + pad) + pad, len(grid) * (cell + pad + header) + pad), "white")
     draw = ImageDraw.Draw(sheet)
     for r, (label, images) in enumerate(grid):
         y = pad + r * (cell + pad + header)

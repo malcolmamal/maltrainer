@@ -88,6 +88,9 @@ Currently, the trainer does not include built-in visualization tools, but here a
 
 ### Example: Adding TensorBoard Support
 
+Maltrainer does not log to TensorBoard (or W&B, or MLflow) out of the box: its monitor writes `training.log`, the console
+progress, and the preview/gallery images. The snippet below shows how you could add TensorBoard yourself.
+
 To add basic TensorBoard logging, you can modify the training scripts:
 
 ```python

@@ -18,7 +18,8 @@ This is the check that would have caught the missing VAE quant_conv / stage shor
 before that fix the base model scored at baseline across the board.
 
 Usage:
-    venv\\Scripts\\python.exe scripts\\qwen_2_1_stack_probe.py --config config\\train_qwen_image_2_1_feliciaday_adamw.yaml
+    venv\\Scripts\\python.exe scripts\\qwen_2_1_stack_probe.py ^
+        --config config\\train_qwen_image_2_1_feliciaday_adamw.yaml
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ import gc
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 from tqdm import tqdm
@@ -68,14 +70,13 @@ def main() -> None:
         default_caption=dataset_config.get("default_caption", ""),
         repeats=1,
     )
-    items = [dataset[i] for i in range(min(args.samples, len(dataset)))]
+    items: list[dict[str, Any]] = [dataset[i] for i in range(min(args.samples, len(dataset)))]
     print(f"probing {len(items)} images at {dataset.height}x{dataset.width}")
 
     vae = load_qwen_image_2_1_vae(model_config["vae_path"], device=device, dtype=dtype)
     with torch.no_grad():
         latents = [
-            vae.encode(item["pixel_values"].unsqueeze(0).to(device, dtype), deterministic=True).cpu()
-            for item in items
+            vae.encode(item["pixel_values"].unsqueeze(0).to(device, dtype), deterministic=True).cpu() for item in items
         ]
     del vae
     gc.collect()
@@ -88,7 +89,6 @@ def main() -> None:
         model_config["text_encoder_path"],
         asset_dir=model_config.get("tokenizer_path"),
         device=device,
-        dtype=dtype,
     )
     with torch.no_grad():
         embeds = [text_encoder.encode_prompts([item["caption"]], device=device).cpu() for item in items]
@@ -98,9 +98,7 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    transformer = load_qwen_image_2_1_transformer(
-        model_config["transformer_path"], device=device, dtype=dtype
-    )
+    transformer = load_qwen_image_2_1_transformer(model_config["transformer_path"], device=device, dtype=dtype)
 
     print(f"\n{'sigma':>6} {'matched':>9} {'mismatched':>11} {'zero':>8} {'noise-only':>11}")
     generator = torch.Generator(device=device).manual_seed(0)
@@ -108,7 +106,7 @@ def main() -> None:
         totals = {"matched": 0.0, "mismatched": 0.0, "zero": 0.0, "noise": 0.0}
         count = 0
         for latent, embed, wrong in tqdm(
-            list(zip(latents, embeds, shuffled)), desc=f"sigma {sigma:.2f}", leave=False
+            list(zip(latents, embeds, shuffled, strict=False)), desc=f"sigma {sigma:.2f}", leave=False
         ):
             x0 = latent.to(device, dtype)
             b, c, h, w = x0.shape
@@ -134,8 +132,8 @@ def main() -> None:
                 totals["noise"] += torch.nn.functional.mse_loss(noise_flat, target).item()
                 count += 1
         print(
-            f"{sigma:>6.2f} {totals['matched']/count:>9.4f} {totals['mismatched']/count:>11.4f} "
-            f"{totals['zero']/count:>8.4f} {totals['noise']/count:>11.4f}"
+            f"{sigma:>6.2f} {totals['matched'] / count:>9.4f} {totals['mismatched'] / count:>11.4f} "
+            f"{totals['zero'] / count:>8.4f} {totals['noise'] / count:>11.4f}"
         )
 
     print(

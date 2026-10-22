@@ -1,0 +1,92 @@
+"""Mutation targets: the model maths (see ``mutation_targets`` for what a target is)."""
+
+from __future__ import annotations
+
+from maltrainer_quality.mutation_target import Target
+
+MODELS_TARGETS: tuple[Target, ...] = (
+    Target(
+        "maltrainer/models/scheduler.py",
+        ("tests/maltrainer/models/test_scheduler.py",),
+        98.0,
+    ),
+    Target(
+        "maltrainer/models/krea2/timesteps.py",
+        ("tests/trainers/krea2/test_lora_sigma.py",),
+        98.0,
+    ),
+    Target(
+        "maltrainer/models/moss_image/model_math.py",
+        (
+            "tests/maltrainer/models/moss_image/test_model_math.py",
+            "tests/maltrainer/models/moss_image/test_model_forward.py",
+        ),
+        96.0,
+    ),
+    Target(
+        "maltrainer/models/moss_image/sampling.py",
+        ("tests/maltrainer/models/moss_image/test_sampling.py",),
+        92.0,
+    ),
+    Target(
+        "maltrainer/models/qwen_image_2_1/model_math.py",
+        (
+            "tests/maltrainer/models/qwen_image_2_1/test_model_rope.py",
+            "tests/maltrainer/models/qwen_image_2_1/test_model_schedule.py",
+            "tests/maltrainer/models/qwen_image_2_1/test_model_transformer.py",
+        ),
+        91.0,
+    ),
+    Target(
+        "maltrainer/models/flux3/rope.py",
+        (
+            "tests/maltrainer/models/flux3/test_model_math.py",
+            "tests/maltrainer/models/flux3/test_model_blocks.py",
+        ),
+        93.0,
+    ),
+    Target(
+        "maltrainer/models/krea2/rope.py",
+        (
+            "tests/maltrainer/models/krea2/test_model_math.py",
+            "tests/maltrainer/models/krea2/test_model_blocks.py",
+        ),
+        96.0,
+    ),
+    Target(
+        "maltrainer/models/minimax_h3/int8_rotation.py",
+        (
+            "tests/maltrainer/models/minimax_h3/test_int8_convrot_rotation.py",
+            "tests/maltrainer/models/minimax_h3/test_int8_convrot_function.py",
+            "tests/maltrainer/models/minimax_h3/test_int8_convrot_dispatch.py",
+        ),
+        88.0,
+    ),
+    Target(
+        "maltrainer/models/moss_image/model_config.py",
+        (
+            "tests/maltrainer/models/moss_image/test_model_blocks.py",
+            "tests/maltrainer/models/moss_image/test_model_config.py",
+            "tests/maltrainer/models/moss_image/test_model_forward.py",
+        ),
+        94.0,
+    ),
+    Target(
+        "maltrainer/models/embedding.py",
+        ("tests/maltrainer/models/test_embedding.py",),
+        78.0,
+    ),
+    Target(
+        "maltrainer/models/minimax_h3/packing.py",
+        (
+            "tests/trainers/minimax_h3/test_packed_geometry.py",
+            "tests/maltrainer/models/minimax_h3/test_packing_math.py",
+        ),
+        97.0,
+    ),
+    Target(
+        "maltrainer/models/minimax_h3/video_frames.py",
+        ("tests/maltrainer/models/minimax_h3/test_video_vae_constants.py",),
+        94.0,
+    ),
+)

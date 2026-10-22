@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import torch
 from torch import nn
@@ -22,7 +22,7 @@ from torch import nn
 logger = logging.getLogger(__name__)
 
 
-def compile_unavailable_reason(device: torch.device) -> Optional[str]:
+def compile_unavailable_reason(device: torch.device) -> str | None:
     """Why inductor cannot compile for ``device``, or None."""
     if not hasattr(torch, "compile"):
         return f"torch {torch.__version__} has no torch.compile"
@@ -31,7 +31,7 @@ def compile_unavailable_reason(device: torch.device) -> Optional[str]:
     return None
 
 
-def compile_blocks(blocks: Iterable[nn.Module], device: torch.device, mode: Optional[str] = None) -> bool:
+def compile_blocks(blocks: Iterable[nn.Module], device: torch.device, mode: str | None = None) -> bool:
     """Compile every block in place; returns whether it did."""
     reason = compile_unavailable_reason(device)
     blocks = list(blocks)
@@ -43,5 +43,7 @@ def compile_blocks(blocks: Iterable[nn.Module], device: torch.device, mode: Opti
     torch._dynamo.config.cache_size_limit = max(torch._dynamo.config.cache_size_limit, 64)
     for block in blocks:
         block.compile(mode=mode)
-    logger.info("torch.compile: %d blocks (mode %s); the first steps of each new shape compile", len(blocks), mode or "default")
+    logger.info(
+        "torch.compile: %d blocks (mode %s); the first steps of each new shape compile", len(blocks), mode or "default"
+    )
     return True

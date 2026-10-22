@@ -11,7 +11,8 @@ weight (comfy/lora.py).
 from __future__ import annotations
 
 import logging
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -30,8 +31,12 @@ TEXT_FFN = ("ffn_gate", "ffn_up", "ffn_down")
 # captions changes how all prompts are read, and in Fizgig's runs it exaggerated expressions
 # more with every epoch. TEXT_ATTN / TEXT_FFN stay for grouping loaded LoRAs that do adapt it.
 IO_LAYERS = (
-    "video_embedder", "time_embedding.0", "time_embedding.2",
-    "shared_block_modulation", "video_head_modulation", "final_linear_video",
+    "video_embedder",
+    "time_embedding.0",
+    "time_embedding.2",
+    "shared_block_modulation",
+    "video_head_modulation",
+    "final_linear_video",
 )
 
 # Named target sets.
@@ -45,17 +50,17 @@ TARGET_PRESETS = ("blocks", "attn", "all")
 # negative branch (the pipeline's uncond_skip_layers=[22]; ComfyUI's SkipLayerGuidanceDiTSimple),
 # so a LoRA there acts on the positive branch only. AI Toolkit leaves it out for that reason, but
 # Fizgig's A/B runs (v8.6.0, 2026-10-18) found that costs likeness, and Fizgig now trains it.
-DEFAULT_SKIP_BLOCKS: tuple = ()
+DEFAULT_SKIP_BLOCKS: tuple[Any, ...] = ()
 
 
-def _block_leaf(name: str) -> Optional[str]:
+def _block_leaf(name: str) -> str | None:
     parts = name.split(".")
     if len(parts) == 4 and parts[0] == "layers" and parts[2] == "proj":
         return parts[3]
     return None
 
 
-def _text_leaf(name: str) -> Optional[str]:
+def _text_leaf(name: str) -> str | None:
     parts = name.split(".")
     if len(parts) == 4 and parts[:2] == ["text_embedder", "blocks"]:
         return parts[3]
@@ -85,8 +90,15 @@ def param_group_of(name: str) -> str:
 
 
 class MOSSImageLoRANetwork(nn.Module):
-    def __init__(self, transformer: nn.Module, rank: int = 16, alpha: float = 16.0, targets: str = "blocks",
-                 prefix: str = "diffusion_model.", skip_blocks: Iterable[int] = DEFAULT_SKIP_BLOCKS):
+    def __init__(
+        self,
+        transformer: nn.Module,
+        rank: int = 16,
+        alpha: float = 16.0,
+        targets: str = "blocks",
+        prefix: str = "diffusion_model.",
+        skip_blocks: Iterable[int] = DEFAULT_SKIP_BLOCKS,
+    ):
         super().__init__()
         if targets not in TARGET_PRESETS:
             raise ValueError(f"lora.targets must be one of {TARGET_PRESETS}, got {targets!r}")
@@ -96,7 +108,7 @@ class MOSSImageLoRANetwork(nn.Module):
         self.skip_blocks = tuple(sorted({int(i) for i in skip_blocks}))
         skipped = tuple(f"layers.{i}." for i in self.skip_blocks)
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
 
         for name, module in list(transformer.named_modules()):
             if not isinstance(module, nn.Linear) or name.startswith(skipped):
@@ -114,12 +126,17 @@ class MOSSImageLoRANetwork(nn.Module):
         if not self.lora_layers:
             raise ValueError("No MOSS-Image modules matched the LoRA targets")
 
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for name in self.name_map.values():
             counts[param_group_of(name)] = counts.get(param_group_of(name), 0) + 1
         logger.info(
             "MOSS-Image LoRA: %d adapters (%s), rank %d, alpha %s, targets %s, skipped blocks %s",
-            len(self.lora_layers), counts, rank, alpha, targets, list(self.skip_blocks) or "none",
+            len(self.lora_layers),
+            counts,
+            rank,
+            alpha,
+            targets,
+            list(self.skip_blocks) or "none",
         )
 
     def _add(self, name: str, in_features: int, out_features: int, rank: int, alpha: float) -> LoRALayer:
@@ -130,40 +147,41 @@ class MOSSImageLoRANetwork(nn.Module):
         return layer
 
     @staticmethod
-    def _wrap(module: nn.Module, loras: List[nn.Module], concat: bool = False) -> None:
+    def _wrap(module: nn.Module, loras: Sequence[nn.Module], concat: bool = False) -> None:
         original = module.forward
 
-        def forward(x, _orig=original, _loras=loras):
+        def forward(x: torch.Tensor, _orig: Any = original, _loras: Sequence[nn.Module] = loras) -> torch.Tensor:
             base = _orig(x)
             delta = torch.cat([lora(x) for lora in _loras], dim=-1) if concat else _loras[0](x)
-            return (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta
+            return cast(torch.Tensor, (base + delta).to(base.dtype) if delta.dtype != base.dtype else base + delta)
 
         module.forward = forward
 
-    def set_lora_dtype(self, device, dtype: torch.dtype) -> None:
+    def set_lora_dtype(self, device: torch.device | str, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
-    def param_groups(self, split: bool) -> List[dict]:
+    def param_groups(self, split: bool) -> list[dict[str, Any]]:
         if not split:
             return [{"params": list(self.lora_layers.parameters()), "name": "lora"}]
-        groups: Dict[str, List[nn.Parameter]] = {}
+        groups: dict[str, list[nn.Parameter]] = {}
         for safe, layer in self.lora_layers.items():
             groups.setdefault(param_group_of(self.name_map[safe]), []).extend(layer.parameters())
         return [{"params": params, "name": name} for name, params in groups.items()]
 
-    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+    def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         out = {}
-        for safe, layer in self.lora_layers.items():
+        for safe, module in self.lora_layers.items():
+            layer = cast(LoRALayer, module)
             key = f"{self.prefix}{self.name_map[safe]}"
-            down = layer.lora_down.weight.detach().cpu()
-            up = layer.lora_up.weight.detach().cpu()
-            out[f"{key}.lora_A.weight"] = down if save_dtype is None else down.to(save_dtype)
-            out[f"{key}.lora_B.weight"] = up if save_dtype is None else up.to(save_dtype)
+            # copy=True: .cpu() and .to(same dtype) return the live weight itself, which training changes
+            down, up = layer.lora_down.weight.detach(), layer.lora_up.weight.detach()
+            out[f"{key}.lora_A.weight"] = down.to("cpu", save_dtype or down.dtype, copy=True)
+            out[f"{key}.lora_B.weight"] = up.to("cpu", save_dtype or up.dtype, copy=True)
             out[f"{key}.alpha"] = torch.tensor(float(layer.alpha), dtype=torch.float32)
         return out
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

@@ -59,7 +59,8 @@ finetune:
 
 The window at step `s` is `(s // rotate_every) mod windows`, so a `max_steps` that is a multiple
 of `4 × rotate_every` trains every window equally. A prefix matches the Linear's name inside its
-block; a Linear in no window stays frozen (with a warning).
+block; a Linear in no window stays frozen (with a warning). `rotate_every` must be at least 1; leave it out (or null)
+for the default of 100. A 0 or a negative value stops the run at start with an error (it used to be read as 100).
 
 ## Memory
 

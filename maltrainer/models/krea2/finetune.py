@@ -20,19 +20,20 @@ input/output layers stay frozen.
 from __future__ import annotations
 
 import logging
-import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, cast
 
 import torch
 from safetensors.torch import save_file
 from torch import nn
 
 from maltrainer.finetune.rotation import Window, WindowRotator
+from maltrainer.models.comfy_fp8 import Fp8ScaledLinear
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WINDOWS: Tuple[Window, ...] = (
+DEFAULT_WINDOWS: tuple[Window, ...] = (
     ("attention", ("attn.",)),
     ("mlp.gate", ("mlp.gate",)),
     ("mlp.up", ("mlp.up",)),
@@ -41,7 +42,7 @@ DEFAULT_WINDOWS: Tuple[Window, ...] = (
 DEFAULT_ALWAYS_ON = ("txtfusion",)
 
 
-def parse_windows(config: Optional[Sequence]) -> Tuple[Window, ...]:
+def parse_windows(config: Sequence[Any] | None) -> tuple[Window, ...]:
     """finetune.windows: [{name: attention, prefixes: ["attn."]}, ...] or [[name, [prefixes]], ...]."""
     if not config:
         return DEFAULT_WINDOWS
@@ -55,27 +56,33 @@ def parse_windows(config: Optional[Sequence]) -> Tuple[Window, ...]:
     return tuple(out)
 
 
-def always_on_linears(model: nn.Module, modules: Sequence[str]) -> List[Tuple[str, nn.Parameter]]:
+def always_on_linears(model: nn.Module, modules: Sequence[str]) -> list[tuple[str, nn.Parameter]]:
     """(name, weight) of every Linear under ``modules``, made trainable (weights only)."""
     out = []
     for module_name in modules:
         root = model.get_submodule(module_name)
         for name, module in root.named_modules():
+            fp8 = isinstance(module, nn.Linear) and module.weight.dtype in (torch.float8_e4m3fn, torch.float8_e5m2)
+            if fp8 or isinstance(module, Fp8ScaledLinear):  # the loader swaps fp8 Linears for Fp8ScaledLinear
+                raise ValueError(f"{module_name}.{name} is fp8; always-on modules must be bf16")
             if isinstance(module, nn.Linear):
-                if module.weight.dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
-                    raise ValueError(f"{module_name}.{name} is fp8; always-on modules must be bf16")
                 module.weight.requires_grad_(True)
-                out.append((f"{module_name}.{name}.weight", module.weight))
+                out.append((f"{module_name}.{name}.weight", cast(nn.Parameter, module.weight)))
     return out
 
 
-def save_krea2_model(model: nn.Module, rotator: WindowRotator, path: Path, key_prefix: str = "",
-                     metadata: Optional[Dict[str, str]] = None) -> None:
+def save_krea2_model(
+    model: nn.Module,
+    rotator: WindowRotator,
+    path: Path,
+    key_prefix: str = "",
+    metadata: dict[str, str] | None = None,
+) -> None:
     """A full bf16 Krea 2 file with the source's key prefix, which ComfyUI and load_krea2_transformer
     read back: the rotating weights from the master (the active window live), everything else
     (text fusion, norms, modulation, I/O) as the model holds it. Written aside, then renamed."""
     rotating = set(rotator.master)  # every block Linear, in a window or not
-    out: Dict[str, torch.Tensor] = {}
+    out: dict[str, torch.Tensor] = {}
     for name, tensor in model.state_dict().items():
         module, _, leaf = name.rpartition(".")
         if f"{module}.weight" in rotating and leaf in ("weight", "weight_scale"):
@@ -86,4 +93,4 @@ def save_krea2_model(model: nn.Module, rotator: WindowRotator, path: Path, key_p
     path = Path(path)
     tmp = path.with_name(path.name + ".tmp")
     save_file(out, str(tmp), metadata=metadata)
-    os.replace(tmp, path)
+    Path(tmp).replace(path)

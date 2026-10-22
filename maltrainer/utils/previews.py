@@ -43,23 +43,24 @@ system RAM.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import time
+from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Callable, ContextManager, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from PIL import Image
 
-logger = logging.getLogger(__name__)
+from maltrainer.utils.previews_live import PreviewEdits, contact_strip
 
-SETTINGS = ("every", "at_start", "negative", "steps", "cfg", "width", "height", "seed", "slow_after")
+logger = logging.getLogger(__name__)
 ROWS = ("raw", "ema")
 
 
-def _entries(prompts) -> List[Tuple[str, bool]]:
+def _entries(prompts: Sequence[object] | None) -> list[tuple[str, bool]]:
     """``prompts`` items as (prompt, enabled): a string, or {prompt: ..., enabled: ...}."""
-    out = []
+    out: list[tuple[str, bool]] = []
     for item in prompts or []:
         if isinstance(item, dict):
             text = str(item.get("prompt", "")).strip()
@@ -70,9 +71,9 @@ def _entries(prompts) -> List[Tuple[str, bool]]:
     return out
 
 
-class Previews:
-    def __init__(self, config: Optional[dict], output_dir: Path):
-        self.slots: Dict[str, int] = {}  # prompt -> its stable number (seed offset, file name)
+class Previews(PreviewEdits):
+    def __init__(self, config: dict[str, Any] | None, output_dir: Path):
+        self.slots: dict[str, int] = {}  # prompt -> its stable number (seed offset, file name)
         self.current = ""
         self.dir = Path(output_dir) / "samples"
         self._listed = False  # prompts.txt is rewritten once per process, then on every change
@@ -80,10 +81,10 @@ class Previews:
         if self.every > 0 and not self.active:
             logger.warning("sample.every is set but no sample prompt is enabled: no previews")
 
-    def _apply(self, config: dict) -> None:
+    def _apply(self, config: dict[str, Any]) -> None:
         self.every = int(config.get("every", 0) or 0)
         entries = _entries(config.get("prompts"))
-        self.prompts: List[str] = [p for p, _ in entries]  # every defined prompt, in file order
+        self.prompts: list[str] = [p for p, _ in entries]  # every defined prompt, in file order
         self.enabled_prompts = {p for p, on in entries if on}
         self.at_start = bool(config.get("at_start", True))
         self.negative = str(config.get("negative", "") or "")
@@ -100,7 +101,7 @@ class Previews:
                 self.slots[prompt] = max(self.slots.values(), default=-1) + 1
 
     @property
-    def active(self) -> List[str]:
+    def active(self) -> list[str]:
         """The enabled prompts, in file order."""
         return [p for p in self.prompts if p in self.enabled_prompts]
 
@@ -108,41 +109,10 @@ class Previews:
     def enabled(self) -> bool:
         return self.every > 0 and bool(self.active)
 
-    # ------------------------------------------------------------------ changes while running
-
-    def update(self, config: Optional[dict]) -> List[str]:
-        """Apply a new ``sample`` section; returns a line per change (empty: nothing changed)."""
-        before = {key: getattr(self, key) for key in SETTINGS}
-        old_prompts, old_enabled, old_rows = list(self.prompts), set(self.enabled_prompts), dict(self.rows)
-        self._apply(config or {})
-        changes = [f"{key}: {before[key]!r} -> {getattr(self, key)!r}" for key in SETTINGS if getattr(self, key) != before[key]]
-        changes += [f"rows: {row} {'on' if on else 'off'}" for row, on in self.rows.items() if old_rows.get(row) != on]
-        for p in self.prompts:
-            if p not in old_prompts:
-                changes.append(f"+ [{self.slots[p]:02d}] {p}" + ("" if p in self.enabled_prompts else " (disabled)"))
-            elif (p in self.enabled_prompts) != (p in old_enabled):
-                changes.append(f"{'enabled ' if p in self.enabled_prompts else 'disabled'} [{self.slots[p]:02d}] {p}")
-        changes += [f"- [{self.slots[p]:02d}] {p}" for p in old_prompts if p not in self.prompts]
-        if changes:
-            self._write_listing()
-        return changes
-
-    def set_every(self, every: int) -> None:
-        self.every = max(int(every), 0)
-
-    def set_enabled(self, prompt: str, on: bool) -> None:
-        if on:
-            self.enabled_prompts.add(prompt)
-        else:
-            self.enabled_prompts.discard(prompt)
-
-    def set_row(self, row: str, on: bool) -> None:
-        self.rows[row] = bool(on)
-
     # ------------------------------------------------------------------ rendering
 
     @property
-    def captions(self) -> List[str]:
+    def captions(self) -> list[str]:
         """Everything a render may need encoded: every defined prompt (enabled or not, so enabling
         one later is instant) and, with CFG, the negative."""
         if not self.prompts:
@@ -154,22 +124,12 @@ class Previews:
             return False
         return (step == 0 and self.at_start) or (step > 0 and (step % self.every == 0 or step == total))
 
-    def _write_listing(self) -> None:
-        self.dir.mkdir(parents=True, exist_ok=True)
-        lines = []
-        for prompt, slot in sorted(self.slots.items(), key=lambda item: item[1]):
-            state = "on " if prompt in self.enabled_prompts else ("off" if prompt in self.prompts else "removed")
-            lines.append(f"{slot:02d}  seed {self.seed + slot}  [{state}]  {prompt}\n")
-        lines.append(f"every {self.every} steps, rows {', '.join(r for r, on in self.rows.items() if on) or 'none'}; "
-                     f"negative: {self.negative!r}, {self.steps} steps, CFG {self.cfg:g}, {self.width}x{self.height}\n")
-        (self.dir / "prompts.txt").write_text("".join(lines), encoding="utf-8")
-
     def render(
         self,
         step: int,
         render_one: Callable[[str, int], Image.Image],
-        variants: Sequence[Tuple[str, Callable[[], ContextManager]]] = (("", contextlib.nullcontext),),
-        ready: Callable[[str], bool] = lambda prompt: True,
+        variants: Sequence[tuple[str, Callable[[], AbstractContextManager[Any]]]] = (("", nullcontext),),
+        ready: Callable[[str], bool] = lambda _prompt: True,
     ) -> float:
         """Render every enabled, ready prompt for ``step``, once per variant (label, context that
         puts those weights in place; labelled variants only when their row is on); returns the
@@ -182,8 +142,12 @@ class Previews:
         prompts = [p for p in self.active if ready(p)]
         waiting = [p for p in self.active if p not in prompts]
         if waiting:
-            logger.info("[sample] step %d: %d new prompt(s) still being encoded, skipped this round: %s",
-                        step, len(waiting), ", ".join(f"[{self.slots[p]:02d}]" for p in waiting))
+            logger.info(
+                "[sample] step %d: %d new prompt(s) still being encoded, skipped this round: %s",
+                step,
+                len(waiting),
+                ", ".join(f"[{self.slots[p]:02d}]" for p in waiting),
+            )
         if not prompts or not variants:
             return 0.0
         started = time.time()
@@ -208,21 +172,21 @@ class Previews:
                             "[sample] %s took %.0fs (over %.0fs): the GPU is probably out of VRAM and spilling into "
                             "system RAM. Close other GPU programs; NVIDIA Control Panel's 'CUDA - Sysmem Fallback "
                             "Policy: Prefer No Sysmem Fallback' turns this into an out-of-memory error instead",
-                            self.current, took, self.slow_after)
+                            self.current,
+                            took,
+                            self.slow_after,
+                        )
             rows.append(images)
-        width = max(sum(im.width for im in row) for row in rows)
-        height = sum(max(im.height for im in row) for row in rows)
-        strip = Image.new("RGB", (width, height))
-        y = 0
-        for row in rows:
-            x = 0
-            for image in row:
-                strip.paste(image, (x, y))
-                x += image.width
-            y += max(im.height for im in row)
+        strip = contact_strip(rows)
         strip.save(self.dir / f"step{step:06d}.png")
         elapsed = time.time() - started
         labels = ", ".join(label for label, _ in variants if label)
-        logger.info("[sample] step %d: %d preview(s)%s in %.0fs -> %s", step, sum(len(r) for r in rows),
-                    f" ({labels}, one row each)" if labels else "", elapsed, self.dir / f"step{step:06d}.png")
+        logger.info(
+            "[sample] step %d: %d preview(s)%s in %.0fs -> %s",
+            step,
+            sum(len(r) for r in rows),
+            f" ({labels}, one row each)" if labels else "",
+            elapsed,
+            self.dir / f"step{step:06d}.png",
+        )
         return elapsed

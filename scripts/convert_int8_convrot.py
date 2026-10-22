@@ -36,10 +36,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("source", type=Path, help="the bf16 (or fp16 / fp32) ComfyUI single file")
     parser.add_argument("output", type=Path, help="where to write the INT8 ConvRot file")
-    parser.add_argument("--reference", type=Path, required=True,
-                        help="an INT8 ConvRot file of the same architecture (e.g. Comfy-Org's release)")
-    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu",
-                        help="where to rotate and quantize (default: cuda if available)")
+    parser.add_argument(
+        "--reference",
+        type=Path,
+        required=True,
+        help="an INT8 ConvRot file of the same architecture (e.g. Comfy-Org's release)",
+    )
+    parser.add_argument(
+        "--device",
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="where to rotate and quantize (default: cuda if available)",
+    )
     parser.add_argument("--force", action="store_true", help="overwrite the output")
     args = parser.parse_args()
 
@@ -57,8 +64,12 @@ def main() -> int:
         ref_keys = set(ref.keys())
         markers = {k[: -len(".comfy_quant")]: ref.get_tensor(k) for k in ref_keys if k.endswith(".comfy_quant")}
         configs = {k: json.loads(bytes(t.tolist()).decode("utf-8")) for k, t in markers.items()}
-        extras = {k: ref.get_tensor(k) for k in ref_keys
-                  if not k.endswith((".weight", ".weight_scale", ".comfy_quant", ".bias")) and ref.get_slice(k).get_dtype() == "U8"}
+        extras = {
+            k: ref.get_tensor(k)
+            for k in ref_keys
+            if not k.endswith((".weight", ".weight_scale", ".comfy_quant", ".bias"))
+            and ref.get_slice(k).get_dtype() == "U8"
+        }
 
     out = {}
     with safe_open(str(args.source), framework="pt", device="cpu") as src:
@@ -66,7 +77,10 @@ def main() -> int:
         src_keys = list(src.keys())
         missing = [m for m in markers if f"{m}.weight" not in src_keys]
         if missing:
-            print(f"the reference quantizes {len(missing)} Linears the source does not have, e.g. {missing[:3]}", file=sys.stderr)
+            print(
+                f"the reference quantizes {len(missing)} Linears the source does not have, e.g. {missing[:3]}",
+                file=sys.stderr,
+            )
             return 1
         for i, key in enumerate(src_keys):
             module = key[: -len(".weight")] if key.endswith(".weight") else None
@@ -92,8 +106,10 @@ def main() -> int:
     save_file(out, str(tmp), metadata=metadata)
     tmp.replace(args.output)
     size = args.output.stat().st_size / 1e9
-    print(f"wrote {args.output} ({size:.2f} GB): {len(markers)} Linears INT8 ConvRot, {len(extras)} reference blobs, "
-          f"{len(out)} tensors in {time.time() - started:.0f}s")
+    print(
+        f"wrote {args.output} ({size:.2f} GB): {len(markers)} Linears INT8 ConvRot, {len(extras)} reference blobs, "
+        f"{len(out)} tensors in {time.time() - started:.0f}s"
+    )
     return 0
 
 

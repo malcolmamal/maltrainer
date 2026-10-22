@@ -4,11 +4,12 @@ ComfyUI custom node for Z-Image Textual Inversion support.
 This node provides text encoding with textual inversion embeddings for Z-Image models.
 """
 
-import torch
-import folder_paths
-from transformers import Qwen2Tokenizer, Qwen3ForCausalLM
+from pathlib import Path
+
 import safetensors.torch as safetensors
-import os
+import torch
+from transformers import Qwen2Tokenizer, Qwen3ForCausalLM
+
 
 class ZImageTextEncodeWithEmbeddings:
     """
@@ -25,7 +26,7 @@ class ZImageTextEncodeWithEmbeddings:
             "optional": {
                 "embedding_file": ("STRING", {"default": ""}),
                 "token_string": ("STRING", {"default": "<*>"}),
-            }
+            },
         }
 
     RETURN_TYPES = ("CONDITIONING",)
@@ -50,7 +51,7 @@ class ZImageTextEncodeWithEmbeddings:
 
     def load_embedding(self, embedding_path, token_string):
         """Load textual inversion embedding and inject into text encoder."""
-        if not embedding_path or not os.path.exists(embedding_path):
+        if not embedding_path or not Path(embedding_path).exists():
             return
 
         # Load the embedding
@@ -58,16 +59,16 @@ class ZImageTextEncodeWithEmbeddings:
 
         # Find embedding vectors
         embedding_vectors = None
-        
+
         # Priority 1: Check for 'emb_params' (common format)
-        if 'emb_params' in embedding_data:
-            embedding_vectors = embedding_data['emb_params']
+        if "emb_params" in embedding_data:
+            embedding_vectors = embedding_data["emb_params"]
         # Priority 2: Check for 'embedding' (our trainer format)
-        elif 'embedding' in embedding_data:
-            embedding_vectors = embedding_data['embedding']
+        elif "embedding" in embedding_data:
+            embedding_vectors = embedding_data["embedding"]
         # Priority 3: Heuristic search for correct shape
         else:
-            for key, tensor in embedding_data.items():
+            for _key, tensor in embedding_data.items():
                 if tensor.dim() == 2 and tensor.shape[0] <= 16:  # num_vectors x dim
                     embedding_vectors = tensor
                     break
@@ -86,8 +87,9 @@ class ZImageTextEncodeWithEmbeddings:
 
         # Set the embedding
         with torch.no_grad():
-            self.text_encoder.get_input_embeddings().weight[token_id:token_id+embedding_vectors.shape[0]] = \
+            self.text_encoder.get_input_embeddings().weight[token_id : token_id + embedding_vectors.shape[0]] = (
                 embedding_vectors.to(self.text_encoder.device, self.text_encoder.dtype)
+            )
 
         print(f"Loaded {embedding_vectors.shape[0]} embedding vectors for token '{token_string}'")
 
@@ -110,7 +112,8 @@ class ZImageTextEncodeWithEmbeddings:
 
         # Return in ComfyUI conditioning format
         # For Z-Image, we return the text embeddings directly
-        return ([[text_embeds, {"context": text_embeds}]], )
+        return ([[text_embeds, {"context": text_embeds}]],)
+
 
 # Node registration
 NODE_CLASS_MAPPINGS = {

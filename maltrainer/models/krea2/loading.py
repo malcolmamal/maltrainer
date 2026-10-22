@@ -6,23 +6,37 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
 
 import torch
 from accelerate import init_empty_weights
 
-from maltrainer.models.comfy_fp8 import (container_prefix, dequantize, quantize_rows, read_comfy_checkpoint,
-                                         strip_prefix, swap_in_fp8_linears)
+from maltrainer.models.comfy_fp8 import (
+    container_prefix,
+    dequantize,
+    quantize_rows,
+    read_comfy_checkpoint,
+    strip_prefix,
+    swap_in_fp8_linears,
+)
 from maltrainer.models.krea2.model import Krea2Config, Krea2Transformer
 
 logger = logging.getLogger(__name__)
 
+
 def is_block_linear(key: str) -> bool:
-    return key.startswith("blocks.") and key.endswith(".weight") and (".attn.w" in key or ".attn.gate" in key or ".mlp." in key)
+    return (
+        key.startswith("blocks.")
+        and key.endswith(".weight")
+        and (".attn.w" in key or ".attn.gate" in key or ".mlp." in key)
+    )
 
 
-def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute_dtype: torch.dtype = torch.bfloat16,
-                           master: Optional[Dict[str, torch.Tensor]] = None) -> Tuple[Krea2Transformer, Dict[str, object]]:
+def load_krea2_transformer(
+    path: str | Path,
+    device: torch.device,
+    compute_dtype: torch.dtype = torch.bfloat16,
+    master: dict[str, torch.Tensor] | None = None,
+) -> tuple[Krea2Transformer, dict[str, object]]:
     """Build the DiT with fp8 block Linears.
 
     An fp8_scaled file keeps the exact fp8 weights ComfyUI runs. A bf16 file (e.g. Comfy-Org's
@@ -37,7 +51,7 @@ def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute
     tensors, layers = read_comfy_checkpoint(path)
     prefix_found = container_prefix(tensors)
     tensors, layers = strip_prefix(tensors, layers)
-    info: Dict[str, object] = {"source_fp8_layers": len(layers), "key_prefix": prefix_found}
+    info: dict[str, object] = {"source_fp8_layers": len(layers), "key_prefix": prefix_found}
 
     if master is not None:
         for key in [k for k in tensors if is_block_linear(k)]:
@@ -56,7 +70,11 @@ def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute
         info["quantized_on_load"] = len(layers)
 
     for key, value in list(tensors.items()):
-        if value.is_floating_point() and value.dtype not in (torch.float8_e4m3fn, torch.float8_e5m2) and not key.endswith("weight_scale"):
+        if (
+            value.is_floating_point()
+            and value.dtype not in (torch.float8_e4m3fn, torch.float8_e5m2)
+            and not key.endswith("weight_scale")
+        ):
             tensors[key] = value.to(compute_dtype)
 
     with init_empty_weights(include_buffers=True):
@@ -74,7 +92,9 @@ def load_krea2_transformer(path: Union[str, Path], device: torch.device, compute
     info["fp8_linears"] = len(layers)
     logger.info(
         "Krea 2 DiT from %s: %d fp8 Linears (%s), rest %s",
-        Path(path).name, len(layers), "quantized on load" if info.get("quantized_on_load") else "as stored",
+        Path(path).name,
+        len(layers),
+        "quantized on load" if info.get("quantized_on_load") else "as stored",
         compute_dtype,
     )
     return model, info

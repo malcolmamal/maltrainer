@@ -1,5 +1,9 @@
 # Textual Inversion Training Configuration Reference
 
+> **Deprecated.** Z-Image textual inversion was a proof of concept that did not give usable results. The trainer
+> (`train_zimage_embedding.py`) still runs, is tested and logs a deprecation warning when started, and the approach
+> may be reused with other models later. For Z-Image, train a LoRA instead.
+
 Complete reference for Z-Image Textual Inversion (embedding) training configuration parameters.
 
 ## Configuration Structure

@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Any
 
 import torch
 from accelerate import init_empty_weights
@@ -31,12 +31,12 @@ from torch import nn
 from transformers import AutoTokenizer, Qwen3VLConfig
 
 from maltrainer.models.flux3.loading import is_int8_convrot
+from maltrainer.models.flux3.text_state import install_int8_embedding, load_text_state
 from maltrainer.models.minimax_h3.int8_convrot import (
     enable_int8_convrot,
     load_comfy_int8_convrot_state_dict,
     prepare_int8_convrot_modules,
 )
-from maltrainer.models.qwen_image_2_1.text_encoder import Int8Embedding
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +51,25 @@ TOKENIZER_ASSETS = Path(__file__).resolve().parents[1] / "minimax_h3" / "assets"
 
 # comfy/text_encoders/llama.py Qwen3VL_4BConfig. Heads, rope and eps are shared with the
 # vendored Qwen3-VL config and inherited from it.
-QWEN3VL_4B_TEXT = dict(hidden_size=2560, intermediate_size=9728, num_attention_heads=32, num_key_value_heads=8, head_dim=128)
+QWEN3VL_4B_TEXT = {
+    "hidden_size": 2560,
+    "intermediate_size": 9728,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "head_dim": 128,
+}
 
 
-def _text_key(key: str) -> Optional[str]:
-    for prefix in ("text_encoders.qwen3vl_4b.transformer.", "model.language_model.", "language_model.model.", "language_model.", "model."):
+def _text_key(key: str) -> str | None:
+    for prefix in (
+        "text_encoders.qwen3vl_4b.transformer.",
+        "model.language_model.",
+        "language_model.model.",
+        "language_model.",
+        "model.",
+    ):
         if key.startswith(prefix):
-            key = key[len(prefix):]
+            key = key[len(prefix) :]
             break
     if key.startswith(("visual.", "lm_head.")):
         return None
@@ -65,18 +77,19 @@ def _text_key(key: str) -> Optional[str]:
 
 
 class Flux3TextEncoder(nn.Module):
-    def __init__(self, model: nn.Module, tokenizer):
+    def __init__(self, model: Any, tokenizer: Any) -> None:
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
-        self._captured: Dict[int, torch.Tensor] = {}
+        self._captured: dict[int, torch.Tensor] = {}
         for k in TAP_LAYERS[:-1]:
             model.layers[k].register_forward_pre_hook(self._capture(k), with_kwargs=True)
 
-    def _capture(self, index: int):
-        def hook(_module, args, kwargs):
+    def _capture(self, index: int) -> Any:
+        def hook(_module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
             hidden = args[0] if args else kwargs["hidden_states"]
             self._captured[index] = hidden.detach()
+
         return hook
 
     @torch.no_grad()
@@ -102,22 +115,17 @@ class Flux3TextEncoder(nn.Module):
         return torch.cat([t[0] for t in taps], dim=-1).to(dtype)
 
 
-def load_flux3_text_encoder(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.bfloat16,
-                            tokenizer_path: Union[str, Path, None] = None, grad_precision: str = "bf16") -> Flux3TextEncoder:
-    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
-
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Qwen3-VL-4B text encoder not found at {path}")
-    tokenizer = AutoTokenizer.from_pretrained(str(Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS), trust_remote_code=True)
-
-    config = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
-    for name, value in QWEN3VL_4B_TEXT.items():
-        setattr(config, name, value)
+def _text_config(tokenizer_assets: Path) -> Any:
+    config: Any = Qwen3VLConfig.from_pretrained(str(tokenizer_assets)).text_config
+    for name, setting in QWEN3VL_4B_TEXT.items():
+        setattr(config, name, setting)
     config.num_hidden_layers = TAP_LAYERS[-1]
     config.use_cache = False
+    return config
 
-    quantized = is_int8_convrot(path)
+
+def _text_state(path: Path, quantized: bool, num_layers: int) -> dict[str, Any]:
+    """The checkpoint's text-model tensors under their ``Qwen3VLTextModel`` names, past layer ``num_layers`` dropped."""
     if quantized:
         raw, _ = load_comfy_int8_convrot_state_dict(str(path), device=torch.device("cpu"))
     else:
@@ -127,32 +135,42 @@ def load_flux3_text_encoder(path: Union[str, Path], device: torch.device, dtype:
         target = _text_key(key)
         if target is None or target.startswith("norm."):
             continue
-        if target.startswith("layers.") and int(target.split(".", 2)[1]) >= config.num_hidden_layers:
+        if target.startswith("layers.") and int(target.split(".", 2)[1]) >= num_layers:
             continue
         state[target] = value
+    return state
+
+
+def load_flux3_text_encoder(
+    path: str | Path,
+    device: torch.device,
+    dtype: torch.dtype = torch.bfloat16,
+    tokenizer_path: str | Path | None = None,
+    grad_precision: str = "bf16",
+) -> Flux3TextEncoder:
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
+
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Qwen3-VL-4B text encoder not found at {path}")
+    tokenizer = AutoTokenizer.from_pretrained(
+        str(Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS), trust_remote_code=True
+    )
+    config = _text_config(TOKENIZER_ASSETS)
+
+    quantized = is_int8_convrot(path)
+    state = _text_state(path, quantized, config.num_hidden_layers)
 
     with init_empty_weights(include_buffers=False):
-        model = Qwen3VLTextModel(config)
+        model: Any = Qwen3VLTextModel(config)
     model.norm = nn.Identity()
 
     if quantized and "embed_tokens.int8_convrot_groupsize" in state:
-        # The table is stored Hadamard-rotated; Int8Embedding un-rotates it on lookup.
-        embed = Int8Embedding(config.vocab_size, config.hidden_size, group_size=int(state["embed_tokens.int8_convrot_groupsize"].item()))
-        embed.weight.data.copy_(state.pop("embed_tokens.weight"))
-        embed.scale_weight.data.copy_(state.pop("embed_tokens.scale_weight"))
-        state.pop("embed_tokens.int8_convrot_groupsize")
-        model.embed_tokens = embed
+        install_int8_embedding(model, state, config)
     if quantized:
         prepare_int8_convrot_modules(model, state)
 
-    info = model.load_state_dict(state, strict=False, assign=True)
-    replaced_embed = isinstance(model.embed_tokens, Int8Embedding)
-    missing = [key for key in info.missing_keys if "rotary_emb" not in key and not (replaced_embed and key.startswith("embed_tokens."))]
-    if missing or info.unexpected_keys:
-        raise ValueError(
-            f"{path.name} does not look like a Qwen3-VL-4B text encoder "
-            f"(missing {missing[:5]}, unexpected {info.unexpected_keys[:5]})"
-        )
+    load_text_state(model, state, path.name)
     if quantized:
         enable_int8_convrot(model, grad_precision=grad_precision)
 
@@ -162,5 +180,9 @@ def load_flux3_text_encoder(path: Union[str, Path], device: torch.device, dtype:
         if parameter.is_floating_point():
             parameter.data = parameter.data.to(dtype)
     model.to(device=device).eval().requires_grad_(False)
-    logger.info("FLUX.3 text encoder: Qwen3-VL-4B, %d layers, %s", config.num_hidden_layers, "INT8 ConvRot" if quantized else "plain")
+    logger.info(
+        "FLUX.3 text encoder: Qwen3-VL-4B, %d layers, %s",
+        config.num_hidden_layers,
+        "INT8 ConvRot" if quantized else "plain",
+    )
     return Flux3TextEncoder(model, tokenizer)

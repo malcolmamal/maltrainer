@@ -1,0 +1,5 @@
+# Commits git blame skips. GitHub reads this file on its own; locally, run once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: format the repository with ruff format (line length 120)
+251bddf5ab8f4ca9681b58c30e9dde625a63eab4

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any
 
 import torch
 from accelerate import init_empty_weights
@@ -41,47 +41,66 @@ TOKENIZER_ASSETS = Path(__file__).resolve().parents[1] / "minimax_h3" / "assets"
 
 # comfy/text_encoders/llama.py Qwen3VL_4BConfig (the rest -- heads, rope, eps -- is shared
 # with the vendored Qwen3-VL config and inherited from it).
-QWEN3VL_4B_TEXT = dict(hidden_size=2560, intermediate_size=9728, num_attention_heads=32, num_key_value_heads=8, head_dim=128)
+QWEN3VL_4B_TEXT = {
+    "hidden_size": 2560,
+    "intermediate_size": 9728,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "head_dim": 128,
+}
 
 
-def _prefix_end(token_ids: List[int]) -> int:
+def _prefix_end(token_ids: list[int]) -> int:
     """Index of the first prompt token: ComfyUI's Krea2TEModel prefix strip."""
     template_end, seen = -1, 0
     for i, token in enumerate(token_ids):
         if token == IM_START and seen < 2:
             template_end, seen = i, seen + 1
-    if len(token_ids) > template_end + 3 and token_ids[template_end + 1] == USER and token_ids[template_end + 2] == NEWLINE:
+    if (
+        len(token_ids) > template_end + 3
+        and token_ids[template_end + 1] == USER
+        and token_ids[template_end + 2] == NEWLINE
+    ):
         template_end += 3
     return max(template_end, 0)
 
 
-def _text_key(key: str) -> Optional[str]:
-    for prefix in ("text_encoders.qwen3vl_4b.transformer.", "model.language_model.", "language_model.model.", "language_model.", "model."):
+def _text_key(key: str) -> str | None:
+    key = key.removeprefix("text_encoders.qwen3vl_4b.transformer.")  # a combined ComfyUI file, then its own spelling
+    for prefix in (
+        "model.language_model.",
+        "language_model.model.",
+        "language_model.",
+        "model.",
+    ):
         if key.startswith(prefix):
-            key = key[len(prefix):]
+            key = key[len(prefix) :]
             break
-    if key.startswith(("visual.", "lm_head.")) or key.startswith("model.visual"):
+    if key.startswith(("visual.", "lm_head.", "model.visual")):
         return None
     return key
 
 
 class Krea2TextEncoder(nn.Module):
-    def __init__(self, model: nn.Module, tokenizer):
+    def __init__(self, model: Any, tokenizer: Any) -> None:
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
-        self._captured: Dict[int, torch.Tensor] = {}
+        self._captured: dict[int, torch.Tensor] = {}
         for k in TAP_LAYERS[:-1]:
             model.layers[k].register_forward_pre_hook(self._capture(k), with_kwargs=True)
 
-    def _capture(self, index: int):
-        def hook(_module, args, kwargs):
+    def _capture(self, index: int) -> Any:
+        def hook(_module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
             hidden = args[0] if args else kwargs["hidden_states"]
             self._captured[index] = hidden.detach()
+
         return hook
 
     @torch.no_grad()
-    def encode(self, prompt: str, device: torch.device, dtype: torch.dtype = torch.bfloat16, max_prompt_tokens: int = 512) -> torch.Tensor:
+    def encode(
+        self, prompt: str, device: torch.device, dtype: torch.dtype = torch.bfloat16, max_prompt_tokens: int = 512
+    ) -> torch.Tensor:
         """One prompt -> (seq, 12, 2560) conditioning on CPU-ready ``dtype``.
 
         Prompts longer than ``max_prompt_tokens`` are cut (ai-toolkit and OneTrainer cap at 512;
@@ -104,21 +123,25 @@ class Krea2TextEncoder(nn.Module):
         return stacked[start:].to(dtype)
 
 
-def load_krea2_text_encoder(path: Union[str, Path], device: torch.device, dtype: torch.dtype = torch.bfloat16,
-                            tokenizer_path: Union[str, Path, None] = None) -> Krea2TextEncoder:
+def load_krea2_text_encoder(
+    path: str | Path,
+    device: torch.device,
+    dtype: torch.dtype = torch.bfloat16,
+    tokenizer_path: str | Path | None = None,
+) -> Krea2TextEncoder:
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
 
     assets = Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS
     tokenizer = AutoTokenizer.from_pretrained(str(assets), trust_remote_code=True)
 
-    config = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
-    for name, value in QWEN3VL_4B_TEXT.items():
-        setattr(config, name, value)
+    config: Any = Qwen3VLConfig.from_pretrained(str(TOKENIZER_ASSETS)).text_config
+    for name, setting in QWEN3VL_4B_TEXT.items():
+        setattr(config, name, setting)
     config.num_hidden_layers = TAP_LAYERS[-1]  # 35: the deepest tap is the input to layer 35
     config.use_cache = False
 
     with init_empty_weights(include_buffers=False):
-        model = Qwen3VLTextModel(config)
+        model: Any = Qwen3VLTextModel(config)
     model.norm = nn.Identity()
 
     tensors, layers = read_comfy_checkpoint(path)
@@ -141,5 +164,7 @@ def load_krea2_text_encoder(path: Union[str, Path], device: torch.device, dtype:
     # Non-persistent buffers (RoPE inv_freq) were never materialized under init_empty_weights.
     model.rotary_emb = type(model.rotary_emb)(config=config)
     model.to(device=device, dtype=dtype).eval().requires_grad_(False)
-    logger.info("Krea 2 text encoder: Qwen3-VL-4B, %d layers, %d fp8 tensors dequantized", config.num_hidden_layers, len(layers))
+    logger.info(
+        "Krea 2 text encoder: Qwen3-VL-4B, %d layers, %d fp8 tensors dequantized", config.num_hidden_layers, len(layers)
+    )
     return Krea2TextEncoder(model, tokenizer)

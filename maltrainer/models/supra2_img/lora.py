@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, cast
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class SupraLoRALayer(nn.Module):
         nn.init.zeros_(self.lora_up.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.lora_up(self.lora_down(x)) * self.scale
+        return cast(torch.Tensor, self.lora_up(self.lora_down(x)) * self.scale)
 
 
 class SupraLoRANetwork(nn.Module):
@@ -43,7 +44,7 @@ class SupraLoRANetwork(nn.Module):
         transformer: nn.Module,
         rank: int = 16,
         alpha: float = 16.0,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
         prefix: str = "",
     ):
         super().__init__()
@@ -53,7 +54,7 @@ class SupraLoRANetwork(nn.Module):
         self.target_modules = target_modules or list(DEFAULT_SUPRA_TARGET_MODULES)
         self.prefix = prefix
         self.lora_layers = nn.ModuleDict()
-        self.name_map: Dict[str, str] = {}
+        self.name_map: dict[str, str] = {}
         self._inject_lora()
 
     def _matches(self, name: str) -> bool:
@@ -79,20 +80,20 @@ class SupraLoRANetwork(nn.Module):
     def _wrap_forward(module: nn.Linear, lora: nn.Module) -> None:
         original_forward = module.forward
 
-        def forward(x, _orig=original_forward, _lora=lora):
-            return _orig(x) + _lora(x)
+        def forward(x: torch.Tensor, _orig: Any = original_forward, _lora: Any = lora) -> torch.Tensor:
+            return cast(torch.Tensor, _orig(x) + _lora(x))
 
-        module.forward = forward
+        module.forward = forward  # type: ignore[method-assign, assignment]  # monkeypatching the instance forward is the point; the stub types forward as a method
 
     def set_lora_dtype(self, device: torch.device, dtype: torch.dtype) -> None:
         self.lora_layers.to(device=device, dtype=dtype)
 
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> Iterator[nn.Parameter]:
         return self.lora_layers.parameters()
 
-    def get_state_dict(self, save_dtype: Optional[torch.dtype] = torch.bfloat16) -> Dict[str, torch.Tensor]:
+    def get_state_dict(self, save_dtype: torch.dtype | None = torch.bfloat16) -> dict[str, torch.Tensor]:
         state = {}
-        for safe_name, layer in self.lora_layers.items():
+        for safe_name, layer in cast("dict[str, SupraLoRALayer]", self.lora_layers).items():
             name = f"{self.prefix}{self.name_map[safe_name]}"
 
             def _store(tensor: torch.Tensor) -> torch.Tensor:
@@ -104,13 +105,13 @@ class SupraLoRANetwork(nn.Module):
             state[f"{name}.alpha"] = torch.tensor(layer.alpha, dtype=torch.float32)
         return state
 
-    def load_weights(self, path: Union[str, Path]) -> int:
+    def load_weights(self, path: str | Path) -> int:
         from safetensors.torch import load_file
 
         tensors = load_file(str(path), device="cpu")
         missing = []
         loaded = 0
-        for safe_name, layer in self.lora_layers.items():
+        for safe_name, layer in cast("dict[str, SupraLoRALayer]", self.lora_layers).items():
             name = f"{self.prefix}{self.name_map[safe_name]}"
             down_key = f"{name}.lora_A.weight"
             up_key = f"{name}.lora_B.weight"
@@ -130,5 +131,5 @@ class SupraLoRANetwork(nn.Module):
         logger.info("Loaded %d Supra2-IMG LoRA layers from %s", loaded, path)
         return loaded
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         return self.transformer(*args, **kwargs)

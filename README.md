@@ -9,7 +9,7 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   ~1500 steps, ≈ 13–16 min on an RTX 5090. Training is currently **square 512×512**; more resolutions and
   aspect-ratio bucketing are planned. See the [Qwen-Image 2.1 training guide](docs/qwen-image-2.1-lora-training.md).
 - **Z-Image LoRA Training**: Train LoRA adapters for Z-Image (base) models
-- **Z-Image Textual Inversion**: Train textual inversion embeddings for Z-Image
+- **Z-Image Textual Inversion (deprecated)**: a proof of concept that did not give usable results; kept for reference and possible reuse with other models
 - **Krea 2 LoRA Training**: trains from ComfyUI's single files (the fp8 RAW DiT, the Qwen-Image VAE
   and Qwen3-VL-4B), with an Automagic3 template, a Prodigy template that mirrors OneTrainer's
   recipe and an AdamW 8-bit template after Fizgig's Standard preset. Optional DOP keeps the
@@ -46,10 +46,13 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   video clips with sound, and audio-only recordings, using ComfyUI's single-file checkpoints. It
   includes Fizgig's default recipe. See the [MiniMax H3 training guide](docs/minimax-h3-lora-training.md).
 - **Optimizers**: AdamW 8-bit, Prodigy, and Automagic3 (self-tuning learning rate)
+- **Control API**: an opt-in REST API with Swagger, served by the running trainer itself, to check a run's stats
+  and steer it: pause and resume, save, save and stop, render the gallery, and change which prompts render
+  previews and how often. See the [control API](docs/control-api.md).
 - **Web UI**: Pick a dataset, model and optimizer, train for a number of epochs or an exact number of steps, and
   follow live progress from a job queue
 - **YAML Configuration**: Simple YAML-based configuration system
-- **Modern Architecture**: Clean, modular codebase built on PyTorch and Diffusers
+- **Modern Architecture**: Clean, modular codebase built on PyTorch. Most models load local ComfyUI single files; only the Z-Image path uses Diffusers and the Hugging Face Hub
 
 ## Installation
 
@@ -72,8 +75,11 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 ### 2. Install remaining requirements
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.lock
 ```
+
+`requirements.lock` pins every runtime dependency except PyTorch (hence step 1). With [uv](https://docs.astral.sh/uv/) the same
+resolution is `uv sync --extra cu130` (or `--extra cpu`), which installs PyTorch too.
 
 ## Web UI (Trainer Frontend)
 
@@ -175,17 +181,11 @@ See [Watching a run](docs/qwen-image-2.1-lora-training.md#watching-a-run) for wh
    python train_zimage_lora.py --config config/my_lora.yaml
    ```
 
-### Textual Inversion Training
+### Textual Inversion Training (deprecated)
 
-1. Prepare your dataset (images with optional `.txt` caption files)
-2. Copy and edit the example config:
-   ```bash
-   cp config/train_zimage_embedding_example.yaml config/my_embedding.yaml
-   ```
-3. Run training:
-   ```bash
-   python train_zimage_embedding.py --config config/my_embedding.yaml
-   ```
+Z-Image textual inversion was a proof of concept that did not give usable results. `train_zimage_embedding.py` still
+runs and logs a deprecation warning; there is no example config any more. See
+[docs/textual-inversion-z-image.md](docs/textual-inversion-z-image.md) if you want to experiment.
 
 ## Training
 
@@ -209,8 +209,7 @@ my_dataset/
 ### Configuring Training
 
 1. **Choose the right config template**:
-   - For LoRA training: `templates/examples/train_zimage_lora_example.yaml`
-   - For Textual Inversion: `config/train_zimage_embedding_example.yaml`
+   - For LoRA training: `templates/examples/train_zimage_lora_example.yaml` (other models: the files in `templates/`)
 
 2. **Edit the configuration**:
    - Set `dataset.path` to your dataset directory
@@ -221,7 +220,7 @@ my_dataset/
 3. **Key parameters to customize**:
    - `model.name_or_path`: Path to Z-Image model
    - `dataset.resolution`: Training resolution
-   - `train.learning_rate`: Learning rate (higher for embeddings)
+   - `train.learning_rate`: Learning rate
    - `train.num_epochs`: Number of training epochs
    - `output.path`: Where to save checkpoints
 
@@ -246,9 +245,6 @@ Execute the training script with your config:
 ```bash
 # For LoRA training
 python train_zimage_lora.py --config config/my_lora.yaml
-
-# For Textual Inversion
-python train_zimage_embedding.py --config config/my_embedding.yaml
 ```
 
 For testing, you can simulate training without downloading the model:
@@ -256,9 +252,6 @@ For testing, you can simulate training without downloading the model:
 ```bash
 # Dry run (default 0.025s per step)
 python train_zimage_lora.py --config config/my_lora.yaml --dry-run
-
-# Dry run with custom step time
-python train_zimage_embedding.py --config config/my_embedding.yaml --dry-run --dry-run-step-time 0.1
 ```
 
 ### Monitoring Training
@@ -277,7 +270,7 @@ Training produces:
 
 ## Configuration
 
-All training parameters are configured via YAML files. See `config/` directory for examples.
+All training parameters are configured via YAML files. Your own run configs go in `config/` (create it; it is git-ignored on purpose), copied from `templates/`.
 
 ### Key Configuration Sections
 
@@ -322,9 +315,73 @@ output/
 - ≈ 11 GB VRAM for Qwen-Image 2.1 at 512px (INT8 base model)
 - `transformers` 4.57+ for the Qwen3-VL text encoder (Qwen-Image 2.1, MiniMax H3)
 
+## Quality gate
+
+One command runs every check, and CI will run the same one. The tests need no GPU, so they run in
+a separate CPU-only environment, `.venv`. That keeps CPU torch out of the training `venv/`:
+
+```bash
+uv sync --extra cpu --group dev      # creates .venv: CPU torch, the pinned runtime dependencies and the gate tools
+```
+
+(`.venv/bin/python` on Linux and macOS.) Without uv: `python -m venv .venv`, then install CPU torch from
+`https://download.pytorch.org/whl/cpu`, `pip install -r requirements.lock` and the tools pinned under
+`[dependency-groups] dev` in `pyproject.toml`. Then:
+
+```bash
+.venv/Scripts/python -m maltrainer_quality      # or quality.bat / ./quality.sh, which pick .venv
+```
+
+It runs lint and formatting (ruff), the complexity and file-length limits, the type check (mypy),
+the tests (pytest), and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can.
+Every gate runs even after one fails; the failed ones are listed at the end. A tool that isn't
+installed in the interpreter you launched it with fails its gate.
+
+**Enforcement.** The `gate` job of `.github/workflows/quality.yml` runs this same command on every pull request and every
+push to `main`, but it is not a *required* check: the repository is private on a plan without branch protection (GitHub
+answers 403 for it), so nothing blocks a merge on a red gate. The rule is therefore a convention (AGENTS.md): run the
+gate before every commit and do not merge a red one. If the repository becomes public or the plan changes, require the
+`gate` job on `main` (Settings, Branches).
+
+**Limits:** at most 200 lines per Python or shell file, complexity 10 per function, and no mypy error
+anywhere in the checked tree. They are hard limits with no exceptions list: split the file or the function
+instead of working around the gate. The coverage floor (`fail_under` in `pyproject.toml`) is a floor on purpose
+below the measured value (CI reads a hair lower than Windows); raise it when tests land, and never lower it to
+make a change pass.
+
+**Dependencies.** `pyproject.toml` is the one list (runtime dependencies, the `cpu` / `cu130` PyTorch extras, the
+pinned dev tools). `uv.lock` pins everything for every platform and `requirements.lock` is its pip-installable runtime
+half. After changing dependencies:
+
+```bash
+uv lock
+python -m maltrainer_quality.requirements --write
+```
+
+The gate fails when either lock is stale (`uv lock --check`, then a byte comparison with `uv export`) and when
+`pip-audit` finds a known vulnerability in `requirements.lock`; the audit needs network access, like `uv lock --check`.
+
+**Mutation testing** (not in the gate, it takes about five minutes): `python -m maltrainer_quality.mutation --changed`
+changes the pure-math modules one expression at a time and checks that the tests notice. Run it when a change touches
+one of those modules or their tests; see [docs/mutation-testing.md](docs/mutation-testing.md) for the policy, the
+scores and the equivalent mutants.
+
+## Code layout
+
+A run goes from a thin `train_<model>_*.py` entry point to `maltrainer/trainers/<model>/` (that model's pipeline),
+which builds on `maltrainer/training/` (what every trainer shares) and `maltrainer/models/<model>/` (the network,
+VAE, text encoder, loaders and LoRA layers). `maltrainer/optimizers/`, `data/`, `finetune/` and `utils/` hold the
+rest; `backend/` and `frontend/` are the web UI, `scripts/` the command-line tools, `tests/` mirrors all of it.
+Every Python file is at most 200 lines, so a module's name tells you what is in it. See
+[docs/code-layout.md](docs/code-layout.md) for the map, and [docs/architecture.md](docs/architecture.md) for the
+C4 diagrams.
+
 ## Documentation
 
 See `docs/` directory for detailed documentation:
+- [Code layout: where things live](docs/code-layout.md)
+- [Mutation testing: policy, scores, how to run](docs/mutation-testing.md)
+- [Architecture: C4 diagrams and description](docs/architecture.md)
 - [Finetuning walkthrough: setup, commands, troubleshooting](docs/finetune-tutorial.md)
 - [Krea 2 full finetuning on 32 GB (rotating windows)](docs/krea2-finetuning.md)
 - [MOSS-Image finetune in ComfyUI: 8-step setup and prompting](docs/moss-image-comfyui-prompting.md)

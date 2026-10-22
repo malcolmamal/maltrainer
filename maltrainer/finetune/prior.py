@@ -33,14 +33,17 @@ import contextlib
 import json
 import logging
 import random
-import re
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
 from tqdm import tqdm
+
+from maltrainer.finetune.classes import class_caption, resolve_classes
+
+__all__ = ["class_caption", "resolve_classes"]  # re-exported: train_moss_image_finetune.py imports them from here
 
 logger = logging.getLogger(__name__)
 
@@ -48,38 +51,13 @@ logger = logging.getLogger(__name__)
 PredictFn = Callable[[torch.Tensor, torch.Tensor, str], torch.Tensor]
 
 
-def class_caption(caption: str, classes: Dict[str, str]) -> Optional[str]:
-    """``caption`` with every trigger (a whole word, any case) replaced by its class word, or
-    None when it names no trigger. Longer triggers go first, so "annasmith" wins over "anna"."""
-    out, hit = caption, False
-    for trigger in sorted(classes, key=len, reverse=True):
-        pattern = re.compile(rf"(?<![\w]){re.escape(trigger)}(?![\w])", re.IGNORECASE)
-        out, count = pattern.subn(classes[trigger], out)
-        hit = hit or count > 0
-    return out if hit else None
-
-
-def resolve_classes(prior_config: dict, trigger: Optional[str]) -> Dict[str, str]:
-    """``prior.classes`` (trigger -> class word), or ``dataset.trigger`` -> ``prior.class_word``."""
-    classes = {str(k).strip(): str(v).strip() for k, v in (prior_config.get("classes") or {}).items() if str(k).strip()}
-    word = str(prior_config.get("class_word") or "").strip()
-    if not classes and trigger and word:
-        classes = {trigger.strip(): word}
-    if not classes:
-        raise ValueError(
-            "prior.weight > 0 needs prior.classes (trigger: class word, e.g. {feliciaday: woman}) "
-            "or dataset.trigger with prior.class_word"
-        )
-    return classes
-
-
 CONTAINER_PREFIXES = ("", "diffusion_model.", "model.diffusion_model.")
 
 
 @contextlib.contextmanager
 def weights_from_file(
-    named: Sequence[Tuple[str, torch.nn.Parameter]],
-    path: Union[str, Path],
+    named: Sequence[tuple[str, torch.nn.Parameter]],
+    path: str | Path,
     prefixes: Sequence[str] = CONTAINER_PREFIXES,
 ) -> Iterator[None]:
     """The parameters hold the values stored under their names in the safetensors file at
@@ -97,7 +75,7 @@ def weights_from_file(
         yield
     finally:
         with torch.no_grad():
-            for (_, param), saved in zip(named, backup):
+            for (_, param), saved in zip(named, backup, strict=False):
                 param.copy_(saved.to(param.device))
 
 
@@ -112,10 +90,10 @@ class PriorPreservation:
         self.samples_per_image = max(int(samples_per_image), 1)
         self.every = max(int(every), 1)
         self.seed = int(seed)
-        self.captions: Dict[str, str] = {}  # key -> class caption
-        self.sigmas: Dict[str, torch.Tensor] = {}  # key -> [n] float32
-        self.seeds: Dict[str, torch.Tensor] = {}  # key -> [n] int64
-        self.targets: Dict[str, torch.Tensor] = {}  # key -> [n, ...] bf16, CPU
+        self.captions: dict[str, str] = {}  # key -> class caption
+        self.sigmas: dict[str, torch.Tensor] = {}  # key -> [n] float32
+        self.seeds: dict[str, torch.Tensor] = {}  # key -> [n] int64
+        self.targets: dict[str, torch.Tensor] = {}  # key -> [n, ...] bf16, CPU
 
     def __contains__(self, key: str) -> bool:
         return key in self.targets
@@ -131,7 +109,7 @@ class PriorPreservation:
     @torch.no_grad()
     def build(
         self,
-        items: Iterable[Tuple[str, torch.Tensor, str]],
+        items: Iterable[tuple[str, torch.Tensor, str]],
         sample_sigma: Callable[[], torch.Tensor],
         predict: PredictFn,
         device: torch.device,
@@ -140,8 +118,8 @@ class PriorPreservation:
         class caption); call this before the first training step."""
         items = list(items)
         rng = random.Random(self.seed)
-        for key, x0, caption in tqdm(items, desc="Prior: the original model's predictions"):
-            x0 = x0.to(device, torch.float32).unsqueeze(0)
+        for key, cpu_x0, caption in tqdm(items, desc="Prior: the original model's predictions"):
+            x0 = cpu_x0.to(device, torch.float32).unsqueeze(0)
             sigmas, seeds, preds = [], [], []
             for _ in range(self.samples_per_image):
                 sigma = sample_sigma().reshape(1).to(device, torch.float32)
@@ -155,13 +133,18 @@ class PriorPreservation:
             self.seeds[key] = torch.tensor(seeds, dtype=torch.int64)
             self.targets[key] = torch.stack(preds)
         size = sum(t.numel() * t.element_size() for t in self.targets.values()) / 1024**2
-        logger.info("Prior: %d images x %d inputs recorded (%.0f MB in CPU RAM)", len(self.targets), self.samples_per_image, size)
+        logger.info(
+            "Prior: %d images x %d inputs recorded (%.0f MB in CPU RAM)",
+            len(self.targets),
+            self.samples_per_image,
+            size,
+        )
 
     def due(self, step: int) -> bool:
         """Whether optimizer step ``step`` (0-based) adds the prior term."""
         return self.weight > 0 and step % self.every == 0
 
-    def loss(self, key: str, x0: torch.Tensor, predict: PredictFn) -> Optional[torch.Tensor]:
+    def loss(self, key: str, x0: torch.Tensor, predict: PredictFn) -> torch.Tensor | None:
         """MSE of the model now against the original on one recorded input of ``key`` (x0 [1, ...]
         on the device), or None when ``key`` has none. Uses Python's ``random``, so a resumed run
         restores it with the other RNG state."""
@@ -176,7 +159,7 @@ class PriorPreservation:
 
     # ------------------------------------------------------------------ persistence
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(self, path: str | Path) -> None:
         """One safetensors file; a resumed run must load it, since the model it came from is gone."""
         keys = sorted(self.targets)
         tensors = {}
@@ -185,26 +168,33 @@ class PriorPreservation:
             tensors[f"{i}.sigma"] = self.sigmas[key]
             tensors[f"{i}.seed"] = self.seeds[key]
         metadata = {
-            "maltrainer_prior": json.dumps({
-                "keys": keys,
-                "captions": [self.captions[k] for k in keys],
-                "samples_per_image": self.samples_per_image,
-            })
+            "maltrainer_prior": json.dumps(
+                {
+                    "keys": keys,
+                    "captions": [self.captions[k] for k in keys],
+                    "samples_per_image": self.samples_per_image,
+                }
+            )
         }
         path = Path(path)
         tmp = path.with_name(path.name + ".tmp")
         save_file(tensors, str(tmp), metadata=metadata)
         tmp.replace(path)
 
-    def load(self, path: Union[str, Path]) -> None:
+    def load(self, path: str | Path) -> None:
         with safe_open(str(path), framework="pt", device="cpu") as handle:
             info = json.loads(handle.metadata()["maltrainer_prior"])
-            for i, (key, caption) in enumerate(zip(info["keys"], info["captions"])):
+            saved = int(info.get("samples_per_image", self.samples_per_image))
+            if saved != self.samples_per_image:
+                logger.warning(
+                    "Prior: %s has %d inputs per image; new images get %d", path, saved, self.samples_per_image
+                )
+            for i, (key, caption) in enumerate(zip(info["keys"], info["captions"], strict=False)):
                 self.captions[key] = caption
                 self.targets[key] = handle.get_tensor(f"{i}.target")
                 self.sigmas[key] = handle.get_tensor(f"{i}.sigma")
                 self.seeds[key] = handle.get_tensor(f"{i}.seed")
         logger.info("Prior: %d images' recorded predictions loaded from %s", len(self.targets), path)
 
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         return list(self.targets)
