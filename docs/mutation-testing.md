@@ -182,8 +182,8 @@ Judged by reading the code. Line numbers are those of the measured commit. Add a
    default gate, because of its runtime. In CI it is the separate `mutation` job of `quality.yml`, which runs
    the same command on pull requests that touch those paths (and the whole set by hand, `workflow_dispatch`).
    **Decision (2026-10-21): it stays an optional job, not a required check.** It takes 5 to 8 minutes, a
-   survivor needs a human to judge (a test to add, or an equivalent mutant to document), and the repository has no
-   branch protection to make any check required (see "Enforcement" in the README). Revisit if that changes.
+   survivor needs a human to judge (a test to add, or an equivalent mutant to document), and the `protect-main` ruleset
+   requires only `gate` and `frontend` (see "Enforcement" in the README). Revisit if that changes.
 2. **The floor.** Each target has a minimum score in `mutation_targets.py`, set a little below the measured one
    (the measured whole percent minus 2). A module below its floor fails the command and the job. Floors are only
    raised, never lowered, like `fail_under`: when a change raises a score, raise the floor in the same commit.

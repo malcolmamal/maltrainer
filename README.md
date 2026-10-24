@@ -338,10 +338,10 @@ Every gate runs even after one fails; the failed ones are listed at the end. A t
 installed in the interpreter you launched it with fails its gate.
 
 **Enforcement.** The `gate` job of `.github/workflows/quality.yml` runs this same command on every pull request and every
-push to `main`, but it is not a *required* check: the repository is private on a plan without branch protection (GitHub
-answers 403 for it), so nothing blocks a merge on a red gate. The rule is therefore a convention (AGENTS.md): run the
-gate before every commit and do not merge a red one. If the repository becomes public or the plan changes, require the
-`gate` job on `main` (Settings, Branches).
+push to `main`. The repository is public and the `protect-main` ruleset (Settings, Rules) guards `main`: changes go
+through a pull request, the `gate` and `frontend` jobs must pass, and force pushes and deletion are blocked. The
+repository owner can bypass the ruleset; the `mutation` job stays optional. The rule in AGENTS.md still applies: run the
+gate before every commit.
 
 **Limits:** at most 200 lines per Python or shell file, complexity 10 per function, and no mypy error
 anywhere in the checked tree. They are hard limits with no exceptions list: split the file or the function
