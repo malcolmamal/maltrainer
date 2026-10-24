@@ -75,7 +75,7 @@ explicit = true
 # helper only a test calls is reported; delete it with its test, or list it here with the reason.
 paths = [
     "maltrainer", "maltrainer_quality", "backend", "scripts",
-    "train_fibo2_lora.py", "train_flux3_klein_lora.py", "train_krea2_finetune.py", "train_krea2_lora.py", "train_minimax_h3_lora.py",
+    "train_fibo2_lora.py", "train_flux3_klein_lora.py", "train_krea2_finetune.py", "train_krea2_lora.py", "train_ltx25_lora.py", "train_minimax_h3_lora.py",
     "train_moss_image_finetune.py", "train_moss_image_lora.py", "train_qwen_image_2_1_lora.py",
     "train_zimage_embedding.py", "train_zimage_lora.py", "check_weights.py", "compare_loras.py", "inspect_lora.py",
 ]
@@ -214,6 +214,7 @@ source = [
     "train_flux3_klein_lora",
     "train_krea2_finetune",
     "train_krea2_lora",
+    "train_ltx25_lora",
     "train_minimax_h3_lora",
     "train_moss_image_finetune",
     "train_moss_image_lora",

@@ -1,0 +1,81 @@
+# LTX-2.5 (Dev) LoRA template -- Automagic3 (train_ltx25_lora.py).
+#
+# Used by the web UI, which fills in the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    COMFYUI_MODELS_PATH; the UI finds each file anywhere under the matching subfolder
+# For the CLI, copy this file and replace the placeholders yourself.
+#
+# Recipe sources (docs/ltx25-lora-training.md):
+#   the official LTX-2 trainer / musubi-tuner's LTX-2 mode -- rank 32, all attention, timesteps from a logit-normal
+#     shifted by the video token count (the "stretched" sampler of LTX-2.3 and 2.5), one clip at a time
+#   maltrainer's FLUX.3 Automagic3 setup -- one adaptive rate per module family, a 16-step sign window, no
+#     weight decay, EMA 0.98, 1e-6 launch point
+
+model:
+  # The DEV model. The distilled files are refused. The bf16 file (ltx-2.5-22b-dev-transformer-bf16) also loads,
+  # but needs ~44 GB; the INT8 ConvRot file keeps the frozen DiT at ~22 GB.
+  transformer_path: "[comfyui_models]/diffusion_models/ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors"
+  # The classic conv VAE (its encoder is what training needs); the default 2.5 VAE adds a diffusion decoder only.
+  video_vae_path: "[comfyui_models]/vae/ltx-2.5-video-vae-conv-bf16.safetensors"
+  audio_vae_path: "[comfyui_models]/vae/ltx-2.5-audio-vae-bf16.safetensors"
+  # Gemma 4 12B with the projection the DiT's text connectors read
+  text_encoder_path: "[comfyui_models]/text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors"
+  vae_dtype: "bfloat16"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512            # area target; buckets keep each image's aspect on a 32 px grid
+  fps: 24                    # videos are resampled to this clock
+  clip_frames: 49            # frames per clip (8k + 1), taken from the start of each video
+  audio: true                # train on a clip's soundtrack when it has one
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 32
+  alpha: 32
+  prefix: "diffusion_model."
+  # auto (attn when any clip has sound, else video) | attn | video | attn_ff | video_ff | full
+  targets: "auto"
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  # Duration: max_steps (> 0) wins; otherwise num_epochs full epochs.
+  max_steps: 2000
+  num_epochs: 70
+  save_every: 250
+  # shifted_logit_normal (the official sampler; "stretched" mode) | uniform
+  timestep_distribution: "shifted_logit_normal"
+  shifted_logit_mode: "stretched"
+  max_grad_norm: 1.0
+  gradient_checkpointing: true
+  int8_grad_precision: "bf16"     # backward through the frozen int8 Linears: bf16 | fp32 | int8
+  optimizer: "automagic3"
+  learning_rate: 1.0e-6           # Automagic3 launch point; it adapts from here
+  weight_decay: 0.0
+  automagic_param_groups: true    # attention / MLP / other each adapt their own rate
+  automagic_polarity_history: 16
+  automagic_clip_threshold: 1.0
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+  ema_decay: 0.98                 # checkpoints save the average
+  video_loss_weight: 1.0
+  audio_loss_weight: 1.0
+  # An empty caption encodes as a lone BOS token (what an empty negative prompt gives).
+  caption_dropout: 0.05
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/ltx25/[person_to_train]"
+  name: "ltx25_[person_to_train]"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

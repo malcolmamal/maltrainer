@@ -25,6 +25,10 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   template. Plain or structured JSON captions. Run it with
   `train_fibo2_lora.py`, `run_fibo2_training.bat` or the web UI. See the
   [Fibo 2.0 training guide](docs/fibo2-lora-training.md).
+- **LTX-2.5 LoRA Training**: trains LTX-2.5 Dev (Lightricks, 22B audio-video) on stills, video clips and their
+  soundtracks, from ComfyUI's single files (the INT8 ConvRot DiT, the video and audio VAEs and Gemma 4 12B). Run it
+  with `train_ltx25_lora.py`, `run_ltx25_training.bat` or the web UI. Checked against ComfyUI's code; not yet run
+  on the LTX-2.5 files. See the [LTX-2.5 training guide](docs/ltx25-lora-training.md).
 - **MOSS-Image LoRA Training**: trains MOSS-Image Base (OpenMOSS, 5B) from ComfyUI's single files
   (the bf16 or INT8 ConvRot DiT, the Flux2 VAE and Qwen3.5-9B), with an Automagic3 template and a
   Prodigy template. Run it with `train_moss_image_lora.py`, `run_moss_image_training.bat` or the

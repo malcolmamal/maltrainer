@@ -55,6 +55,17 @@ MODELS = {
             "text_encoder_path": ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
         },
     ),
+    "ltx25": (
+        "train_ltx25_lora.py",
+        "templates/ltx25_template.yaml",
+        {},
+        {
+            "transformer_path": ("diffusion_models", "ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors"),
+            "video_vae_path": ("vae", "ltx-2.5-video-vae-conv-bf16.safetensors"),
+            "audio_vae_path": ("vae", "ltx-2.5-audio-vae-bf16.safetensors"),
+            "text_encoder_path": ("text_encoders", "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors"),
+        },
+    ),
     "moss_image": (
         "train_moss_image_lora.py",
         "templates/moss_image_automagic_template.yaml",

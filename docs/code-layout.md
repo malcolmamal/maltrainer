@@ -28,7 +28,7 @@ table and forbids module-level import cycles).
 
 | Path | What it is |
 |---|---|
-| `train_<model>_lora.py`, `train_krea2_finetune.py`, `train_moss_image_finetune.py`, `train_zimage_embedding.py` (deprecated) | One entry point per trainer: FLUX.3 [klein], Fibo 2.0, Krea 2, MOSS-Image, MiniMax H3, Qwen-Image 2.1, Z-Image (LoRA and textual inversion), and the two full finetunes. Each also has a `run_*.bat` launcher. |
+| `train_<model>_lora.py`, `train_krea2_finetune.py`, `train_moss_image_finetune.py`, `train_zimage_embedding.py` (deprecated) | One entry point per trainer: FLUX.3 [klein], Fibo 2.0, LTX-2.5, Krea 2, MOSS-Image, MiniMax H3, Qwen-Image 2.1, Z-Image (LoRA and textual inversion), and the two full finetunes. Each also has a `run_*.bat` launcher. |
 | `check_weights.py`, `compare_loras.py`, `inspect_lora.py` | Small root-level LoRA inspection tools. |
 | `scripts/` | Command-line tools that are not trainers: merge, resize and extract LoRAs, merge checkpoints and LoRAs into a model (`merge_lora_into_model.py` + `merge_into_model_*`), INT8 ConvRot to and from plain files, inspect metadata, inference, the Qwen 2.1 benchmark, `train_from_template.py`. Helper modules sit next to the script that uses them (`scripts` has no package). |
 | `backend/` | The web UI's FastAPI service (see below). |
@@ -44,13 +44,13 @@ table and forbids module-level import cycles).
 
 ### `training/`: shared trainer machinery
 `session.py` (accelerator, seeds, device), `steps.py` (step and epoch planning), `loop.py` (`StepLoop` with hooks),
-`image_lora.py` (`ImageLoRATrainer`, the base of the FLUX.3, Fibo 2.0, Krea 2 and MOSS-Image LoRA trainers), `optimizer.py`,
+`image_lora.py` (`ImageLoRATrainer`, the base of the FLUX.3, Fibo 2.0, LTX-2.5, Krea 2 and MOSS-Image LoRA trainers), `optimizer.py`,
 `progress.py`, `saving.py`, `sigma.py` (timestep sampling), `dop.py` (differential output preservation), `cli.py`.
 H3, Qwen 2.1 and Z-Image have loops that differ too much to share the base; they reuse only the small pieces.
 
 ### `trainers/<model>/`: one model's pipeline
-Not every trainer has a package here. `trainers/` exists for Fibo 2.0 (its sigma sampler only), MiniMax H3, MOSS-Image, Qwen-Image 2.1, Z-Image and the
-two finetunes' parts. The FLUX.3 [klein], Fibo 2.0 and Krea 2 LoRA trainers are classes on `ImageLoRATrainer` that live in
+Not every trainer has a package here. `trainers/` exists for Fibo 2.0 (its sigma sampler only), LTX-2.5 (data, caching, step, sigma), MiniMax H3, MOSS-Image, Qwen-Image 2.1, Z-Image and the
+two finetunes' parts. The FLUX.3 [klein], Fibo 2.0, LTX-2.5 and Krea 2 LoRA trainers are classes on `ImageLoRATrainer` that live in
 their root `train_*.py` files (still under 200 lines), and the finetune entry points import the LoRA script they
 extend (`train_krea2_finetune.py` -> `train_krea2_lora.py`, `train_moss_image_finetune.py` -> `train_moss_image_lora.py`).
 Modules by role: `data` (what is loaded), `model` (loading and wiring), `step` (one forward/backward), `loop`,
