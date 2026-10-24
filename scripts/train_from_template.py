@@ -45,6 +45,16 @@ MODELS = {
             "text_encoder_path": ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
         },
     ),
+    "fibo2": (
+        "train_fibo2_lora.py",
+        "templates/fibo2_template.yaml",
+        {},
+        {
+            "transformer_path": ("diffusion_models", "fibo2_dev_bf16.safetensors"),
+            "vae_path": ("vae", "flux2_vae.safetensors"),
+            "text_encoder_path": ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
+        },
+    ),
     "moss_image": (
         "train_moss_image_lora.py",
         "templates/moss_image_automagic_template.yaml",

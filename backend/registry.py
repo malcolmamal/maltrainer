@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
+from backend.registry_fibo2 import FIBO2
 from backend.specs import ModelSpec, OptimizerSpec
 
 MODELS: dict[str, ModelSpec] = {
@@ -169,6 +170,7 @@ MODELS: dict[str, ModelSpec] = {
             output_prefix="moss_image_",
             caption_from_trigger=True,
         ),
+        FIBO2,
     )
 }
 

@@ -76,6 +76,8 @@ def test_the_trainer_runs_from_the_repo_root_with_an_absolute_config_and_its_exi
         ("moss_image", ["--optimizer", "adamw8bit"], "adamw8bit"),
         ("moss_image", [], "automagic3"),
         ("flux3_klein", ["--optimizer", "prodigy"], "prodigy"),
+        ("fibo2", [], "automagic3"),
+        ("fibo2", ["--optimizer", "adamw8bit"], "adamw8bit"),
     ],
 )
 @pytest.mark.usefixtures("launch")
