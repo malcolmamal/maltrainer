@@ -126,6 +126,35 @@ The run is long: each step is 8 samples, so 1000 steps train on 8000 samples, ab
 Automagic3 template's 1500. BRIA measured about 58 s per step and 31 GiB at 1024 px, rank 128, on an
 L40S.
 
+## Keys while it trains
+
+When the trainer runs in a console it listens for single keys, acted on at the next step: `s` saves a checkpoint,
+`q` saves and stops, `p` pauses, `h` lists the keys. The template's `sample:` section adds preview keys:
+
+| Key | Does |
+|---|---|
+| `w` | renders `photo of a woman` from the LoRA as it is now |
+| `m` | renders `photo of a man` |
+| `g` | renders every prompt of `sample.keys` |
+
+```yaml
+sample:
+  keys: {w: "photo of a woman", m: "photo of a man"}   # any single characters except s q p e g h
+  steps: 30            # BRIA's default
+  guidance: 5.0
+  resolution: 768      # a square, default dataset.resolution
+  seed: 42             # same noise at every press, so images compare across steps
+  ema: true            # with the EMA weights, as the checkpoints save them
+```
+
+Images go to `<output.path>/samples/step<N>_<key>.png`. Training waits while one renders (30 steps with
+guidance is 60 DiT passes). The prompts' text features are made while the text encoder is loaded for the dataset,
+so a press never needs it; the VAE decoder loads for the press and is freed again. A press does not touch the
+training RNG, so a run with previews trains exactly as one without. Without a `sample:` section only `s q p h` exist.
+
+The keys do not work in a run started from the web UI (it has no console). Not measured on a GPU yet: whether
+the extra sampling and the decoder fit next to the DiT at 1024 px on a 32 GB card.
+
 ## Configuration reference
 
 | Key | Default | Meaning |

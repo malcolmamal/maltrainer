@@ -22,21 +22,25 @@ import logging
 import torch
 from tqdm import tqdm
 
+from maltrainer.control.launch import make_keys
+from maltrainer.control.stats import RunView
 from maltrainer.data.flux3_dataset import load_flux3_image
 from maltrainer.models.fibo2.loading import load_fibo2_transformer
 from maltrainer.models.fibo2.lora import Fibo2LoRANetwork
 from maltrainer.models.fibo2.text_encoder import load_fibo2_text_encoder
 from maltrainer.models.flux3.vae import load_flux2_vae_encoder
+from maltrainer.trainers.fibo2.previews import FiboPreviews
 from maltrainer.trainers.fibo2.timesteps import sample_sigma
 from maltrainer.training.cli import start_run, training_arguments
 from maltrainer.training.image_lora import ImageLoRATrainer
 from maltrainer.training.session import free_memory
 from maltrainer.utils.config import load_config
+from maltrainer.utils.keyboard import KeyCommands
 
 logger = logging.getLogger(__name__)
 
 
-class Fibo2LoRATrainer(ImageLoRATrainer):
+class Fibo2LoRATrainer(FiboPreviews, ImageLoRATrainer):
     model_type = "fibo2"
     label = "Fibo 2.0"
     default_name = "fibo2_lora"
@@ -46,7 +50,6 @@ class Fibo2LoRATrainer(ImageLoRATrainer):
     )
     # Fibo's attention, MLP and I/O each adapt their own rate, over a 16-step sign window (batch-1 gradients).
     polarity_history = 16
-    key_commands = False
     schedule = ("bria", 1.0)
 
     # ------------------------------------------------------------------ caching
@@ -84,6 +87,7 @@ class Fibo2LoRATrainer(ImageLoRATrainer):
         prompts = {caption for _, caption in self.samples}
         if float(train_config.get("caption_dropout", 0.0) or 0.0) > 0:
             prompts.add("")
+        prompts |= self.preview_texts()
         encoder = load_fibo2_text_encoder(
             model_config["text_encoder_path"], self.device, self.dtype, model_config.get("tokenizer_path")
         )
@@ -114,6 +118,16 @@ class Fibo2LoRATrainer(ImageLoRATrainer):
             prefix=lora_config.get("prefix", "diffusion_model."),
         )
         self._lora_ready()
+
+    # ------------------------------------------------------------------ keys
+
+    def _make_keys(self) -> KeyCommands:
+        """s / q / p / h, and the preview keys of the ``sample`` section (w, m, g ...)."""
+        return make_keys(KeyCommands, self.config, RunView(self), extra=self.preview_keys())
+
+    def _after_log(self, step: int, total: int) -> None:
+        del total
+        self.current_step = step
 
     # ------------------------------------------------------------------ training
 

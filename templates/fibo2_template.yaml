@@ -59,6 +59,16 @@ train:
   # An empty caption encodes as the null caption the model's CFG negative uses (BRIA drops 0.1).
   caption_dropout: 0.1
 
+# Preview keys while it trains (console only): w renders "photo of a woman", m "photo of a man", g all of them,
+# into <output>/samples/. Training waits while it renders. Delete this section to switch the keys off.
+sample:
+  keys: {w: "photo of a woman", m: "photo of a man"}
+  steps: 30
+  guidance: 5.0
+  resolution: 1024
+  seed: 42
+  ema: true
+
 dtype: "bfloat16"
 mixed_precision: "bf16"
 seed: 42

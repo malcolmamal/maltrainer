@@ -6,6 +6,8 @@ Single-key commands while training runs in a console (training waits while ``e``
 - ``e`` opens the trainer's menu, if it has one (MOSS-Image: the preview settings)
 - ``g`` renders a gallery, if it has one (MOSS-Image finetune: maltrainer/utils/gallery.py)
 - ``h`` lists the keys
+- more keys a trainer registers itself (Fibo 2.0: ``w`` / ``m`` / ``g`` render preview prompts), each with its own
+  help text and action
 
 Keys are read without blocking at each optimizer step, so a press acts at the next step
 boundary. Windows reads the console with ``msvcrt``; elsewhere stdin is put into cbreak mode for
@@ -20,7 +22,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from importlib import import_module
 
 logger = logging.getLogger(__name__)
@@ -43,12 +45,22 @@ class KeyCommands:
         keys: str = SAVE + QUIT + PAUSE + HELP,
         menu: Callable[[], None] | None = None,
         gallery: Callable[[], None] | None = None,
+        extra: Mapping[str, tuple[str, Callable[[], None]]] | None = None,
     ):
         """``menu``: opened by ``e``; ``gallery``: run by ``g`` (each key exists only when a trainer
-        offers it)."""
+        offers it). ``extra``: key -> (help text, action) for keys of the trainer's own; one that is already a
+        command key is refused."""
         self.menu = menu
         self.gallery = gallery
         self.keys = set(keys) | ({MENU} if menu is not None else set()) | ({GALLERY} if gallery is not None else set())
+        self.help = dict(HELP_TEXT)
+        self.actions: dict[str, Callable[[], None]] = {}
+        for key, (text, action) in (extra or {}).items():
+            if len(key) != 1 or key in self.keys:
+                raise ValueError(f"key {key!r} cannot be registered: it is not a single character or already a command")
+            self.help[key], self.actions[key] = text, action
+        self.keys |= set(self.actions)
+        self.order = (*KEY_ORDER, *(key for key in self.actions if key not in KEY_ORDER))
         self._restore: Callable[[], None] | None = None
         self.paused_seconds = 0.0  # time spent paused since take_paused_seconds() last read it
         try:
@@ -68,9 +80,9 @@ class KeyCommands:
                 logger.info("Key commands unavailable: %s", e)
                 self.enabled = False
         if self.enabled:
-            shown = [k for k in KEY_ORDER if k in self.keys]
+            shown = [k for k in self.order if k in self.keys]
             logger.info(
-                "Keys: %s", ", ".join(f"[{k}] {HELP_TEXT[k].split(';')[0].split(' (')[0].split(':')[0]}" for k in shown)
+                "Keys: %s", ", ".join(f"[{k}] {self.help[k].split(';')[0].split(' (')[0].split(':')[0]}" for k in shown)
             )
 
     def poll(self) -> list[str]:
@@ -101,8 +113,8 @@ class KeyCommands:
 
     def show_help(self) -> None:
         logger.info("Keys (act at the next step):")
-        for key in (k for k in KEY_ORDER if k in self.keys):
-            logger.info("  [%s] %s", key, HELP_TEXT[key])
+        for key in (k for k in self.order if k in self.keys):
+            logger.info("  [%s] %s", key, self.help[key])
 
     def take_paused_seconds(self) -> float:
         """Seconds spent paused since the last call (for the monitor's s/step)."""
@@ -126,7 +138,8 @@ class KeyCommands:
     def _run_extras(self, pressed: list[str], count_time: bool = True) -> None:
         """Run the menu / gallery the keys asked for. A failure is logged and training goes on.
         ``count_time``: add the time to paused_seconds (not from a pause, whose own total covers it)."""
-        for key, name, action in ((MENU, "menu", self.menu), (GALLERY, "gallery", self.gallery)):
+        offered = ((MENU, "menu", self.menu), (GALLERY, "gallery", self.gallery))
+        for key, name, action in (*offered, *((k, f"[{k}] action", a) for k, a in self.actions.items())):
             if key not in pressed or action is None:
                 continue
             started = time.time()
