@@ -14,9 +14,11 @@ python train_fibo2_lora.py --config my_fibo2_config.yaml
 ```bash
 run_fibo2_training.bat feliciaday              # fills templates/fibo2_template.yaml (Automagic3)
 run_fibo2_training.bat feliciaday adamw8bit
+run_fibo2_training.bat feliciaday adamw        # BRIA's official recipe: templates/fibo2_bria_template.yaml
 ```
 
-The third is the web UI: pick **Fibo 2.0 (Dev)**, a dataset and an optimizer.
+The third is the web UI: pick **Fibo 2.0 (Dev)**, a dataset and an optimizer. **AdamW (BRIA's recipe)**
+loads the official template; its step field still starts at the model's 1500, so set 1000 for BRIA's run.
 
 `run_fibo2_training.bat` wraps `scripts/train_from_template.py`. That script fills the template's
 placeholders and writes the filled config into the output folder before it starts. Pass
@@ -90,6 +92,39 @@ Checked numerically against ComfyUI's own modules (checkout of 2026-10-24):
 | EMA | 0.98 with warm-up; checkpoints save the average | as FLUX.3 |
 | Duration | 1500 steps, a checkpoint every 250 | as FLUX.3 |
 | Resolution | 1024 aspect buckets on a 16 px grid | the model's training area. 768 or 512 are faster and lighter |
+
+## Template: `templates/fibo2_bria_template.yaml` (BRIA's official recipe)
+
+Every training setting is the default of BRIA's `fine_tuning/train_lora.py`, shipped in the
+`briaai/Fibo-2.0-dev` repository. Pick it with the optimizer `adamw`.
+
+| Setting | Value |
+|---|---|
+| LoRA | rank 64, alpha 64, every Linear of the DiT (`targets: all`, 266 adapters), fp32 adapters on the frozen bf16 DiT |
+| Optimizer | torch AdamW: lr 1e-4 constant, no warmup, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, gradient clip 1.0 |
+| Duration | 1000 optimizer steps of 8 accumulated samples (batch 1), a checkpoint every 250, no EMA |
+| Timesteps | `bria`, 10 % uniform, not clamped (`min_sigma` 0, `max_sigma` 1) |
+| Caption dropout | 0.1, to the null caption |
+| Resolution | 1024 |
+| Seed | 0 |
+| Saved LoRA | fp32, as BRIA saves it (about 0.9 GB) |
+
+What still differs from BRIA's script:
+
+- **Fused layers.** BRIA's diffusers model has separate `to_q` / `to_k` / `to_v`, `w1` / `w3` and
+  `to_k` / `to_v` Linears (415 in all). The ComfyUI file fuses them (266), and one rank-64 adapter on
+  a fused `qkv` shares its down-projection between q, k and v, where BRIA trains three.
+- **The file format.** The LoRA is saved with ComfyUI's keys, not as diffusers'
+  `pytorch_lora_weights.safetensors`.
+- **Captions.** BRIA reads `<name>.json` or `<name>.txt`; this trainer reads only `<name>.txt`, so put a
+  JSON caption inside the `.txt`. An image without a caption gets `dataset.default_caption` here, where
+  BRIA skips it. `text_render` images are not drawn (see Captions).
+- **Sizing.** Buckets on the 16 px grid around 1024 x 1024, where BRIA picks the size within 10 % of
+  the area that crops least, as its pipeline does.
+
+The run is long: each step is 8 samples, so 1000 steps train on 8000 samples, about five times the
+Automagic3 template's 1500. BRIA measured about 58 s per step and 31 GiB at 1024 px, rank 128, on an
+L40S.
 
 ## Configuration reference
 

@@ -2,9 +2,10 @@
 REM ==========================================================================
 REM  Fibo 2.0 LoRA training from a template, without the web UI.
 REM
-REM    run_fibo2_training.bat <dataset> [automagic3^|adamw8bit^|prodigy] [extra args...]
+REM    run_fibo2_training.bat <dataset> [automagic3^|adamw^|adamw8bit^|prodigy] [extra args...]
 REM    run_fibo2_training.bat feliciaday
 REM    run_fibo2_training.bat feliciaday adamw8bit
+REM    run_fibo2_training.bat feliciaday adamw           (BRIA's official recipe)
 REM    run_fibo2_training.bat feliciaday automagic3 --max-steps 2000 --dry-run
 REM
 REM  Settings come from the environment, or from webui.local.bat next to this file:
@@ -16,7 +17,7 @@ cd /d "%~dp0"
 if exist "%~dp0webui.local.bat" call "%~dp0webui.local.bat"
 
 if "%~1"=="" (
-    echo Usage: run_fibo2_training.bat ^<dataset^> [automagic3^|adamw8bit^|prodigy] [extra args]
+    echo Usage: run_fibo2_training.bat ^<dataset^> [automagic3^|adamw^|adamw8bit^|prodigy] [extra args]
     exit /b 1
 )
 

@@ -48,7 +48,7 @@ MODELS = {
     "fibo2": (
         "train_fibo2_lora.py",
         "templates/fibo2_template.yaml",
-        {},
+        {"adamw": "templates/fibo2_bria_template.yaml"},
         {
             "transformer_path": ("diffusion_models", "fibo2_dev_bf16.safetensors"),
             "vae_path": ("vae", "flux2_vae.safetensors"),
