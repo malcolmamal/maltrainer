@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -57,6 +58,9 @@ class CapabilitiesOut(BaseModel):
 
 class RunStatus(BaseModel):
     state: RunState
+    kind: Literal["lora", "finetune"] | None = Field(
+        None, description="What the run trains; null before the first step boundary"
+    )
     step: int | None = Field(None, description="Optimizer steps done; null before the first step boundary")
     total_steps: int | None = None
     percent: float | None = None

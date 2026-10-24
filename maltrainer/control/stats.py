@@ -24,6 +24,7 @@ class RunView:
 
     host: Any
     monitor: TrainMonitor | None = None
+    kind: str = "lora"  # "lora" or "finetune": what the run trains, for the control API's status
 
     def stats(self, step: int) -> dict[str, Any]:
         total = self.host.run_metadata.get("planned_total_steps")
@@ -32,6 +33,7 @@ class RunView:
         seconds = window["seconds_per_step"] if window else None
         epoch = getattr(self.host, "epoch", None)
         return {
+            "kind": self.kind,
             "step": step,
             "total_steps": None if total is None else int(total),
             "percent": round(100 * step / total, 1) if total else None,

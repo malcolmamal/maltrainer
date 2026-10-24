@@ -141,3 +141,11 @@ def test_stats_without_a_planned_total_report_nulls_not_an_error() -> None:
     stats = view.stats(5)
 
     assert (stats["total_steps"], stats["percent"], stats["eta_seconds"]) == (None, None, None)
+
+
+def test_a_run_is_a_lora_unless_the_view_says_it_is_a_finetune() -> None:
+    lora = make_view()
+    finetune = RunView(lora.host, kind="finetune")
+
+    assert lora.stats(1)["kind"] == "lora"
+    assert finetune.stats(1)["kind"] == "finetune"

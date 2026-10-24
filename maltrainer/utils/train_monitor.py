@@ -107,8 +107,9 @@ class TrainMonitor:
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
 
-    def record(self, loss: float, sigma: float, prior: float | None = None) -> None:
-        """One micro-step's loss (a float already synced for the progress bar) and its sigma."""
+    def record(self, loss: float, sigma: float | None, prior: float | None = None) -> None:
+        """One micro-step's loss (a float already synced for the progress bar) and its sigma. A trainer that does
+        not keep its sigma passes None: the loss still counts, it just joins no noise band."""
         if not math.isfinite(loss):
             self.bad_in_a_row += 1
             logger.error("[monitor] the loss is %s (%d in a row)", loss, self.bad_in_a_row)
@@ -122,7 +123,7 @@ class TrainMonitor:
         self.last_loss = loss
         self.losses.append(loss)
         for name, lo, hi in BANDS:
-            if lo <= sigma < hi:
+            if sigma is not None and lo <= sigma < hi:
                 self.bands[name].append(loss)
                 break
         if prior is not None and math.isfinite(prior):

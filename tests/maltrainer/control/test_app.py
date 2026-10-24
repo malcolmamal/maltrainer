@@ -24,6 +24,7 @@ def test_status_before_the_first_step_has_the_state_and_what_the_trainer_can_do(
 
     assert body["state"] == "running"
     assert body["step"] is None
+    assert body["kind"] is None
     assert body["published_seconds_ago"] is None
     assert body["capabilities"] == {"gallery": True, "preview_settings": False}
 
@@ -36,6 +37,7 @@ def test_status_reports_the_published_stats_and_the_live_state() -> None:
     body = client_for(hub).get("/status").json()
 
     assert (body["state"], body["step"], body["total_steps"], body["percent"]) == ("paused", 50, 200, 25.0)
+    assert body["kind"] == "lora"
     assert body["epoch"] == 1
     assert body["learning_rate"] == pytest.approx(0.01)
     assert body["window"]["window_steps"] == 0

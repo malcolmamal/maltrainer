@@ -56,7 +56,7 @@ def train(host: FinetuneHost) -> None:
         total=total_steps, initial=host.global_step, desc="Training Steps", disable=not host.is_main_process
     )
     monitor = TrainMonitor(every=int(train_config.get("monitor_every", 100) or 100))
-    keys = make_keys(KeyCommands, host.config, RunView(host, monitor)) if host.is_main_process else None
+    keys = make_keys(KeyCommands, host.config, RunView(host, monitor, "finetune")) if host.is_main_process else None
     stopped = _epochs(host, (resume, same_data), (num_epochs, total_steps), (progress_bar, keys, monitor))
 
     progress_bar.close()

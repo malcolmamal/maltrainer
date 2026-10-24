@@ -76,12 +76,14 @@ def make_preview_host_keys(
     host: PreviewHost,
     monitor: TrainMonitor | None = None,
     gallery: Callable[[], None] | None = None,
+    kind: str = "lora",
 ) -> KeyCommands:
-    """``make_keys`` for a trainer with the preview hooks: its menu, preview settings and (a finetune) gallery."""
+    """``make_keys`` for a trainer with the preview hooks: its menu, preview settings and (a finetune) gallery.
+    ``kind`` is what the run trains, "lora" or "finetune", as the control API's status reports it."""
     return make_keys(
         factory,
         host.config,
-        RunView(host, monitor),
+        RunView(host, monitor, kind),
         menu=host._preview_menu,
         gallery=gallery,
         previews=host.previews,

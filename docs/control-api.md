@@ -71,7 +71,9 @@ behave identically from either, and both work together.
 once per optimizer step, so `published_seconds_ago` tells how fresh they are: during a long preview round or a save
 they are as old as that round. `window` is what the trainer logs as its `[monitor]` line, since the last one: the mean
 loss, the loss per noise band, the prior's mean and the seconds per step (without previews and pauses). `eta_seconds`
-is that rate times the steps left, an estimate.
+is that rate times the steps left, an estimate. `kind` is `lora` or `finetune`, and `epoch` is 1-based; both are null
+until the first step boundary. A LoRA run keeps the same monitor as a finetune (`train.monitor_every`, default 100),
+so it prints the `[monitor]` line and fills `window` and `eta_seconds` too.
 
 ### Preview settings
 
