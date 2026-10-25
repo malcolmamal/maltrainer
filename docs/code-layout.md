@@ -30,7 +30,7 @@ table and forbids module-level import cycles).
 |---|---|
 | `train_<model>_lora.py`, `train_krea2_finetune.py`, `train_moss_image_finetune.py`, `train_zimage_embedding.py` (deprecated) | One entry point per trainer: FLUX.3 [klein], Fibo 2.0, Krea 2, MOSS-Image, MiniMax H3, Qwen-Image 2.1, Z-Image (LoRA and textual inversion), and the two full finetunes. Each also has a `run_*.bat` launcher. |
 | `check_weights.py`, `compare_loras.py`, `inspect_lora.py` | Small root-level LoRA inspection tools. |
-| `scripts/` | Command-line tools that are not trainers: merge, resize and extract LoRAs, inspect metadata, inference, the Qwen 2.1 benchmark, `train_from_template.py`. Helper modules sit next to the script that uses them (`scripts` has no package). |
+| `scripts/` | Command-line tools that are not trainers: merge, resize and extract LoRAs, merge checkpoints and LoRAs into a model (`merge_lora_into_model.py` + `merge_into_model_*`), INT8 ConvRot to and from plain files, inspect metadata, inference, the Qwen 2.1 benchmark, `train_from_template.py`. Helper modules sit next to the script that uses them (`scripts` has no package). |
 | `backend/` | The web UI's FastAPI service (see below). |
 | `frontend/` | The Angular web UI. |
 | `templates/` | YAML config templates the UI and `train_from_template.py` start from. |
@@ -60,7 +60,11 @@ order). The finetunes are split into `finetune_*` modules:
 - `trainers/moss_image/finetune_*`: mixins (`data` -> `prior` -> `state` -> `checkpoint`, listed ahead of the LoRA
   trainer in the class bases) plus functions (`model`, `loop`, `resume`). A stub that must not shadow a later
   class in the method resolution order is declared under `if TYPE_CHECKING:`.
-- `trainers/krea2/finetune_*`: `host`, `model`, `loop`, `save`.
+- `trainers/krea2/finetune_*`: `host`, `model`, `optimizer`, `loop`, `step`, `save`; `previews` (Krea 2's sampler
+  and decoder on MOSS-Image's `PreviewHooks`, and the gallery).
+- `trainers/finetune/`: the mixins both finetunes share, `dataset` (regularisation images, per-folder repeats, the
+  dataset fingerprint, --suggest-steps) and `prior_setup` (the prior recorded before the first step, reloaded on
+  resume). They are mixins on `ImageLoRATrainer`, so they live with the trainers, not in `finetune/`.
 
 ### `models/<model>/`: the networks
 Each model package follows the same split, so a file's name tells you its content:
@@ -90,9 +94,9 @@ working. Tests patch a name in the module where the code looks it up; moving a n
 `disk_cache.py` (latent and embedding cache, shared by the MOSS trainers).
 
 ### `finetune/`
-Full-finetuning building blocks: `selection` (which parameters train), `rotation` (Krea 2 fp8 window rotation),
-`prior`/`classes`/`regularisation`/`repeats` (class-prior preservation), `resume` (exact-resume checks), `extract`
-(finetune -> LoRA by SVD), `notes`.
+Full-finetuning building blocks: `selection` (which parameters train), `rotation` (Krea 2 fp8 window rotation) and
+`rotation_base` (the original weights under it), `prior`/`classes`/`regularisation`/`repeats` (class-prior
+preservation), `resume` (exact-resume checks), `extract` (finetune -> LoRA by SVD), `notes`.
 
 ### `utils/`
 `config.py`, `logging_utils.py`, `fsutil.py` (rename with retry for Windows), `previews*.py` and `preview_menu.py`

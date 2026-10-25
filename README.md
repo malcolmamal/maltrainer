@@ -35,9 +35,18 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   (all 5.08B or a chosen subset) on a 32 GB GPU with fused Automagic3. It has an optional EMA in
   CPU RAM and can resume exactly from a saved state. See
   [MOSS-Image finetuning](docs/moss-image-finetuning.md).
+- **Krea 2 full finetuning**: `train_krea2_finetune.py` trains all 12.9B weights of the Krea 2 DiT on a 32 GB GPU,
+  one window of blocks at a time over an fp8 frozen trunk, with prior preservation, regularisation images, per-folder
+  repeats, previews and an exact resume (also with people added). Measured on an RTX 5090: 29.3 GB peak, ~2 s a step
+  at 512 px. See [Krea 2 finetuning](docs/krea2-finetuning.md) (with the results of an eight-person run).
 - **Lossless LoRA merging**: `scripts/merge_loras.py` merges LoRAs into one file that applies
   exactly what stacking them does, with per-LoRA strengths given on the command line or in a YAML
   config. It also bakes a strength into a single LoRA. See [merging LoRAs](docs/merge-loras.md).
+- **Merging into a model**: `scripts/merge_lora_into_model.py` blends checkpoints (weighted sum of any number,
+  add difference) and bakes LoRAs (LoRA pairs, LoKr, ComfyUI `.diff`) at their strengths into a bf16 / fp16 /
+  fp8-scaled base, from the command line or a YAML file, warning when the models differ.
+  `scripts/convert_int8_convrot.py` makes an INT8 ConvRot copy for ComfyUI and `scripts/dequantize_int8_convrot.py`
+  turns one back into a plain fp16 file. See [LoRAs into a model](docs/merge-lora-into-model.md).
 - **LoRA resizing**: `scripts/resize_lora.py` (or `resize_lora.bat`) shrinks a LoRA to a lower
   rank, such as 32 to 8, with a per-layer SVD, in seconds and with no kohya install. See
   [resizing LoRAs](docs/resize-loras.md).

@@ -91,3 +91,31 @@ def test_a_source_tensor_wins_over_a_reference_blob_of_the_same_name(
 
     assert torch.equal(load_file(str(output))["blocks.0.comfy_attention.config"], blob("from the source"))
     assert calls
+
+
+def test_a_source_saved_without_the_container_prefix_is_written_in_the_references_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, calls: list[tuple[torch.Tensor, int]]
+) -> None:
+    # a Krea 2 finetune from krea2_raw_fp8_scaled keeps that file's bare names ("blocks.0..."), while the INT8
+    # ConvRot releases ComfyUI loads say "model.diffusion_model.blocks.0..."
+    source, plain_reference, output = make_files(tmp_path)
+    reference = tmp_path / "prefixed_ref.safetensors"
+    save_file({f"model.diffusion_model.{k}": v for k, v in load_file(str(plain_reference)).items()}, str(reference))
+    plain = load_file(str(source))
+
+    assert run(monkeypatch, source, output, reference) == 0
+
+    out = load_file(str(output))
+    assert sorted(out) == sorted(
+        f"model.diffusion_model.blocks.0.{name}"
+        for name in (
+            "lin.weight",
+            "lin.weight_scale",
+            "lin.comfy_quant",
+            "lin.bias",
+            "norm.weight",
+            "comfy_attention.config",
+        )
+    )
+    assert out["model.diffusion_model.blocks.0.lin.weight"].dtype == torch.int8 and len(calls) == 1
+    assert torch.equal(out["model.diffusion_model.blocks.0.norm.weight"], plain["blocks.0.norm.weight"])

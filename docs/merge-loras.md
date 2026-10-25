@@ -140,3 +140,5 @@ The merged file records:
   says how each part was trained.
 
 `python scripts/inspect_lora_metadata.py <file>` shows it.
+
+To bake LoRAs into a model file instead, see [LoRAs into a model](merge-lora-into-model.md).
