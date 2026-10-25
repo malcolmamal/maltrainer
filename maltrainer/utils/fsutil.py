@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import shutil
 import time
 from collections.abc import Callable
 from pathlib import Path
 
+from PIL import Image
+
 logger = logging.getLogger(__name__)
+
+
+def save_or_report(image: Image.Image, path: Path) -> bool:
+    """``image.save(path)``; a write the disk refuses (full, or the file locked) is logged and removed, never
+    raised: a preview that cannot be written must not end a training run."""
+    try:
+        image.save(path)
+        return True
+    except OSError as error:
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
+        logger.error("%s could not be written (%s); training continues", path, error)
+        return False
 
 
 def rename_with_retry(

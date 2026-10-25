@@ -9,6 +9,7 @@ import random
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 
@@ -51,6 +52,28 @@ def _wait_for_space(output_dir: Path, need: int, step: int | str) -> bool:
     return True
 
 
+def _tensor_bytes(value: Any) -> int:
+    if isinstance(value, torch.Tensor):
+        return value.numel() * value.element_size()
+    if isinstance(value, dict):
+        return sum(_tensor_bytes(v) for v in value.values())
+    if isinstance(value, list | tuple):
+        return sum(_tensor_bytes(v) for v in value)
+    return 0
+
+
+def state_bytes(host: FinetuneHost) -> int:
+    """What the resume state writes beside its hard-linked model: every window's optimizer state (the active
+    one read where it lives, not copied) and the text fusion's."""
+    rotator = host.rotator
+    states: list[Any] = [rotator.optimizer_states]
+    if rotator.current is not None:
+        states.append(rotator.optimizer.state_dict())
+    if host.always_optimizer is not None:
+        states.append(host.always_optimizer.state_dict())
+    return sum(_tensor_bytes(state) for state in states)
+
+
 def save_checkpoint(host: FinetuneHost, step: int | str) -> bool:
     """The full model and, with train.save_state, the resume state (its weights hard-linked to
     the checkpoint). A save that does not fit is skipped (the final one waits for space)."""
@@ -59,7 +82,9 @@ def save_checkpoint(host: FinetuneHost, step: int | str) -> bool:
     output_dir.mkdir(parents=True, exist_ok=True)
     name = host._name()
     save_path = output_dir / (f"{name}.safetensors" if step == "final" else f"{name}_step_{step}.safetensors")
-    if not _wait_for_space(output_dir, host._model_bytes() + DISK_MARGIN, step):
+    with_state = bool(host.config["train"].get("save_state", True))
+    need = host._model_bytes() + (state_bytes(host) if with_state else 0) + DISK_MARGIN
+    if not _wait_for_space(output_dir, need, step):
         return False
     runtime = dict(
         host.run_metadata,
@@ -81,13 +106,26 @@ def save_checkpoint(host: FinetuneHost, step: int | str) -> bool:
         return False
     host.last_saved_path = str(save_path)
     logger.info("Saved finetuned model to %s (%.0fs)", save_path, time.time() - started)
-    if bool(host.config["train"].get("save_state", True)):
+    if with_state:
         try:
             host._save_state(output_dir / f"{name}_state", save_path)
         except Exception:  # logged with its traceback; the run goes on
-            shutil.rmtree(output_dir / f"{name}_state.tmp", ignore_errors=True)
             logger.exception("Writing the resume state for step %s failed; the previous state is kept.", step)
+            _remove_unfinished(output_dir / f"{name}_state.tmp")
     return True
+
+
+def _remove_unfinished(tmp: Path) -> None:
+    shutil.rmtree(tmp, ignore_errors=True)
+    if tmp.exists():
+        logger.error("Could not remove %s, the unfinished resume state: delete it to free its space.", tmp)
+
+
+def _write(value: Any, path: Path) -> None:
+    """``torch.save`` into a file this function closes, also when the write fails (given a path, torch keeps the
+    file open while the error is handled, and Windows cannot delete an open file)."""
+    with path.open("wb") as file:
+        torch.save(value, file)
 
 
 def _link(source: Path, target: Path, what: str) -> None:
@@ -108,14 +146,14 @@ def save_state(host: FinetuneHost, state_dir: Path, weights: Path) -> None:
     _link(weights, tmp / STATE_MODEL, "state weights")
     if host.prior is not None and host.prior_path is not None:
         _link(host.prior_path, tmp / STATE_PRIOR, "prior")
-    torch.save(
+    _write(
         {
             "rotation": host.rotator.state_dict(),
             "always": host.always_optimizer.state_dict() if host.always_optimizer is not None else None,
         },
         tmp / STATE_OPTIMIZER,
     )
-    torch.save(
+    _write(
         {
             "global_step": host.global_step,
             "epoch": host.epoch,

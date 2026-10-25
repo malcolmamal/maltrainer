@@ -52,6 +52,7 @@ from typing import Any
 
 from PIL import Image
 
+from maltrainer.utils.fsutil import save_or_report
 from maltrainer.utils.previews_live import PreviewEdits, contact_strip
 
 logger = logging.getLogger(__name__)
@@ -163,7 +164,7 @@ class Previews(PreviewEdits):
                     self.current = f"step {step}, image {k}/{count}" + (f", {label}" if label else "")
                     one = time.time()
                     image = render_one(prompt, self.seed + slot)
-                    image.save(self.dir / f"step{step:06d}_{slot:02d}{'_' + label if label else ''}.png")
+                    save_or_report(image, self.dir / f"step{step:06d}_{slot:02d}{'_' + label if label else ''}.png")
                     images.append(image)
                     took = time.time() - one
                     logger.info("[sample] %s: %.0fs", self.current, took)
@@ -178,7 +179,7 @@ class Previews(PreviewEdits):
                         )
             rows.append(images)
         strip = contact_strip(rows)
-        strip.save(self.dir / f"step{step:06d}.png")
+        save_or_report(strip, self.dir / f"step{step:06d}.png")
         elapsed = time.time() - started
         labels = ", ".join(label for label, _ in variants if label)
         logger.info(
