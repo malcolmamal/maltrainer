@@ -27,17 +27,16 @@ import torch
 from maltrainer.control.launch import make_preview_host_keys
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.models.moss_image.lora import DEFAULT_SKIP_BLOCKS, MOSSImageLoRANetwork
-from maltrainer.trainers.moss_image.advice import StepAdvice
 from maltrainer.trainers.moss_image.cache import cache_latents, cache_prompts, collect_samples, prompt_folders
 from maltrainer.trainers.moss_image.previews import PreviewHooks
 from maltrainer.trainers.moss_image.timesteps import sample_sigma
+from maltrainer.training.advice import StepAdvice
 from maltrainer.training.cli import start_run, training_arguments
 from maltrainer.training.image_lora import ImageLoRATrainer
 from maltrainer.utils.compile import compile_blocks
 from maltrainer.utils.config import load_config
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.step_planner import DEFAULT_EPOCHS
-from maltrainer.utils.train_monitor import TrainMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -148,28 +147,21 @@ class MOSSImageLoRATrainer(PreviewHooks, StepAdvice, ImageLoRATrainer):
         strength = float(self.config["train"].get("loss_weight_strength", 1.0))
         return loss * strength if strength != 1.0 else loss
 
-    # The loop's hooks: key e opens the preview menu; the monitor (train.monitor_every) records every sample, its
-    # speed leaves out previews and pauses; previews and the sample: reload run at the step boundaries.
+    # The loop's hooks: key e opens the preview menu; the loop's monitor (train.monitor_every) gets this trainer's
+    # sigma as ``last_sigma``, and its speed leaves out the previews; previews and the sample: reload run at the
+    # step boundaries.
 
     def _make_keys(self) -> KeyCommands | None:
         return make_preview_host_keys(KeyCommands, self)
 
     def _before_loop(self, total_steps: int) -> None:
-        self.monitor = TrainMonitor(every=int(self.config["train"].get("monitor_every", 100) or 100))
         self.monitor.exclude(self._maybe_preview(0, total_steps))
 
-    def _micro_step(self, index: int) -> torch.Tensor:
-        loss = super()._micro_step(index)
-        self.monitor.record(loss.item(), float(self.last_sigma))
-        return loss
-
     def _after_log(self, step: int, total: int) -> None:
-        self.monitor.step_done(step, total, self.optimizer)
         self.monitor.exclude(self._maybe_preview(step, total))
 
     def _after_keys(self, keys: KeyCommands | None) -> None:
-        if keys is not None:
-            self.monitor.exclude(keys.take_paused_seconds())
+        del keys
         self._watch_config()
 
 

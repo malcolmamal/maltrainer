@@ -96,6 +96,16 @@ def test_a_checkpoint_is_found_anywhere_below_its_subfolder(client: TestClient, 
     assert _models(client)["flux3_klein"]["missing_files"] == []
 
 
+def test_fibo2_is_offered_and_its_checkpoints_are_found_below_the_fibo2_folder(
+    client: TestClient, install_models: Installer
+) -> None:
+    install_models("fibo2", nested="Fibo2")
+
+    entry = _models(client)["fibo2"]
+    assert entry["missing_files"] == []
+    assert entry["label"] == "Fibo 2.0 (Dev)"
+
+
 def test_resolved_files_map_config_keys_to_absolute_paths(install_models: Installer) -> None:
     paths = install_models("krea2", nested="deep")
 

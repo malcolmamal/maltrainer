@@ -15,6 +15,7 @@ from maltrainer.training.progress import log_step
 from maltrainer.training.steps import plan_training_steps
 from maltrainer.utils.ema import OffloadedParameterEMA, ParameterEMA
 from maltrainer.utils.keyboard import KeyCommands
+from maltrainer.utils.train_monitor import TrainMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ class StepLoop:
     samples: list[tuple[str, str]]
     is_main_process: bool
     progress_logger: logging.Logger
+    # The health monitor (train.monitor_every): a [monitor] log line each window, and the loss, seconds per step and
+    # time left of the control API. ``epoch`` is the running one, 0-based, as the control API reads it.
+    monitor: TrainMonitor
+    epoch: int = 0
 
     def _epoch_order(self) -> list[int]:
         raise NotImplementedError
@@ -55,6 +60,7 @@ class StepLoop:
             steps_per_epoch=steps_per_epoch, planned_total_steps=total_steps, dataset_samples=len(self.samples)
         )
         self._announce(num_epochs, total_steps)
+        self.monitor = TrainMonitor(every=int(train_config.get("monitor_every", 100) or 100))
 
         progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not self.is_main_process)
         keys = self._make_keys() if self.is_main_process else None
@@ -115,10 +121,12 @@ class StepLoop:
         """One epoch's samples from step ``steps[0]`` on, until ``steps[1]`` or a key stops it: (step, stopped)."""
         (epoch, num_epochs), (global_step, total_steps) = epochs, steps
         stopped = False
+        self.epoch = epoch
         self.lora_network.train()
         for index in self._epoch_order():
             with self.accelerator.accumulate(self.lora_network):
                 loss = self._micro_step(index)
+                self._record_loss(loss)
                 if self.accelerator.sync_gradients:
                     self._optimizer_step(network)
             if self.accelerator.sync_gradients:
@@ -134,6 +142,11 @@ class StepLoop:
         loss: torch.Tensor = self._training_step(index)
         self.accelerator.backward(loss)
         return loss
+
+    def _record_loss(self, loss: torch.Tensor) -> None:
+        """The micro-step's loss into the monitor, with its sigma when the trainer keeps it as ``last_sigma``."""
+        sigma = getattr(self, "last_sigma", None)
+        self.monitor.record(loss.item(), None if sigma is None else float(sigma))
 
     def _optimizer_step(self, network: Any) -> None:
         max_grad_norm = float(self.config["train"].get("max_grad_norm", 1.0))
@@ -151,10 +164,13 @@ class StepLoop:
         """After an optimizer step: the bar, the log line, a due save, the keys. True when a key stopped the run."""
         bar.update(1)
         self._log_step(step, total, loss, *epochs)
+        self.monitor.step_done(step, total, self.optimizer)
         self._after_log(step, total)
         if self._save_every > 0 and step % self._save_every == 0 and step < total:
             self.save_checkpoint(step)
         stopped = keys is not None and keys.handle(step, self.save_checkpoint)
+        if keys is not None:
+            self.monitor.exclude(keys.take_paused_seconds())
         self._after_keys(keys)
         return stopped
 
@@ -162,10 +178,10 @@ class StepLoop:
         """Before the first step (MOSS-Image: the step-0 previews)."""
 
     def _after_log(self, step: int, total: int) -> None:
-        """After a step's log line, before its save (MOSS-Image: the monitor and the previews)."""
+        """After a step's log line and the monitor's, before its save (MOSS-Image: the previews)."""
 
     def _after_keys(self, keys: KeyCommands | None) -> None:
-        """After the keys were handled (MOSS-Image: the paused time, the config reload)."""
+        """After the keys were handled and the paused time left out of the monitor (MOSS-Image: the config reload)."""
 
     def _log_step(self, step: int, total: int, loss: torch.Tensor, epoch: int, num_epochs: int) -> None:
         log_step(self.progress_logger, self.optimizer, step, total, loss, epoch, num_epochs, self._step_note())

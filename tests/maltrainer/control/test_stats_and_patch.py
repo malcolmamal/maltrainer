@@ -23,6 +23,11 @@ def test_the_learning_rate_is_the_plain_rate() -> None:
     assert learning_rate(_optimizer()) == 0.002
 
 
+def test_without_an_optimizer_there_is_no_rate_rather_than_an_error() -> None:
+    # a Krea 2 finetune before its first window: the trainer's optimizers are not up yet
+    assert learning_rate(None) is None
+
+
 def test_a_prodigy_rate_is_the_multiplier_times_d() -> None:
     assert learning_rate(_optimizer(d=0.5)) == pytest.approx(0.001)
 
@@ -141,3 +146,11 @@ def test_stats_without_a_planned_total_report_nulls_not_an_error() -> None:
     stats = view.stats(5)
 
     assert (stats["total_steps"], stats["percent"], stats["eta_seconds"]) == (None, None, None)
+
+
+def test_a_run_is_a_lora_unless_the_view_says_it_is_a_finetune() -> None:
+    lora = make_view()
+    finetune = RunView(lora.host, kind="finetune")
+
+    assert lora.stats(1)["kind"] == "lora"
+    assert finetune.stats(1)["kind"] == "finetune"

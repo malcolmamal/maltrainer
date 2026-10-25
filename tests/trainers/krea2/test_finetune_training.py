@@ -7,6 +7,7 @@ import logging
 import pytest
 import torch
 from safetensors import safe_open
+from safetensors.torch import load_file
 from torch import nn
 
 from maltrainer.models.krea2.loading import load_krea2_transformer
@@ -82,6 +83,28 @@ def test_the_same_seed_gives_bit_identical_models(workspace: Workspace) -> None:
     run_finetune(workspace.finetune_config(train=train, output={"path": str(workspace.root / "again")}))
 
     assert same_values(final_weights(workspace.out), final_weights(workspace.root / "again"))
+
+
+def test_comfyuis_fp8_file_with_its_text_fusion_in_fp8_too_trains_the_text_fusion_in_bf16(
+    workspace: Workspace, caplog: pytest.LogCaptureFixture
+) -> None:
+    # krea2_raw_fp8_scaled stores the 32 text-fusion Linears in fp8 as well (one scale per tensor)
+    write_checkpoint(workspace.checkpoint, fp8=True, fp8_text=True)
+    stored = load_file(str(workspace.checkpoint))
+    workspace.add_images(1)
+
+    with caplog.at_level(logging.WARNING):
+        trainer = run_finetune(workspace.finetune_config(train={"max_steps": 1}))
+
+    assert "always-trained Linears are stored in fp8: dequantized to trainable bfloat16" in caplog.text
+    names = [name for name, _ in trainer.always_on]
+    assert names and all(param.dtype == torch.bfloat16 and param.requires_grad for _, param in trainer.always_on)
+    first = names[0]
+    module = first[: -len(".weight")]
+    start = (stored[PREFIX + first].float() * stored[PREFIX + module + ".weight_scale"]).to(torch.bfloat16)
+    saved = final_weights(workspace.out)
+    assert saved[PREFIX + first].dtype == torch.bfloat16 and PREFIX + module + ".weight_scale" not in saved
+    assert not torch.equal(saved[PREFIX + first], start)  # it trained, from the dequantized weights
 
 
 def test_an_fp8_source_file_trains_from_its_dequantized_weights_and_the_trainer_warns(

@@ -8,7 +8,7 @@ acted on it, and the hub's snapshot is refreshed at every step."""
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
@@ -36,6 +36,7 @@ class ControlledKeys(KeyCommands):
         previews: PreviewTarget | None = None,
         menu: Callable[[], None] | None = None,
         gallery: Callable[[], None] | None = None,
+        extra: Mapping[str, tuple[str, Callable[[], None]]] | None = None,
     ) -> None:
         self.hub, self.view, self.target = hub, view, previews
         self.on_close: Callable[[], None] | None = None
@@ -46,7 +47,7 @@ class ControlledKeys(KeyCommands):
         self._publish_failed = False
         self._saved: bool | None = None
         self._gallery_ok: bool | None = None
-        super().__init__(menu=menu, gallery=self._run_gallery if gallery is not None else None)
+        super().__init__(menu=menu, gallery=self._run_gallery if gallery is not None else None, extra=extra)
         self.hub.publish(settings=self._settings())
 
     def _settings(self) -> dict[str, Any] | None:

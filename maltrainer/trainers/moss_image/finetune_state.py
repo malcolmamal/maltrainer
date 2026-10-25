@@ -1,9 +1,9 @@
-"""The MOSS-Image finetune's resume state: the dataset fingerprint that says whether a state belongs to this data,
-and everything train.resume_from needs (weights, optimizer, prior, EMA, step, epoch and RNG states)."""
+"""The MOSS-Image finetune's resume state: everything train.resume_from needs (weights, optimizer, prior, EMA, step,
+epoch and RNG states). The dataset fingerprint is the shared finetune data's
+(maltrainer/trainers/finetune/dataset.py)."""
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import random
@@ -35,20 +35,6 @@ class FinetuneState(FinetunePrior):
     position: int
     epoch_rng: tuple[Any, ...] | None
     ema: OffloadedParameterEMA | None
-
-    def _dataset_fingerprint(self) -> str:
-        """The samples (paths relative to the dataset folder, captions) and repeats, so a moved
-        dataset still matches and any added, removed or recaptioned image does not."""
-        root = self.config["dataset"]["path"]
-        digest = hashlib.sha1(str(self.config["dataset"].get("repeats", 1)).encode("utf-8"), usedforsecurity=False)
-        if self.config["dataset"].get("folder_repeats"):  # only then, so earlier states keep their fingerprint
-            digest.update(repr(sorted(self.config["dataset"]["folder_repeats"].items())).encode("utf-8"))
-        for key, caption in self.samples:
-            if key in self.reg_keys:  # marked only then, so states without regularisation keep their fingerprint
-                digest.update(f"\x1ereg:{self._rel(key)}\x1f{caption}".encode())
-            else:
-                digest.update(f"\x1e{Path(os.path.relpath(key, root)).as_posix()}\x1f{caption}".encode())
-        return digest.hexdigest()
 
     def _save_state(self, state_dir: Path, weights: Path | None = None) -> None:
         """Everything train.resume_from needs, written aside and swapped in whole.

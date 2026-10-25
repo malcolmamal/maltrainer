@@ -10,7 +10,12 @@ from pathlib import Path
 import torch
 
 from maltrainer.finetune.rotation import WindowRotator
-from maltrainer.models.krea2.finetune import DEFAULT_ALWAYS_ON, always_on_linears, parse_windows
+from maltrainer.models.krea2.finetune import (
+    DEFAULT_ALWAYS_ON,
+    always_on_linears,
+    dequantize_always_on,
+    parse_windows,
+)
 from maltrainer.models.krea2.loading import load_krea2_transformer
 from maltrainer.trainers.krea2.finetune_host import STATE_MODEL, STATE_OPTIMIZER, STATE_TRAINER, FinetuneHost
 
@@ -52,7 +57,14 @@ def load_for_finetune(host: FinetuneHost, say: Callable[[str], None]) -> None:
         host._make_optimizer,
     )
     always = finetune_config.get("always_on", list(DEFAULT_ALWAYS_ON)) or []
+    dequantized = dequantize_always_on(host.transformer, always, host.rotator.master)
     host.always_on = always_on_linears(host.transformer, always)
+    if dequantized:
+        logger.warning(
+            "%d always-trained Linears are stored in fp8: dequantized to trainable %s (they keep fp8's rounding)",
+            dequantized,
+            str(host.dtype).replace("torch.", ""),
+        )
     host.lora_network = host.transformer
     windows = ", ".join(f"{n} {host.rotator.window_parameters(i) / 1e9:.2f}B" for i, n in enumerate(host.rotator.names))
     always_count = sum(p.numel() for _, p in host.always_on)

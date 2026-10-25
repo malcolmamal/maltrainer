@@ -6,8 +6,9 @@
 #
 # Trains the DiT's own weights, not a LoRA, a window at a time (docs/krea2-finetuning.md): the
 # frozen model stays on the GPU in fp8, one window of every block's Linears trains in bf16 from
-# a CPU master copy, and the text-fusion stack trains all run. Data, timesteps and loss match
-# krea2_template.yaml. Each checkpoint is a full bf16 model (~26 GB); the resume state adds the
+# a CPU master copy, and the text-fusion stack trains all run. Timesteps and loss match
+# krea2_template.yaml; regularisation images, per-folder repeats, prior preservation and previews
+# work as in the MOSS-Image finetune. Each checkpoint is a full bf16 model (~26 GB); the resume state adds the
 # optimizer (~12.5 GB) and hard-links the checkpoint.
 
 model:
@@ -25,6 +26,12 @@ dataset:
   trigger: "[person_to_train]"
   default_caption: "a photo of [person_to_train]"
   repeats: 1
+  # folder_repeats: {"people/ben": 3, "emmawatson": 0.5}   # per sub-folder, by path or name; fractions allowed
+  # Regularisation images: ordinary photos of the class (not model output), trained beside the
+  # subjects at train.reg_lr_multiplier x the step. Empty = none.
+  reg_path: ""
+  reg_default_caption: ""    # for reg images without a .txt
+  reg_repeats: 1
 
 finetune:
   # One window trains at a time, every rotate_every steps the next (a full cycle = 4 windows).
@@ -37,6 +44,16 @@ finetune:
     - {name: mlp.down, prefixes: ["mlp.down"]}
   # Trained all run, in bf16: where prompt-to-concept binding happens (Fizgig). [] = none.
   always_on: ["txtfusion"]
+
+# Prior preservation (DOP): before step 1 the original model's predictions are recorded for each
+# image with its trigger replaced by the class word; each step then holds the model to them on
+# that class caption, so the subjects stay behind their triggers. A second forward pass per step
+# at every: 1. The original model here is the fp8 trunk the frozen windows run on.
+prior:
+  weight: 0.0                # 0 = off
+  classes: {"[person_to_train]": "person"}   # trigger: class word
+  samples_per_image: 8       # recorded noised inputs per image (0.13 MB each at 512 px)
+  every: 1                   # add the term every N steps
 
 train:
   batch_size: 1
@@ -60,7 +77,33 @@ train:
   automagic_beta2: 0.999
   automagic_eps: 1.0e-30
   caption_dropout: 0.05
+  reg_lr_multiplier: 0.2          # step size of regularisation images (0.1-0.3 anchors)
   monitor_every: 100
+
+# Previews rendered with the weights in training (no checkpoint saved): every N steps and before
+# the first, the same seed per prompt each time. The trigger-free prompt shows whether the person
+# leaks into the class. Fizgig's RAW settings: 28 steps, CFG 4.5 (two DiT passes per step; ~29 s per
+# image at 768 px on an RTX 5090, ~1 min at 1024). For a Turbo-like base (or a merge with Turbo in it):
+# 10 steps, CFG 1. width / height: multiples of 16. every: 0 = off.
+sample:
+  every: 500
+  at_start: true
+  # Every prompt is encoded at the start, enabled or not; a plain line is enabled. While training,
+  # key [e] switches prompts and the interval; saving this file applies it as well.
+  prompts:
+    - "photo of [person_to_train] smiling, close-up with face visible, soft light from the front"
+    - prompt: "photo of a person smiling, close-up with face visible, soft light from the front"
+      enabled: true          # the class without a name: does the person leak into it?
+  negative: ""
+  steps: 28
+  cfg: 4.5
+  width: 1024                # multiples of 16
+  height: 1024
+  seed: 42
+  # Key [g]: up to 8 of the trained people (prior.classes) at random, each with a generic prompt for
+  # their class word, into samples/gallery/. Every person x prompt is encoded at the start. false = off.
+  gallery:
+    count: 8
 
 dtype: "bfloat16"
 mixed_precision: "bf16"

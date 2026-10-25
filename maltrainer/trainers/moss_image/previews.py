@@ -138,13 +138,7 @@ class PreviewHooks:
         def work() -> None:
             try:
                 if self._cpu_encoder is None:
-                    model_config = self.config["model"]
-                    self._cpu_encoder = load_moss_image_text_encoder(
-                        model_config["text_encoder_path"],
-                        torch.device("cpu"),
-                        self.dtype,
-                        model_config.get("tokenizer_path"),
-                    )
+                    self._cpu_encoder = self._load_cpu_encoder()
                 for caption in missing:
                     started = time.time()
                     self.text_cache[caption] = self._cpu_encoder.encode(caption, torch.device("cpu"), self.dtype).cpu()
@@ -157,6 +151,13 @@ class PreviewHooks:
         logger.info("[sample] encoding %d new prompt(s) on the CPU in the background", len(missing))
         self._encoding = threading.Thread(target=work, daemon=True)
         self._encoding.start()
+
+    def _load_cpu_encoder(self) -> Any:
+        """The text encoder on the CPU, for prompts added mid-run (a trainer for another model brings its own)."""
+        model_config = self.config["model"]
+        return load_moss_image_text_encoder(
+            model_config["text_encoder_path"], torch.device("cpu"), self.dtype, model_config.get("tokenizer_path")
+        )
 
     def _preview_menu(self) -> None:
         """Key e: the preview settings menu. Rows to choose from are the labelled variants (a

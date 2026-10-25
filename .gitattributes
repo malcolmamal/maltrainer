@@ -4,6 +4,7 @@ webui.local.example.bat text eol=crlf
 run_webui.sh text eol=lf
 webui.local.example.sh text eol=lf
 run_krea2_training.bat text eol=crlf
+run_fibo2_training.bat text eol=crlf
 run_flux3_klein_training.bat text eol=crlf
 run_moss_image_training.bat text eol=crlf
 quality.bat text eol=crlf

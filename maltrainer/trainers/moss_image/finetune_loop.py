@@ -73,7 +73,8 @@ def train(host: Any) -> None:
         total=total_steps, initial=host.global_step, desc="Training Steps", disable=not host.is_main_process
     )
     monitor = build_monitor(host, train_config)
-    keys = make_preview_host_keys(KeyCommands, host, monitor, host._run_gallery if host.gallery.enabled else None)
+    gallery = host._run_gallery if host.gallery.enabled else None
+    keys = make_preview_host_keys(KeyCommands, host, monitor, gallery, kind="finetune")
     if resume is None:
         monitor.exclude(host._maybe_preview(0, total_steps))  # the base model: what later previews compare with
     stopped = _epochs(host, (resume, same_data), (num_epochs, total_steps), (progress_bar, keys, monitor))

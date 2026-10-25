@@ -1,9 +1,11 @@
-"""Stand-ins for the two heavy components the Krea 2 trainers load: the VAE encoder and the text encoder.
-Everything else in a trainer run (the DiT, the LoRA network or window rotation, the loop) is the real code."""
+"""Stand-ins for the heavy components the Krea 2 trainers load: the VAE encoder and decoder and the text encoder.
+Everything else in a trainer run (the DiT, the LoRA network or window rotation, the loop, the sampler) is the real
+code."""
 
 from __future__ import annotations
 
 import zlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 
@@ -30,6 +32,18 @@ class FakeVAEEncoder:
         return torch.einsum("oc,bchw->bohw", self.projection, cells)
 
 
+class FakeVAEDecoder:
+    """Latents [B, 4, h, w] -> pixels [B, 3, 8h, 8w] in [0, 1]: the channel mean through a sigmoid, in gray."""
+
+    def __init__(self) -> None:
+        self.decoded: list[tuple[int, ...]] = []
+
+    def decode(self, latents: torch.Tensor) -> torch.Tensor:
+        self.decoded.append(tuple(latents.shape))
+        gray = latents.float().mean(dim=1, keepdim=True).sigmoid().repeat(1, 3, 1, 1)
+        return gray.repeat_interleave(8, dim=2).repeat_interleave(8, dim=3)
+
+
 class FakeTextEncoder:
     """A caption -> [L, 3, 32] embedding drawn from a generator seeded by the caption, L in 2..4."""
 
@@ -46,13 +60,17 @@ class FakeTextEncoder:
 @dataclass
 class Fakes:
     encoder: FakeVAEEncoder = field(default_factory=FakeVAEEncoder)
+    decoder: FakeVAEDecoder = field(default_factory=FakeVAEDecoder)
     text: FakeTextEncoder = field(default_factory=FakeTextEncoder)
     vae_loads: int = 0
+    decoder_loads: list[torch.dtype] = field(default_factory=list)
     text_loads: list[tuple[str, str | None]] = field(default_factory=list)
+    cpu_text_loads: list[torch.device] = field(default_factory=list)
 
 
-def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
-    """Replace the two loaders ``module`` (the LoRA trainer's) imported with ones returning the fakes."""
+def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object, previews: object) -> Fakes:
+    """Replace the loaders ``module`` (the LoRA trainer's) and ``previews`` (the finetune's previews) imported with
+    ones returning the fakes."""
     fakes = Fakes()
 
     def vae(_path: str, _device: torch.device) -> FakeVAEEncoder:
@@ -63,8 +81,20 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch, module: object) -> Fakes:
         fakes.text_loads.append((path, tokenizer))
         return fakes.text
 
+    def decoder(_path: str, _device: torch.device, dtype: torch.dtype) -> FakeVAEDecoder:
+        fakes.decoder_loads.append(dtype)
+        return fakes.decoder
+
+    def cpu_text_encoder(
+        _path: str, device: torch.device, _dtype: torch.dtype, _tokenizer: str | None
+    ) -> FakeTextEncoder:
+        fakes.cpu_text_loads.append(device)
+        return fakes.text
+
     monkeypatch.setattr(module, "load_krea2_vae", vae)
     monkeypatch.setattr(module, "load_krea2_text_encoder", text_encoder)
+    monkeypatch.setattr(previews, "load_krea2_vae_decoder", decoder)
+    monkeypatch.setattr(previews, "load_krea2_text_encoder", cpu_text_encoder)  # prompts added mid-run
     return fakes
 
 
@@ -77,8 +107,10 @@ def skip_housekeeping(monkeypatch: pytest.MonkeyPatch, commit: str = "abc1234") 
 class ScriptedKeys(KeyCommands):
     """The real key handling, fed from a script: the n-th poll returns the n-th list of keys."""
 
-    def __init__(self, script: list[list[str]]) -> None:
-        super().__init__()
+    def __init__(
+        self, script: list[list[str]], menu: Callable[[], None] | None, gallery: Callable[[], None] | None
+    ) -> None:
+        super().__init__(menu=menu, gallery=gallery)
         self.script = list(script)
 
     def poll(self) -> list[str]:
@@ -89,8 +121,8 @@ def script_keys(monkeypatch: pytest.MonkeyPatch, modules: list[object], script: 
     """Make the trainers' ``KeyCommands`` a scripted one; the list collects the instances made."""
     made: list[ScriptedKeys] = []
 
-    def factory() -> ScriptedKeys:
-        keys = ScriptedKeys(script)
+    def factory(menu: Callable[[], None] | None = None, gallery: Callable[[], None] | None = None) -> ScriptedKeys:
+        keys = ScriptedKeys(script, menu, gallery)
         made.append(keys)
         return keys
 

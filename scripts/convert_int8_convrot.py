@@ -25,11 +25,52 @@ import argparse
 import json
 import sys
 import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import Any
 
 import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
+
+PREFIXES = ("model.diffusion_model.", "diffusion_model.")
+
+
+def container_prefix(keys: Iterable[str]) -> str:
+    """The container prefix every key of a ComfyUI single file starts with ("" when there is none)."""
+    keys = list(keys)
+    return next((prefix for prefix in PREFIXES if keys and all(k.startswith(prefix) for k in keys)), "")
+
+
+def convert(
+    src: Any,
+    src_keys: list[str],
+    bare: dict[str, str],
+    ref_prefix: str,
+    markers: dict[str, torch.Tensor],
+    configs: dict[str, dict[str, Any]],
+    quantize: Callable[[torch.Tensor, int], tuple[torch.Tensor, torch.Tensor]],
+    device: str,
+) -> dict[str, torch.Tensor] | None:
+    """Every source tensor under the reference's names: the reference's Linears INT8 ConvRot, the rest as stored."""
+    out = {}
+    for i, key in enumerate(src_keys):
+        name = ref_prefix + bare[key]
+        module = bare[key][: -len(".weight")] if key.endswith(".weight") else None
+        if module in configs:
+            cfg = configs[module]
+            if cfg.get("format") != "int8_tensorwise" or not cfg.get("convrot"):
+                print(f"{ref_prefix}{module}: reference format {cfg} is not INT8 ConvRot", file=sys.stderr)
+                return None
+            q, scale = quantize(src.get_tensor(key).to(device, torch.float32), int(cfg.get("convrot_groupsize", 256)))
+            out[name] = q.cpu().contiguous()
+            out[f"{ref_prefix}{module}.weight_scale"] = scale.float().reshape(-1, 1).cpu().contiguous()
+            out[f"{ref_prefix}{module}.comfy_quant"] = markers[module].clone()
+        else:
+            out[name] = src.get_tensor(key).contiguous()
+        if (i + 1) % 50 == 0:
+            print(f"  {i + 1}/{len(src_keys)} tensors", flush=True)
+    return out
 
 
 def main() -> int:
@@ -62,7 +103,11 @@ def main() -> int:
     started = time.time()
     with safe_open(str(args.reference), framework="pt", device="cpu") as ref:
         ref_keys = set(ref.keys())
-        markers = {k[: -len(".comfy_quant")]: ref.get_tensor(k) for k in ref_keys if k.endswith(".comfy_quant")}
+        ref_prefix = container_prefix(ref_keys)
+        # markers by bare module name: the source may be saved with another container prefix than the reference
+        markers = {
+            k[len(ref_prefix) : -len(".comfy_quant")]: ref.get_tensor(k) for k in ref_keys if k.endswith(".comfy_quant")
+        }
         configs = {k: json.loads(bytes(t.tolist()).decode("utf-8")) for k, t in markers.items()}
         extras = {
             k: ref.get_tensor(k)
@@ -71,33 +116,21 @@ def main() -> int:
             and ref.get_slice(k).get_dtype() == "U8"
         }
 
-    out = {}
     with safe_open(str(args.source), framework="pt", device="cpu") as src:
         metadata = src.metadata() or {}
         src_keys = list(src.keys())
-        missing = [m for m in markers if f"{m}.weight" not in src_keys]
+        src_prefix = container_prefix(src_keys)
+        bare = {key: key[len(src_prefix) :] for key in src_keys}
+        missing = sorted(set(markers) - {name[: -len(".weight")] for name in bare.values() if name.endswith(".weight")})
         if missing:
             print(
                 f"the reference quantizes {len(missing)} Linears the source does not have, e.g. {missing[:3]}",
                 file=sys.stderr,
             )
             return 1
-        for i, key in enumerate(src_keys):
-            module = key[: -len(".weight")] if key.endswith(".weight") else None
-            if module in configs:
-                cfg = configs[module]
-                if cfg.get("format") != "int8_tensorwise" or not cfg.get("convrot"):
-                    print(f"{module}: reference format {cfg} is not INT8 ConvRot", file=sys.stderr)
-                    return 1
-                w = src.get_tensor(key).to(args.device, torch.float32)
-                q, scale = quantize_int8_convrot_weight(w, int(cfg.get("convrot_groupsize", 256)))
-                out[key] = q.cpu().contiguous()
-                out[f"{module}.weight_scale"] = scale.float().reshape(-1, 1).cpu().contiguous()
-                out[f"{module}.comfy_quant"] = markers[module].clone()
-            else:
-                out[key] = src.get_tensor(key).contiguous()
-            if (i + 1) % 50 == 0:
-                print(f"  {i + 1}/{len(src_keys)} tensors", flush=True)
+        out = convert(src, src_keys, bare, ref_prefix, markers, configs, quantize_int8_convrot_weight, args.device)
+        if out is None:
+            return 1
     for key, blob in extras.items():
         out.setdefault(key, blob.clone())
 

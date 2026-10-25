@@ -75,8 +75,20 @@ that changed a lot.
   change into `proj.q` / `proj.k` / `proj.v` LoRA modules, each with its own SVD. That is the
   same layout trained MOSS-Image LoRAs use: ComfyUI slices it into the fused weight.
 - Both files must be plain bf16/fp16/fp32 checkpoints with the same tensors, such as
-  `moss_image_base_bf16.safetensors` and a finetune this repo saved from it. Int8 files are
-  refused.
+  `moss_image_base_bf16.safetensors` and a finetune this repo saved from it. fp8 and INT8 files are
+  refused (their stored values are not the weights without their scales).
+- **The base must be the exact model the finetune started from.** A Krea 2 finetune trained from
+  `krea2_raw_fp8_scaled` started from that file dequantized to bf16; extract against that
+  (`_base_dequantized_bf16.safetensors` in the people run), not against Comfy-Org's separate
+  `krea2_raw_bf16`, or the fp8 rounding becomes part of the "change". An INT8 ConvRot model can be
+  turned into a plain file first with `scripts/dequantize_int8_convrot.py`
+  ([merge-lora-into-model.md](merge-lora-into-model.md)).
+- **A full finetune's change is mostly noise in norm, not in effect.** The Krea 2 people finetune
+  kept only ~4% / 6% / 11% of each layer's change at rank 64 / 128 / 256 (the "dropped" figures
+  read 96 / 94 / 89%): batch-1 steps with stochastic rounding spread small changes over every
+  weight. Rank 256 on Turbo still kept most of the likeness (0.58 against 0.59 on the finetune for
+  one person, 0.48 against 0.62 for another), so judge a rank by renders, not by the dropped share.
+  For no cut at all, add the finetune's change at full rank with `merge_lora_into_model.py --add-diff`.
 
 The code is split between the model-agnostic SVD (`maltrainer/finetune/extract.py`) and each
 model's layout (MOSS-Image's in `maltrainer/models/moss_image/finetune.py`).

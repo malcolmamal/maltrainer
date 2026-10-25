@@ -147,7 +147,7 @@ def test_any_other_optimizer_is_refused(workspace: Workspace) -> None:
 @pytest.mark.parametrize(
     ("sections", "message"),
     [
-        ({"train": {"dop": True}}, r"train\.dop is the LoRA trainer's; the Krea 2 finetune has no prior preservation"),
+        ({"train": {"dop": True}}, r"train\.dop is the LoRA trainer's; a finetune holds .* with prior\.weight"),
         ({"train": {"gradient_accumulation_steps": 2}}, r"gradient_accumulation_steps must be 1"),
         ({"train": {"batch_size": 2}}, r"Krea 2 trains at batch_size 1"),
     ],

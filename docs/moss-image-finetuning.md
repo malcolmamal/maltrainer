@@ -6,7 +6,8 @@ all 5.08B, can be selected. Data, caching, timesteps and loss are the LoRA train
 ([moss-image-lora-training.md](moss-image-lora-training.md)); only the model side differs.
 
 The model-agnostic parts live in `maltrainer/finetune/`: parameter selection, prior preservation,
-regularisation images and LoRA extraction. What is MOSS-Image's own (its default trainable set,
+regularisation images and LoRA extraction. The trainer mixins the Krea 2 finetune shares are in
+`maltrainer/trainers/finetune/` (`dataset.py`, `prior_setup.py`) ([krea2-finetuning.md](krea2-finetuning.md)). What is MOSS-Image's own (its default trainable set,
 optimizer groups, checkpoint layout and fused q/k/v) is in
 `maltrainer/models/moss_image/finetune.py`.
 

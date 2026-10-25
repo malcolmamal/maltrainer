@@ -147,9 +147,10 @@ Which trainer is built on which base:
 | Entry point | Pipeline | Base |
 |---|---|---|
 | `train_flux3_klein_lora.py`, `train_krea2_lora.py` | the class lives in the entry point itself | `ImageLoRATrainer` |
-| `train_moss_image_lora.py` | `trainers/moss_image` (`cache`, `previews`, `advice`, `timesteps`) | `ImageLoRATrainer` |
+| `train_fibo2_lora.py` | the class lives in the entry point; `trainers/fibo2/timesteps` | `ImageLoRATrainer` |
+| `train_moss_image_lora.py` | `trainers/moss_image` (`cache`, `previews`, `timesteps`), `training/advice` | `ImageLoRATrainer` |
 | `train_moss_image_finetune.py` | `trainers/moss_image/finetune_*` | the MOSS-Image LoRA trainer (4.4) |
-| `train_krea2_finetune.py` | `trainers/krea2/finetune_*` | the Krea 2 LoRA trainer, imported from `train_krea2_lora` |
+| `train_krea2_finetune.py` | `trainers/krea2/finetune_*`, `trainers/krea2/previews`, `trainers/finetune` | the Krea 2 LoRA trainer, imported from `train_krea2_lora` |
 | `train_minimax_h3_lora.py` | `trainers/minimax_h3` | its own class; reuses `training.session`, `saving`, `steps` |
 | `train_qwen_image_2_1_lora.py` | `trainers/qwen_image_2_1` | its own class; reuses `training.progress`, `saving`, `session` |
 | `train_zimage_lora.py`, `train_zimage_embedding.py` | `trainers/zimage` (`Pipeline`) | `zimage.pipeline.Pipeline` |
@@ -219,7 +220,8 @@ C4Component
 
 The other families follow the same shape: `krea2` (`model`, `layers`, `rope`, `loading`, `text_encoder`, `vae`,
 `timesteps`, `lora`, `finetune`), `flux3` (`model`, `config`, `layers`, `rope`, `loading`, `text_encoder`, `vae`,
-`vae_net`, `lora`), `qwen_image_2_1` (`model*`, `vae*`, `text_encoder`, `checkpoint`, `lora*`) and `minimax_h3`
+`vae_net`, `lora`), `fibo2` (`model`, `config`, `blocks`, `layers`, `rope`, `loading`, `prompt`, `text_encoder`, `lora`;
+its VAE and LoRA layer are FLUX.3's and its text encoder loads like FLUX.3's), `qwen_image_2_1` (`model*`, `vae*`, `text_encoder`, `checkpoint`, `lora*`) and `minimax_h3`
 (`model*`, `video_vae*`, `audio_vae*`, `text_encoder*`, `lora*`, and the shared INT8 and `comfy_quant*` layers). The
 VAE of MOSS-Image is FLUX.3's Flux2 VAE (`models/flux3/vae.py`), and the INT8 ConvRot kernels live in
 `models/minimax_h3/int8_*.py` and are used by four families, so the model packages know each other (section 6.1).
@@ -242,7 +244,7 @@ classDiagram
         run() precache_dataset() save_checkpoint()
     }
     class StepAdvice {
-        trainers/moss_image/advice.py
+        training/advice.py
         suggest_steps()
     }
     class PreviewHooks {
@@ -253,17 +255,25 @@ classDiagram
         train_moss_image_lora.py
         _training_step() load_transformer_and_lora()
     }
+    class FinetuneDataset {
+        trainers/finetune/dataset.py
+        reg images, repeats, step groups, fingerprint
+    }
     class FinetuneData {
         finetune_data.py
-        reg images, repeats, step groups
+        the bases: shared data on MOSS previews
+    }
+    class FinetunePriorSetup {
+        trainers/finetune/prior_setup.py
+        prior recorded or reloaded
     }
     class FinetunePrior {
         finetune_prior.py
-        gallery, prior preservation
+        gallery, prior sigma, original weights
     }
     class FinetuneState {
         finetune_state.py
-        dataset fingerprint, _save_state()
+        _save_state()
     }
     class FinetuneCheckpoint {
         finetune_checkpoint.py
@@ -278,6 +288,10 @@ classDiagram
     StepAdvice <|-- PreviewHooks
     PreviewHooks <|-- MOSSImageLoRATrainer
     PreviewHooks <|-- FinetuneData
+    StepAdvice <|-- FinetuneDataset
+    FinetuneDataset <|-- FinetuneData
+    FinetuneDataset <|-- FinetunePriorSetup
+    FinetunePriorSetup <|-- FinetunePrior
     FinetuneData <|-- FinetunePrior
     FinetunePrior <|-- FinetuneState
     FinetuneState <|-- FinetuneCheckpoint
@@ -286,7 +300,10 @@ classDiagram
 ```
 
 The effective order (`MOSSImageFinetuneTrainer.__mro__`) is: finetune trainer, `FinetuneCheckpoint`, `FinetuneState`,
-`FinetunePrior`, `FinetuneData`, `MOSSImageLoRATrainer`, `PreviewHooks`, `StepAdvice`, `ImageLoRATrainer`, `StepLoop`.
+`FinetunePrior`, `FinetunePriorSetup`, `FinetuneData`, `FinetuneDataset`, `MOSSImageLoRATrainer`, `PreviewHooks`,
+`StepAdvice`, `ImageLoRATrainer`, `StepLoop`. `FinetuneDataset` and `FinetunePriorSetup` (in `trainers/finetune/`)
+are shared with the Krea 2 finetune, whose order is: `Krea2FinetuneTrainer`, `FinetunePriorSetup`, `FinetuneDataset`,
+`StepAdvice`, `Krea2Previews`, `PreviewHooks`, `Krea2LoRATrainer`, `ImageLoRATrainer`, `StepLoop`.
 `finetune_host.py` holds only the state folder's file names. A stub that must not shadow a later class is declared
 under `if TYPE_CHECKING:` (`FinetunePrior._name`, `_sample_sigma`).
 
@@ -505,7 +522,7 @@ What holds, and what does not:
   between packages fails the test until the table in the test and here are changed together), forbids the library
   importing `trainers` or an entry point, and fails on any import cycle between modules.
 - **Models know each other.** The shared INT8 ConvRot layers live in `models/minimax_h3/int8_*.py` and
-  `comfy_quant*.py`, and `flux3`, `qwen_image_2_1` and `moss_image` import them (and each other's VAE, LoRA layer or
+  `comfy_quant*.py`, and `flux3`, `fibo2` (through the FLUX.3 text-encoder loader), `qwen_image_2_1` and `moss_image` import them (and each other's VAE, LoRA layer or
   text encoder pieces). The rule is: reuse, do not copy; the cost is that `minimax_h3` is more of a platform
   package than its name says.
 - **Where logic lives.** Reusable code goes into `maltrainer/` and not into `train_*.py` (200 lines at most). A
@@ -595,7 +612,8 @@ flowchart LR
 - **Rotating fp8 windows for the Krea 2 finetune** (`finetune/rotation.py`, `trainers/krea2/finetune_*`): the frozen
   model sits on the GPU in fp8, one window of Linears at a time is swapped to a trainable bf16 copy from a CPU master,
   trained for `finetune.rotate_every` steps, written back and re-quantized. Optimizer state follows each window to CPU
-  RAM and back.
+  RAM and back. `finetune/rotation_base.py` puts the original weights in for a while (a resumed run recording the prior
+  of images added since) and re-quantizes from the master afterwards, bit for bit.
 - **Exact resume** for both finetunes: the state folder, the epoch order from a saved RNG state, restored RNG streams
   and a dataset fingerprint (5.3).
 - **Backend as a thin planner.** All model knowledge in the UI path is data in `backend/registry.py`; the trainers

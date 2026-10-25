@@ -70,13 +70,16 @@ def test_p_pauses_until_p_again_and_h_lists_the_keys(
     # reading makes the measured pause certain instead of depending on where the tick falls.
     seconds = itertools.count(1000)
     monkeypatch.setattr(keyboard, "time", SimpleNamespace(time=lambda: float(next(seconds)), sleep=lambda _s: None))
+    left_out: list[float] = []
+    monkeypatch.setattr(loop.TrainMonitor, "exclude", lambda _monitor, secs: left_out.append(secs))
 
     with caplog.at_level(logging.INFO):
         run_lora(workspace.lora_config(train={"max_steps": 2}))
 
     assert "Paused at step 1: [p] resume" in caplog.text and "Resumed at step 1 after" in caplog.text
     assert "[s] save a checkpoint now" in caplog.text
-    assert made[0].script == [] and made[0].paused_seconds > 0
+    # the loop takes the paused time and leaves it out of the monitor's seconds per step
+    assert made[0].script == [] and made[0].paused_seconds == 0 and max(left_out) > 0
 
 
 def test_every_step_polls_the_keys_once_and_the_listener_is_closed_when_the_run_ends(

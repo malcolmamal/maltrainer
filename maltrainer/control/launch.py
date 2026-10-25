@@ -40,10 +40,13 @@ def make_keys(
     gallery: Callable[[], None] | None = None,
     previews: Previews | None = None,
     row_labels: Callable[[], list[str]] = list,
+    extra: Mapping[str, tuple[str, Callable[[], None]]] | None = None,
 ) -> KeyCommands:
     """``factory`` builds the plain keys (the trainer's own ``KeyCommands`` name, so tests can replace it).
     A run that asks for the API but cannot bind its port logs that and carries on without it: the run comes first."""
-    plain = {name: value for name, value in (("menu", menu), ("gallery", gallery)) if value is not None}
+    plain: dict[str, Any] = {
+        name: value for name, value in (("menu", menu), ("gallery", gallery), ("extra", extra)) if value is not None
+    }
     settings = ControlSettings.from_config(config)
     if settings is None:
         return factory(**plain)
@@ -59,7 +62,7 @@ def make_keys(
             error,
         )
         return factory(**plain)
-    keys = ControlledKeys(hub, view, target, menu=menu, gallery=gallery)
+    keys = ControlledKeys(hub, view, target, menu=menu, gallery=gallery, extra=extra)
     keys.on_close = running.stop
     keys.url = running.url
     logger.info(
@@ -73,12 +76,14 @@ def make_preview_host_keys(
     host: PreviewHost,
     monitor: TrainMonitor | None = None,
     gallery: Callable[[], None] | None = None,
+    kind: str = "lora",
 ) -> KeyCommands:
-    """``make_keys`` for a trainer with the preview hooks: its menu, preview settings and (a finetune) gallery."""
+    """``make_keys`` for a trainer with the preview hooks: its menu, preview settings and (a finetune) gallery.
+    ``kind`` is what the run trains, "lora" or "finetune", as the control API's status reports it."""
     return make_keys(
         factory,
         host.config,
-        RunView(host, monitor),
+        RunView(host, monitor, kind),
         menu=host._preview_menu,
         gallery=gallery,
         previews=host.previews,

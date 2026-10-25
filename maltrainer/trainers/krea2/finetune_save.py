@@ -1,5 +1,5 @@
 """The Krea 2 finetune's saves: the full bf16 model (after waiting for disk space), and the resume state beside it
-(its weights hard-linked to the checkpoint)."""
+(its weights hard-linked to the checkpoint, and the prior's recorded predictions to <name>_prior.safetensors)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,13 @@ from pathlib import Path
 import torch
 
 from maltrainer.models.krea2.finetune import save_krea2_model
-from maltrainer.trainers.krea2.finetune_host import STATE_MODEL, STATE_OPTIMIZER, STATE_TRAINER, FinetuneHost
+from maltrainer.trainers.krea2.finetune_host import (
+    STATE_MODEL,
+    STATE_OPTIMIZER,
+    STATE_PRIOR,
+    STATE_TRAINER,
+    FinetuneHost,
+)
 from maltrainer.utils.fsutil import replace_directory
 from maltrainer.utils.lora_metadata import build_metadata
 
@@ -84,17 +90,24 @@ def save_checkpoint(host: FinetuneHost, step: int | str) -> bool:
     return True
 
 
+def _link(source: Path, target: Path, what: str) -> None:
+    """A hard link to ``source``, or a copy where there can be none (another volume, a filesystem without them)."""
+    try:
+        os.link(source, target)
+    except OSError as e:
+        logger.info("Could not hard-link the %s (%s); copying", what, e)
+        shutil.copyfile(source, target)
+
+
 def save_state(host: FinetuneHost, state_dir: Path, weights: Path) -> None:
     """Everything train.resume_from needs, written aside and swapped in whole."""
     started = time.time()
     tmp = state_dir.with_name(state_dir.name + ".tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
-    try:
-        os.link(weights, tmp / STATE_MODEL)
-    except OSError as e:  # another volume, or no hard links
-        logger.info("Could not hard-link the state weights (%s); copying", e)
-        shutil.copyfile(weights, tmp / STATE_MODEL)
+    _link(weights, tmp / STATE_MODEL, "state weights")
+    if host.prior is not None and host.prior_path is not None:
+        _link(host.prior_path, tmp / STATE_PRIOR, "prior")
     torch.save(
         {
             "rotation": host.rotator.state_dict(),
@@ -112,7 +125,7 @@ def save_state(host: FinetuneHost, state_dir: Path, weights: Path) -> None:
             "torch_rng": torch.get_rng_state(),
             "cuda_rng": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
             "dataset_fingerprint": host._dataset_fingerprint(),
-            "dataset_samples": len(host._epoch_order()),
+            "dataset_samples": host._epoch_size(),  # counted, not drawn: a save leaves Python's random alone
         },
         tmp / STATE_TRAINER,
     )

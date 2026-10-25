@@ -1,0 +1,72 @@
+# Fibo 2.0 (Dev) LoRA template -- BRIA's official recipe, AdamW (train_fibo2_lora.py).
+#
+# Used by the web UI (optimizer "adamw"), which fills in the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    COMFYUI_MODELS_PATH; the UI finds each file anywhere under the matching subfolder
+# For the CLI, copy this file and replace the placeholders yourself.
+#
+# Every training setting is the default of BRIA's fine_tuning/train_lora.py (briaai/Fibo-2.0-dev):
+#   rank 64, alpha = rank, every Linear of the DiT, LoRA weights in fp32 on the frozen bf16 DiT
+#   AdamW: lr 1e-4 constant (no warmup), betas (0.9, 0.999), eps 1e-8, weight decay 0.01, grad clip 1.0
+#   1000 optimizer steps of 8 accumulated samples (batch 1), a checkpoint every 250, no EMA
+#   sigma = sigmoid(N(shift, 1)), shift 0.5 at 256 tokens to 1.15 at 4096, 10 % uniform, not clamped
+#   text dropout 0.1 to the null caption, 1024 px, gradient checkpointing, seed 0
+# What stays maltrainer's (docs/fibo2-lora-training.md): adapters sit on ComfyUI's fused Linears (qkv, w13,
+# to_kv), the LoRA is saved in ComfyUI's format, captions are .txt files (a JSON caption goes inside the .txt),
+# and text_render images are not drawn.
+#
+# BRIA measured 31 GiB and about 58 s per step at 1024 px, rank 128 on an L40S: 1000 steps of 8 samples is
+# a run of hours, about 5x the samples of templates/fibo2_template.yaml.
+
+model:
+  transformer_path: "[comfyui_models]/diffusion_models/Fibo2/fibo2_dev_bf16.safetensors"
+  vae_path: "[comfyui_models]/vae/flux2_vae.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3vl_4b_int8_convrot.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 1024           # area target on a 16 px grid, as BRIA's --resolution
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 64
+  alpha: 64
+  prefix: "diffusion_model."
+  targets: "all"             # every Linear: BRIA's 415 unfused layers are these 266 fused ones
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  # max_steps counts optimizer steps, as BRIA's --steps
+  max_steps: 1000
+  num_epochs: 70
+  save_every: 250
+  timestep_distribution: "bria"
+  timestep_uniform_mix: 0.1
+  timestep_shift: 1.0
+  min_sigma: 0.0             # BRIA does not clamp the draw
+  max_sigma: 1.0
+  max_grad_norm: 1.0
+  gradient_checkpointing: true
+  optimizer: "adamw"         # torch AdamW, betas (0.9, 0.999), eps 1e-8
+  learning_rate: 1.0e-4
+  learning_rate_warmup_steps: 0
+  weight_decay: 0.01
+  caption_dropout: 0.1
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 0
+
+output:
+  path: "./output/fibo2/[person_to_train]"
+  name: "fibo2_bria_[person_to_train]"
+  dtype: "float32"           # BRIA saves the fp32 adapter (rank 64, every Linear: about 0.9 GB)
+  embed_config: true
+
+logging:
+  level: "INFO"

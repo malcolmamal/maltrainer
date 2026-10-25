@@ -71,6 +71,10 @@ class ImageLoRATrainer(StepLoop):
         for caption in tqdm(sorted(prompts), desc="Caching prompts", disable=not self.is_main_process):
             self.text_cache[caption] = encoder.encode(caption, self.device, self.dtype).cpu()
 
+    def _extra_prompts(self) -> list[str]:
+        """Captions to encode beside the samples' own (previews, a finetune's class captions); none here."""
+        return []
+
     def _sample(self, index: int) -> tuple[str, str]:
         """The sample's cache key and caption; ``train.caption_dropout`` swaps the caption for the empty prompt."""
         key, caption = self.samples[index]

@@ -20,7 +20,7 @@ input/output layers stay frozen.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -29,7 +29,7 @@ from safetensors.torch import save_file
 from torch import nn
 
 from maltrainer.finetune.rotation import Window, WindowRotator
-from maltrainer.models.comfy_fp8 import Fp8ScaledLinear
+from maltrainer.models.comfy_fp8 import Fp8ScaledLinear, dequantize
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,34 @@ def parse_windows(config: Sequence[Any] | None) -> tuple[Window, ...]:
             name, prefixes = entry
         out.append((str(name), tuple(str(p) for p in ([prefixes] if isinstance(prefixes, str) else prefixes))))
     return tuple(out)
+
+
+def _bf16_linear(module: Fp8ScaledLinear) -> nn.Linear:
+    """A bf16 nn.Linear holding an fp8 Linear's dequantized weight (and its bias)."""
+    linear = nn.Linear(module.in_features, module.out_features, bias=module.bias is not None, device="meta")
+    weight = dequantize(
+        cast(torch.Tensor, module.weight), cast(torch.Tensor, module.weight_scale), module.compute_dtype
+    )
+    linear.weight = nn.Parameter(weight, requires_grad=False)
+    if module.bias is not None:
+        bias = cast(torch.Tensor, module.bias)
+        linear.bias = nn.Parameter(bias.detach().to(module.compute_dtype), requires_grad=False)
+    return linear
+
+
+def dequantize_always_on(model: nn.Module, modules: Sequence[str], rotating: Collection[str]) -> int:
+    """Swap each fp8 Linear under ``modules`` whose weight does not rotate (``rotating``: the rotator's master keys)
+    for a bf16 one, so ``always_on_linears`` can train it; how many. ComfyUI's krea2_raw_fp8_scaled stores the text
+    fusion in fp8. A rotating one stays fp8, and ``always_on_linears`` refuses it: the windows train it."""
+    swapped = 0
+    for module_name in modules:
+        for name, module in list(model.get_submodule(module_name).named_modules()):
+            path = f"{module_name}.{name}" if name else module_name
+            if isinstance(module, Fp8ScaledLinear) and f"{path}.weight" not in rotating:
+                parent, _, attribute = path.rpartition(".")
+                setattr(model.get_submodule(parent), attribute, _bf16_linear(module))
+                swapped += 1
+    return swapped
 
 
 def always_on_linears(model: nn.Module, modules: Sequence[str]) -> list[tuple[str, nn.Parameter]]:

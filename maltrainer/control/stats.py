@@ -8,8 +8,11 @@ from typing import Any
 from maltrainer.utils.train_monitor import TrainMonitor
 
 
-def learning_rate(optimizer: Any) -> float:
-    """The rate the progress line prints: Automagic3's average, Prodigy's multiplier x d, or the plain rate."""
+def learning_rate(optimizer: Any) -> float | None:
+    """The rate the progress line prints: Automagic3's average, Prodigy's multiplier x d, or the plain rate; None
+    while the trainer has no optimizer up (a Krea 2 finetune before its first window)."""
+    if optimizer is None:
+        return None
     inner = getattr(optimizer, "optimizer", optimizer)  # accelerate's wrapper does not forward custom methods
     if hasattr(inner, "get_avg_learning_rate"):
         return float(inner.get_avg_learning_rate())
@@ -24,6 +27,7 @@ class RunView:
 
     host: Any
     monitor: TrainMonitor | None = None
+    kind: str = "lora"  # "lora" or "finetune": what the run trains, for the control API's status
 
     def stats(self, step: int) -> dict[str, Any]:
         total = self.host.run_metadata.get("planned_total_steps")
@@ -32,6 +36,7 @@ class RunView:
         seconds = window["seconds_per_step"] if window else None
         epoch = getattr(self.host, "epoch", None)
         return {
+            "kind": self.kind,
             "step": step,
             "total_steps": None if total is None else int(total),
             "percent": round(100 * step / total, 1) if total else None,

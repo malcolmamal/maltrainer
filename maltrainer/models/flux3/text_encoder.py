@@ -115,16 +115,17 @@ class Flux3TextEncoder(nn.Module):
         return torch.cat([t[0] for t in taps], dim=-1).to(dtype)
 
 
-def _text_config(tokenizer_assets: Path) -> Any:
+def text_config(tokenizer_assets: Path, num_layers: int) -> Any:
+    """The Qwen3-VL-4B text config, built with its first ``num_layers`` decoder layers."""
     config: Any = Qwen3VLConfig.from_pretrained(str(tokenizer_assets)).text_config
     for name, setting in QWEN3VL_4B_TEXT.items():
         setattr(config, name, setting)
-    config.num_hidden_layers = TAP_LAYERS[-1]
+    config.num_hidden_layers = num_layers
     config.use_cache = False
     return config
 
 
-def _text_state(path: Path, quantized: bool, num_layers: int) -> dict[str, Any]:
+def text_state_dict(path: Path, quantized: bool, num_layers: int) -> dict[str, Any]:
     """The checkpoint's text-model tensors under their ``Qwen3VLTextModel`` names, past layer ``num_layers`` dropped."""
     if quantized:
         raw, _ = load_comfy_int8_convrot_state_dict(str(path), device=torch.device("cpu"))
@@ -156,10 +157,10 @@ def load_flux3_text_encoder(
     tokenizer = AutoTokenizer.from_pretrained(
         str(Path(tokenizer_path) if tokenizer_path else TOKENIZER_ASSETS), trust_remote_code=True
     )
-    config = _text_config(TOKENIZER_ASSETS)
+    config = text_config(TOKENIZER_ASSETS, TAP_LAYERS[-1])
 
     quantized = is_int8_convrot(path)
-    state = _text_state(path, quantized, config.num_hidden_layers)
+    state = text_state_dict(path, quantized, config.num_hidden_layers)
 
     with init_empty_weights(include_buffers=False):
         model: Any = Qwen3VLTextModel(config)

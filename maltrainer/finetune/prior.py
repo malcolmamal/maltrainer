@@ -110,19 +110,19 @@ class PriorPreservation:
     def build(
         self,
         items: Iterable[tuple[str, torch.Tensor, str]],
-        sample_sigma: Callable[[], torch.Tensor],
+        sample_sigma: Callable[[torch.Tensor], torch.Tensor],
         predict: PredictFn,
         device: torch.device,
     ) -> None:
-        """Record the original model's predictions. ``items``: (key, x0 [C, ...] on the CPU,
-        class caption); call this before the first training step."""
+        """Record the original model's predictions. ``items``: (key, x0 [C, ...] on the CPU, class
+        caption); ``sample_sigma(x0 [1, C, ...])``: a training sigma for it. Call before the first step."""
         items = list(items)
         rng = random.Random(self.seed)
         for key, cpu_x0, caption in tqdm(items, desc="Prior: the original model's predictions"):
             x0 = cpu_x0.to(device, torch.float32).unsqueeze(0)
             sigmas, seeds, preds = [], [], []
             for _ in range(self.samples_per_image):
-                sigma = sample_sigma().reshape(1).to(device, torch.float32)
+                sigma = sample_sigma(x0).reshape(1).to(device, torch.float32)
                 seed = rng.getrandbits(62)
                 noise = _noise(seed, x0.shape).to(device)
                 preds.append(predict(self.noisy(x0, noise, sigma), sigma, caption)[0].to("cpu", torch.bfloat16))

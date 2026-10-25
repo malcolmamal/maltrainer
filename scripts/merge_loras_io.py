@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -25,13 +26,20 @@ def parse_input(spec: str) -> tuple[Path, float]:
     return Path(spec), 1.0
 
 
-def read_lora(path: Path) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor, float]], dict[str, str], str]:
-    """module -> (down [r, in], up [out, r], alpha); the file's metadata; the down/up layout."""
+def read_lora(
+    path: Path, skip: tuple[str, ...] = ()
+) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor, float]], dict[str, str], str]:
+    """module -> (down [r, in], up [out, r], alpha); the file's metadata; the down/up layout ("" for none).
+
+    ``skip``: key suffixes another reader handles (merge_lora_into_model.py's full ``.diff`` deltas); a file of
+    only those has no layout and no modules. Any other tensor this does not understand is refused."""
     with safe_open(str(path), framework="pt", device="cpu") as handle:
-        keys = list(handle.keys())
+        keys = [key for key in handle.keys() if not key.endswith(skip)] if skip else list(handle.keys())
         metadata = handle.metadata() or {}
         tensors = {key: handle.get_tensor(key) for key in keys}
     layout = next((pair for pair in LAYOUTS if any(k.endswith(pair[0]) for k in keys)), None)
+    if layout is None and skip and not keys:
+        return {}, metadata, ""
     if layout is None:
         raise ValueError(f"{path.name}: no lora_A/lora_B or lora_down/lora_up keys")
     down_suffix, up_suffix = layout
@@ -61,11 +69,14 @@ def read_lora(path: Path) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor, f
     return modules, metadata, "/".join(s.split(".")[1] for s in layout)
 
 
-def sha256_prefix(path: Path, length: int = 12) -> str:
+def sha256_prefix(path: Path, length: int = 12, on_read: Callable[[int], object] | None = None) -> str:
+    """The first ``length`` hex digits of the file's SHA-256; ``on_read(bytes)`` after each block (a progress bar)."""
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
+            if on_read is not None:
+                on_read(len(block))
     return digest.hexdigest()[:length]
 
 

@@ -174,3 +174,14 @@ def test_the_monitor_snapshot_is_the_window_as_numbers() -> None:
     assert snapshot["window_loss_bands"] == {"low": 0.2, "high": 0.6}
     assert snapshot["window_prior"] == pytest.approx(0.02)
     assert snapshot["window_steps"] == 0
+
+
+def test_a_loss_without_a_sigma_counts_in_the_window_but_joins_no_noise_band() -> None:
+    monitor = TrainMonitor(every=10)
+
+    monitor.record(0.4, None)
+    monitor.record(0.6, 0.3)
+
+    snapshot = monitor.snapshot()
+    assert snapshot["window_loss"] == pytest.approx(0.5)
+    assert snapshot["window_loss_bands"] == {"low": pytest.approx(0.6)}

@@ -1,0 +1,33 @@
+# scripts/merge_lora_into_model.py --config templates/examples/merge_into_model_krea2.yaml
+#
+# The Krea 2 people finetune moved onto Turbo at full rank (no LoRA extraction, no SVD cut), with the
+# TextFusion Refusal-Reduction LoRA baked in, for 8-step CFG 1 renders. Every section is optional except
+# base and output; the command line's base / output / --dtype / --device override these, and its --model,
+# --add-diff and LoRAs are added to the lists. Relative paths are from the current directory.
+#
+#   W = (1 - sum of model weights) * base + sum weight * model     (models)
+#       + sum strength * (model - the model it was trained from)    (add_difference)
+#       + the LoRAs at their strengths                              (loras)
+
+base: "C:/Development/ComfyUI/models/diffusion_models/Krea2/krea2_turbo_fp8_scaled.safetensors"
+output: "C:/Development/ComfyUI/models/diffusion_models/Krea2/krea2_turbo_people_10000_bf16.safetensors"
+dtype: bfloat16          # default: the base's own (bfloat16 for an fp8 base like this one)
+
+# Weighted sum with other checkpoints of the same model: (1 - 0.3) * base + 0.3 * model.
+# A model far from the base (> 25%: likely another base model) is reported as a warning.
+models: []
+#  - path: "C:/Development/ComfyUI/models/diffusion_models/Krea2/Krea2Realism_V1_fp16_from_int8.safetensors"
+#    weight: 0.3
+
+# What a finetune changed, added onto the base: strength * (model - base it was trained from). Use the exact
+# base the finetune started from: this run trained from krea2_raw_fp8_scaled dequantized to bf16, saved as
+# _base_dequantized_bf16 when its LoRAs were extracted. fp8 inputs here are warned about (rounding noise).
+add_difference:
+  - model: "output/krea2_finetune/krea/krea2_ft_krea.safetensors"
+    base: "output/krea2_finetune/krea/_base_dequantized_bf16.safetensors"
+    strength: 1.0
+
+# LoRAs (lora_A/lora_B, lora_down/lora_up, or ComfyUI .diff deltas) at their strengths; a bare path = 1.0.
+loras:
+  - path: "C:/Development/ComfyUI/models/loras/Krea2/special/Krea2_TextFusion_Refusal_Reduction.safetensors"
+    strength: 1.0
