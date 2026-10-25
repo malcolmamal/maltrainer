@@ -118,6 +118,7 @@ def test_the_fingerprint_follows_the_captions_the_repeats_and_the_relative_paths
 
     moved = workspace.root / "moved"
     shutil.copytree(workspace.data, moved / "data")
+    shutil.copyfile(workspace.checkpoint, Workspace(moved).checkpoint)  # the base model is checked before caching
     assert _fingerprint(Workspace(moved)) == original
     assert _fingerprint(workspace, repeats=2) != original
     write_image(workspace.data / "img1.png", "another caption")

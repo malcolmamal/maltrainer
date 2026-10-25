@@ -53,13 +53,22 @@ def merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def write_checkpoint(path: Path, prefix: str = PREFIX, fp8: bool = False) -> Path:
-    """The tiny DiT as a bf16 ComfyUI file (or with fp8 block Linears and their scales)."""
+def _text_linear(key: str) -> bool:
+    return key.startswith("txtfusion.") and key.endswith(".weight") and (".attn." in key or ".mlp." in key)
+
+
+def write_checkpoint(path: Path, prefix: str = PREFIX, fp8: bool = False, fp8_text: bool = False) -> Path:
+    """The tiny DiT as a bf16 ComfyUI file, or with fp8 block Linears and their per-row scales; ``fp8_text`` also
+    stores the text fusion's Linears in fp8 with one scale each, as ComfyUI's krea2_raw_fp8_scaled does."""
     tensors: dict[str, torch.Tensor] = {}
     layers: dict[str, dict[str, str]] = {}
     for key, value in tiny_model().state_dict().items():
-        if fp8 and is_block_linear(key):
-            tensors[prefix + key], scale = quantize_rows(value)
+        if (fp8 and is_block_linear(key)) or (fp8_text and _text_linear(key)):
+            if is_block_linear(key):
+                tensors[prefix + key], scale = quantize_rows(value)
+            else:
+                scale = (value.abs().max() / 448.0).float()
+                tensors[prefix + key] = (value / scale).to(torch.float8_e4m3fn)
             tensors[prefix + key[: -len(".weight")] + ".weight_scale"] = scale
             layers[prefix + key[: -len(".weight")]] = {"format": "float8_e4m3fn"}
         else:

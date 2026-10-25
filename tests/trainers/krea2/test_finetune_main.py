@@ -97,5 +97,5 @@ def test_a_dry_run_needs_no_output_section_and_logs_in_the_working_directory(
     with caplog.at_level(logging.INFO):
         finetune.main()
 
-    assert "Dry run: 1 samples, 1 steps/epoch -> 2 epochs, 2 total steps" in caplog.text
+    assert "Dry run: 0 samples, 1 steps/epoch -> 2 epochs, 2 total steps" in caplog.text  # counted, as --suggest-steps
     assert (workspace.root / "output" / "training.log").exists() and not workspace.out.exists()

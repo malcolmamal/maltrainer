@@ -24,7 +24,7 @@ class Recorder:
 
 def _sigmas(*values: float):
     queue = list(values)
-    return lambda: torch.tensor(queue.pop(0))
+    return lambda _x0: torch.tensor(queue.pop(0))
 
 
 def _built(samples: int = 2) -> PriorPreservation:
@@ -81,6 +81,22 @@ def test_build_records_each_inputs_sigma_seed_and_prediction() -> None:
     expected = torch.stack([2.0 * x[0] for x, _, _ in predict.calls]).to(torch.bfloat16)
     assert prior.targets["a"].dtype == torch.bfloat16
     torch.testing.assert_close(prior.targets["a"], expected)
+
+
+def test_build_asks_the_sigma_sampler_with_each_image_on_the_device() -> None:
+    seen: list[torch.Tensor] = []
+
+    def sample_sigma(x0: torch.Tensor) -> torch.Tensor:
+        seen.append(x0)
+        return torch.tensor(0.5)
+
+    PriorPreservation(samples_per_image=2).build(
+        [("a", X0, "photo of woman"), ("b", X0 * 3, "photo of man")], sample_sigma, Recorder(), CPU
+    )
+
+    assert [tuple(x.shape) for x in seen] == [(1, 1, 2, 2)] * 4
+    assert [x.dtype for x in seen] == [torch.float32] * 4
+    torch.testing.assert_close(torch.stack(seen), torch.stack([X0[None], X0[None], X0[None] * 3, X0[None] * 3]))
 
 
 def test_the_same_seed_records_the_same_noise() -> None:

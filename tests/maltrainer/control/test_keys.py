@@ -182,7 +182,7 @@ def test_a_failure_reading_the_stats_is_logged_once_and_never_stops_the_run(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     keys, hub = _keys()
-    keys.view.host.optimizer = None
+    keys.view.host.optimizer = object()  # no param_groups: reading its rate raises
 
     with caplog.at_level(logging.ERROR, logger="maltrainer.control.keys"):
         stops = [keys.handle(1, Saver()), keys.handle(2, Saver())]

@@ -1,5 +1,5 @@
-"""The MOSS-Image finetune's gallery (key g), its preview rows, and prior preservation: the original model's
-predictions recorded (or, on resume, reloaded) as the target for the prior term."""
+"""The MOSS-Image finetune's gallery (key g), its preview rows, and its part of prior preservation (the shared start
+is maltrainer/trainers/finetune/prior_setup.py): the size-free training sigma and the base checkpoint's weights."""
 
 from __future__ import annotations
 
@@ -7,12 +7,13 @@ import contextlib
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import torch
 from PIL import Image
 
 from maltrainer.finetune.prior import weights_from_file
+from maltrainer.trainers.finetune.prior_setup import FinetunePriorSetup
 from maltrainer.trainers.moss_image.finetune_data import FinetuneData
 from maltrainer.trainers.moss_image.finetune_host import STATE_PRIOR
 from maltrainer.training.session import free_memory
@@ -20,12 +21,12 @@ from maltrainer.training.session import free_memory
 logger = logging.getLogger(__name__)
 
 
-class FinetunePrior(FinetuneData):
+class FinetunePrior(FinetunePriorSetup, FinetuneData):
+    prior_state_name = STATE_PRIOR
     resume_dir: Path | None
     layout_path: Path
     named_trainable: list[tuple[str, torch.nn.Parameter]]
     global_step: int
-    prior_path: Path | None
     transformer: Any
 
     if TYPE_CHECKING:  # defined further along the finetune's MRO (the checkpoint mixin, the LoRA trainer)
@@ -66,72 +67,12 @@ class FinetunePrior(FinetuneData):
             return [("", contextlib.nullcontext)]
         return [("raw", contextlib.nullcontext), ("ema", self.ema.applied)]
 
-    def _predict(self, noisy: torch.Tensor, sigma: torch.Tensor, caption: str) -> torch.Tensor:
-        context = self.text_cache[caption].to(self.device, self.dtype).unsqueeze(0)
-        return cast(torch.Tensor, self.transformer(noisy.to(self.dtype), sigma, context))
+    def _prior_sigma(self, x0: torch.Tensor) -> torch.Tensor:  # noqa: ARG002 - MOSS-Image's sigma is size-free
+        return self._sample_sigma()
 
-    def _setup_prior(self) -> None:
-        """Record (or, on resume, reload) the original model's predictions for the prior term."""
-        if self.prior is None:
-            return
-        captions = self._prior_captions()
-        if not captions:
-            raise ValueError(
-                f"prior.weight > 0, but no caption names a trigger of prior.classes {sorted(self.prior_classes)}"
-            )
-        if self.resume_dir is not None:
-            path = self.resume_dir / STATE_PRIOR
-            if not path.exists():
-                raise FileNotFoundError(
-                    f"prior.weight > 0, but {path} is missing: the resumed run had no prior, and the "
-                    "original model it needs is gone. Set prior.weight: 0 to resume without one."
-                )
-            self.prior.load(path)
-            missing = {k: c for k, c in captions.items() if self._rel(k) not in self.prior}
-            if missing:
-                # images added since the prior was recorded (e.g. new people): record theirs from the
-                # original model too, by putting the base checkpoint's values back for the recording
-                logger.info(
-                    "Prior: %d image(s) added since it was recorded; recording theirs from the original "
-                    "weights in %s (~%.0f min)",
-                    len(missing),
-                    self.layout_path.name,
-                    len(missing) * self.prior.samples_per_image / 6 / 60,
-                )
-                was_training = self.transformer.training
-                self.transformer.eval()
-                with weights_from_file(self.named_trainable, self.layout_path):
-                    self.prior.build(
-                        ((self._rel(key), self.latent_cache[key], caption) for key, caption in missing.items()),
-                        self._sample_sigma,
-                        self._predict,
-                        self.device,
-                    )
-                self.transformer.train(was_training)
-                torch.cuda.empty_cache()
-        else:
-            self.prior.build(
-                ((self._rel(key), self.latent_cache[key], caption) for key, caption in captions.items()),
-                self._sample_sigma,
-                self._predict,
-                self.device,
-            )
-        self.prior_path = Path(self.config["output"]["path"]) / f"{self._name()}_prior.safetensors"
-        self.prior_path.parent.mkdir(parents=True, exist_ok=True)
-        self.prior.save(self.prior_path)
-        self.run_metadata.update(
-            {
-                "prior_weight": self.prior.weight,
-                "prior_samples_per_image": self.prior.samples_per_image,
-                "prior_every": self.prior.every,
-                "prior_classes": self.prior_classes,
-                "prior_images": len(self.prior),
-            }
-        )
-        logger.info(
-            "Prior preservation: weight %g on %d images, every %d step(s), classes %s",
-            self.prior.weight,
-            len(self.prior),
-            self.prior.every,
-            self.prior_classes,
-        )
+    def _original_weights(self) -> contextlib.AbstractContextManager[Any]:
+        """The base checkpoint's values in the trained parameters (frozen ones never changed)."""
+        return weights_from_file(self.named_trainable, self.layout_path)
+
+    def _original_file(self) -> Path:
+        return self.layout_path

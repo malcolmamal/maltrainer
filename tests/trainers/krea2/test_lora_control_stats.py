@@ -19,7 +19,7 @@ def _stats_at_each_step(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]
     seen: list[dict[str, Any]] = []
 
     def make_keys(_factory: object, _config: object, view: RunView, **_extra: object) -> ScriptedKeys:
-        keys = ScriptedKeys([])
+        keys = ScriptedKeys([], None, None)
         handle = keys.handle
 
         def read_then_handle(step: int, save: Any) -> bool:

@@ -32,13 +32,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from maltrainer.finetune.prior import PriorPreservation, resolve_classes
 from maltrainer.trainers.moss_image import finetune_loop, finetune_model
 from maltrainer.trainers.moss_image.finetune_checkpoint import FinetuneCheckpoint
 from maltrainer.training.cli import start_run, training_arguments
 from maltrainer.utils.config import load_config
 from maltrainer.utils.ema import OffloadedParameterEMA
-from maltrainer.utils.gallery import Gallery
 from maltrainer.utils.step_planner import DEFAULT_EPOCHS
 from train_moss_image_lora import MOSSImageLoRATrainer
 
@@ -61,23 +59,8 @@ class MOSSImageFinetuneTrainer(FinetuneCheckpoint, MOSSImageLoRATrainer):
         self.epoch = 0
         self.position = 0
         self.epoch_rng: tuple[Any, ...] | None = None
-        # dataset.reg_path: regularisation images, trained at train.reg_lr_multiplier x the step
-        self.reg_keys: set[str] = set()
-        self.reg_multiplier = float(config.get("train", {}).get("reg_lr_multiplier", 0.2))
-        # prior.weight > 0: prior preservation against the original model (maltrainer/finetune/prior.py)
-        prior_config = config.get("prior", {}) or {}
-        self.prior: PriorPreservation | None = None
-        self.prior_classes = {}
-        self.prior_path: Path | None = None
-        if float(prior_config.get("weight", 0.0) or 0.0) > 0:
-            self.prior_classes = resolve_classes(prior_config, config.get("dataset", {}).get("trigger"))
-            self.prior = PriorPreservation(
-                weight=float(prior_config["weight"]),
-                samples_per_image=int(prior_config.get("samples_per_image", 8)),
-                every=int(prior_config.get("every", 1)),
-                seed=int(config.get("seed", 42)),
-            )
-        self.gallery = Gallery.from_config(config, self.prior_classes)  # key g (maltrainer/utils/gallery.py)
+        # dataset.reg_path, prior.weight > 0 and the gallery (maltrainer/trainers/finetune/dataset.py)
+        self._init_finetune_data(config)
 
     def load_transformer_and_lora(self) -> None:
         """The bf16 DiT and the trainable subset (maltrainer.trainers.moss_image.finetune_model)."""

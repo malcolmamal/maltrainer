@@ -1,20 +1,20 @@
-"""The Krea 2 finetune's training loop: a step budget over shuffled epochs, a window of blocks swapped in every
-``finetune.rotate_every`` steps, fused Automagic3 stepping inside backward, saves and keys at the step
-boundaries, and an exact resume (the epoch's order and every RNG state come back with the saved position)."""
+"""The Krea 2 finetune's training loop: a step budget over shuffled epochs (per-folder repeats and regularisation
+images included), the prior recorded before the first step, the base model's previews, keys, and an exact resume
+(the epoch's order and every RNG state come back with the saved position). One step is finetune_step.py: the
+window swapped in every ``finetune.rotate_every`` steps, the prior term, fused Automagic3 inside backward."""
 
 from __future__ import annotations
 
 import logging
 import random
-import time
-from typing import Any, cast
+from typing import Any
 
 import torch
 from tqdm import tqdm
 
-from maltrainer.control.launch import make_keys
-from maltrainer.control.stats import RunView
+from maltrainer.control.launch import make_preview_host_keys
 from maltrainer.trainers.krea2.finetune_host import FinetuneHost
+from maltrainer.trainers.krea2.finetune_step import sample_step
 from maltrainer.training.steps import plan_training_steps
 from maltrainer.utils.keyboard import KeyCommands
 from maltrainer.utils.train_monitor import TrainMonitor
@@ -26,7 +26,7 @@ def train(host: FinetuneHost) -> None:
     train_config = host.config["train"]
     if not host.samples:
         raise ValueError("No usable images: every file in the dataset failed to load")
-    epoch_size = len(host._epoch_order())
+    epoch_size = host._epoch_size()
     steps_per_epoch, num_epochs, total_steps = plan_training_steps(epoch_size, train_config)
     host.run_metadata.update(
         steps_per_epoch=steps_per_epoch, planned_total_steps=total_steps, dataset_samples=len(host.samples)
@@ -44,6 +44,9 @@ def train(host: FinetuneHost) -> None:
             )
             return
         num_epochs = host.epoch + -(-(total_steps - host.global_step + host.position) // steps_per_epoch)
+    host._setup_prior()
+    if host.reg_keys:
+        host.run_metadata.update({"reg_images": len(host.reg_keys), "reg_lr_multiplier": host.reg_multiplier})
 
     logger.info(
         "Starting Krea 2 finetuning: %d epochs, %d total steps, %d windows of %d steps",
@@ -56,7 +59,12 @@ def train(host: FinetuneHost) -> None:
         total=total_steps, initial=host.global_step, desc="Training Steps", disable=not host.is_main_process
     )
     monitor = TrainMonitor(every=int(train_config.get("monitor_every", 100) or 100))
-    keys = make_keys(KeyCommands, host.config, RunView(host, monitor, "finetune")) if host.is_main_process else None
+    keys = None
+    if host.is_main_process:
+        gallery = host._run_gallery if host.gallery.enabled else None
+        keys = make_preview_host_keys(KeyCommands, host, monitor, gallery, kind="finetune")
+    if resume is None:
+        monitor.exclude(host._maybe_preview(0, total_steps))  # the base model: what later previews compare with
     stopped = _epochs(host, (resume, same_data), (num_epochs, total_steps), (progress_bar, keys, monitor))
 
     progress_bar.close()
@@ -117,7 +125,7 @@ def _epochs(
         first = False
         stopped = False
         for pos in range(start, len(order)):
-            stopped = _sample(host, order[pos], (pos, epoch, num_epochs, total_steps), tools, shift_logged)
+            stopped = sample_step(host, order[pos], (pos, epoch, num_epochs, total_steps), tools, shift_logged)
             if host.global_step >= total_steps or stopped:
                 break
         if stopped:
@@ -126,48 +134,3 @@ def _epochs(
             host.position = 0
             epoch += 1
     return False
-
-
-def _sample(
-    host: FinetuneHost,
-    index: int,
-    where: tuple[int, int, int, int],
-    tools: tuple[Any, KeyCommands | None, TrainMonitor],
-    shift_logged: list[bool],
-) -> bool:
-    """One sample: the window for this step, loss and fused backward, the log line, a due save, the keys."""
-    pos, epoch, num_epochs, total_steps = where
-    progress_bar, keys, monitor = tools
-    window = host._window_at(host.global_step)
-    if window != host.rotator.current:
-        started = time.time()
-        host.rotator.activate(window)
-        monitor.exclude(time.time() - started)
-        logger.info(
-            "Step %d: training window %s (%.2fB, %.1fs to swap)",
-            host.global_step,
-            host.rotator.names[window],
-            host.rotator.window_parameters(window) / 1e9,
-            time.time() - started,
-        )
-    loss, _, sigma = host._training_step(index, shift_logged)
-    cast(Any, loss).backward()  # fused: every trained weight steps here
-    host.rotator.optimizer.step()  # applies the window's rate votes
-    if host.always_optimizer is not None:
-        host.always_optimizer.step()
-    monitor.record(loss.item(), float(sigma))
-    host.global_step += 1
-    host.position = pos + 1
-    progress_bar.update(1)
-    progress_bar.set_postfix(
-        {"loss": f"{loss.item():.4f}", "window": host.rotator.names[window], "epoch": f"{epoch + 1}/{num_epochs}"}
-    )
-    host._log_step(host.global_step, total_steps, loss, epoch, num_epochs)
-    monitor.step_done(host.global_step, total_steps, host.rotator.optimizer)
-    save_every = int(host.config["train"].get("save_every", 0) or 0)
-    if save_every > 0 and host.global_step % save_every == 0 and host.global_step < total_steps:
-        host.save_checkpoint(host.global_step)
-    stopped = keys is not None and keys.handle(host.global_step, host.save_checkpoint)
-    if keys is not None:
-        monitor.exclude(keys.take_paused_seconds())
-    return stopped

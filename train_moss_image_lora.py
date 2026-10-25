@@ -27,10 +27,10 @@ import torch
 from maltrainer.control.launch import make_preview_host_keys
 from maltrainer.models.moss_image.loading import load_moss_image_transformer
 from maltrainer.models.moss_image.lora import DEFAULT_SKIP_BLOCKS, MOSSImageLoRANetwork
-from maltrainer.trainers.moss_image.advice import StepAdvice
 from maltrainer.trainers.moss_image.cache import cache_latents, cache_prompts, collect_samples, prompt_folders
 from maltrainer.trainers.moss_image.previews import PreviewHooks
 from maltrainer.trainers.moss_image.timesteps import sample_sigma
+from maltrainer.training.advice import StepAdvice
 from maltrainer.training.cli import start_run, training_arguments
 from maltrainer.training.image_lora import ImageLoRATrainer
 from maltrainer.utils.compile import compile_blocks

@@ -23,6 +23,11 @@ def test_the_learning_rate_is_the_plain_rate() -> None:
     assert learning_rate(_optimizer()) == 0.002
 
 
+def test_without_an_optimizer_there_is_no_rate_rather_than_an_error() -> None:
+    # a Krea 2 finetune before its first window: the trainer's optimizers are not up yet
+    assert learning_rate(None) is None
+
+
 def test_a_prodigy_rate_is_the_multiplier_times_d() -> None:
     assert learning_rate(_optimizer(d=0.5)) == pytest.approx(0.001)
 

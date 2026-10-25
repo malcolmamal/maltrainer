@@ -16,7 +16,7 @@ from accelerate.state import AcceleratorState, GradientState
 import train_krea2_lora
 from maltrainer.finetune import rotation
 from maltrainer.models.krea2 import loading
-from maltrainer.trainers.krea2 import finetune_save
+from maltrainer.trainers.krea2 import finetune_save, previews
 
 from .fakes import Fakes, install_fakes, skip_housekeeping
 from .tiny import CONFIG
@@ -52,11 +52,11 @@ def workspace(tmp_path: Path) -> Workspace:
 
 @pytest.fixture(autouse=True)
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
-    """The tiny DiT instead of the 12.9B one the loader builds, instant git and gc, fake VAE and text encoder."""
+    """The tiny DiT instead of the 12.9B one the loader builds, instant git and gc, fake VAE and text encoders."""
     monkeypatch.setattr(loading, "Krea2Config", lambda: CONFIG)
     skip_housekeeping(monkeypatch)
     monkeypatch.setattr(rotation, "gc", SimpleNamespace(collect=lambda: 0))  # a window swap collects garbage
-    return install_fakes(monkeypatch, train_krea2_lora)
+    return install_fakes(monkeypatch, train_krea2_lora, previews)
 
 
 @pytest.fixture(autouse=True)

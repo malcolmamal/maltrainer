@@ -81,7 +81,7 @@ class Krea2LoRATrainer(ImageLoRATrainer):
         free_memory()
         print("VAE latents pre-cached and VAE unloaded from VRAM.", flush=True)
 
-        prompts = {caption for _, caption in self.samples}
+        prompts = {caption for _, caption in self.samples} | set(self._extra_prompts())  # + preview / class prompts
         if float(self.config.get("train", {}).get("caption_dropout", 0.0) or 0.0) > 0:
             prompts.add("")
         if self.dop:

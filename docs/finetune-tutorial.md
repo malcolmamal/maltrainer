@@ -419,8 +419,14 @@ Krea 2 ([krea2-finetuning.md](krea2-finetuning.md): rotating windows over an fp8
   (`selection.py`), prior preservation (`prior.py`), regularisation images at a reduced step
   (`regularisation.py`), per-folder repeats (`repeats.py`) and LoRA extraction (`extract.py`).
   `--suggest-steps` uses `maltrainer/utils/step_planner.py`.
+- **Shared trainer mixins** (`maltrainer/trainers/finetune/`): the data side (`dataset.py`: regularisation images,
+  per-folder repeats, the dataset fingerprint, `--suggest-steps`) and the prior's start (`prior_setup.py`: recorded
+  before the first step, reloaded on resume, recorded from the original weights for people added since). Both
+  finetunes use them.
 - **Rotating windows** (`rotation.py`): for a model whose bf16 weights don't fit beside their
-  training state. Any model whose block Linears load as `Fp8ScaledLinear` can use it.
+  training state. Any model whose block Linears load as `Fp8ScaledLinear` can use it;
+  `rotation_base.py` puts the original weights back in under it for a while (a resume recording the
+  prior of new people).
 - **MOSS-Image's own** (`maltrainer/models/moss_image/finetune.py`): the default trainable set
   (`layers.`), the Automagic3 parameter groups, and how to save a full checkpoint in the source
   file's exact key layout (including its fused q/k/v).
