@@ -8,7 +8,9 @@ import shutil
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
+import torch
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,20 @@ def save_or_report(image: Image.Image, path: Path) -> bool:
             path.unlink(missing_ok=True)
         logger.error("%s could not be written (%s); training continues", path, error)
         return False
+
+
+def torch_save_closed(value: Any, path: Path) -> None:
+    """``torch.save`` into a file this function closes, also when the write fails (given a path, torch can keep
+    the file open while the error is handled, and Windows cannot delete an open file)."""
+    with path.open("wb") as file:
+        torch.save(value, file)
+
+
+def remove_unfinished(folder: Path, what: str) -> None:
+    """Delete a folder a failed write left; one that cannot be deleted is logged with its path."""
+    shutil.rmtree(folder, ignore_errors=True)
+    if folder.exists():
+        logger.error("Could not remove %s, the unfinished %s: delete it to free its space.", folder, what)
 
 
 def rename_with_retry(

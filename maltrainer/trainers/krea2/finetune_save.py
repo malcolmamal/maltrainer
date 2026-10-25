@@ -21,7 +21,7 @@ from maltrainer.trainers.krea2.finetune_host import (
     STATE_TRAINER,
     FinetuneHost,
 )
-from maltrainer.utils.fsutil import replace_directory
+from maltrainer.utils.fsutil import remove_unfinished, replace_directory, torch_save_closed
 from maltrainer.utils.lora_metadata import build_metadata
 
 logger = logging.getLogger(__name__)
@@ -111,21 +111,8 @@ def save_checkpoint(host: FinetuneHost, step: int | str) -> bool:
             host._save_state(output_dir / f"{name}_state", save_path)
         except Exception:  # logged with its traceback; the run goes on
             logger.exception("Writing the resume state for step %s failed; the previous state is kept.", step)
-            _remove_unfinished(output_dir / f"{name}_state.tmp")
+            remove_unfinished(output_dir / f"{name}_state.tmp", "resume state")
     return True
-
-
-def _remove_unfinished(tmp: Path) -> None:
-    shutil.rmtree(tmp, ignore_errors=True)
-    if tmp.exists():
-        logger.error("Could not remove %s, the unfinished resume state: delete it to free its space.", tmp)
-
-
-def _write(value: Any, path: Path) -> None:
-    """``torch.save`` into a file this function closes, also when the write fails (given a path, torch keeps the
-    file open while the error is handled, and Windows cannot delete an open file)."""
-    with path.open("wb") as file:
-        torch.save(value, file)
 
 
 def _link(source: Path, target: Path, what: str) -> None:
@@ -146,14 +133,14 @@ def save_state(host: FinetuneHost, state_dir: Path, weights: Path) -> None:
     _link(weights, tmp / STATE_MODEL, "state weights")
     if host.prior is not None and host.prior_path is not None:
         _link(host.prior_path, tmp / STATE_PRIOR, "prior")
-    _write(
+    torch_save_closed(
         {
             "rotation": host.rotator.state_dict(),
             "always": host.always_optimizer.state_dict() if host.always_optimizer is not None else None,
         },
         tmp / STATE_OPTIMIZER,
     )
-    _write(
+    torch_save_closed(
         {
             "global_step": host.global_step,
             "epoch": host.epoch,
