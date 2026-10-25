@@ -12,8 +12,8 @@ python train_ltx25_lora.py --config my_ltx25_config.yaml
 ```
 
 ```bash
-run_ltx25_training.bat feliciaday              # fills templates/ltx25_template.yaml (Automagic3)
-run_ltx25_training.bat feliciaday adamw8bit
+run_ltx25_training.bat anne              # fills templates/ltx25_template.yaml (Automagic3)
+run_ltx25_training.bat anne adamw8bit
 ```
 
 The third way is the web UI: pick **LTX-2.5 (Dev, video + audio)**, a dataset and an optimizer.

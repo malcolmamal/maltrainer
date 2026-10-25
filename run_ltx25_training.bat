@@ -3,9 +3,9 @@ REM ==========================================================================
 REM  LTX-2.5 LoRA training from a template, without the web UI.
 REM
 REM    run_ltx25_training.bat <dataset> [automagic3^|adamw8bit^|prodigy] [extra args...]
-REM    run_ltx25_training.bat feliciaday
-REM    run_ltx25_training.bat feliciaday adamw8bit
-REM    run_ltx25_training.bat feliciaday automagic3 --max-steps 2000 --dry-run
+REM    run_ltx25_training.bat anne
+REM    run_ltx25_training.bat anne adamw8bit
+REM    run_ltx25_training.bat anne automagic3 --max-steps 2000 --dry-run
 REM
 REM  Settings come from the environment, or from webui.local.bat next to this file:
 REM    DATASETS_PATH        folder with one sub-folder per dataset   (default: .\datasets)
