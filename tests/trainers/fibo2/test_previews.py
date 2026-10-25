@@ -55,7 +55,7 @@ def test_the_configured_keys_get_their_prompts_and_g_renders_them_all(workspace:
     keys = _trainer(workspace).preview_keys()
 
     assert set(keys) == {"w", "m", "g"}
-    assert keys["w"][0] == 'render "photo of a woman"' and keys["g"][0] == "render every preview prompt"
+    assert keys["w"][0] == 'render "photo of a woman"' and keys["g"][0] == "render every preview prompt (2)"
 
 
 def test_without_a_sample_section_there_are_no_preview_keys_but_the_standard_ones_remain(workspace: Workspace) -> None:

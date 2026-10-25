@@ -135,11 +135,12 @@ When the trainer runs in a console it listens for single keys, acted on at the n
 |---|---|
 | `w` | renders `photo of a woman` from the LoRA as it is now |
 | `m` | renders `photo of a man` |
-| `g` | renders every prompt of `sample.keys` |
+| `g` | renders every prompt of `sample.keys` and `sample.prompts` |
 
 ```yaml
 sample:
   keys: {w: "photo of a woman", m: "photo of a man"}   # any single characters except s q p e g h
+  prompts: ["a woman reading in a cafe"]               # more prompts, rendered by g only (files p1, p2 ...)
   steps: 30            # BRIA's default
   guidance: 5.0
   resolution: 768      # a square, default dataset.resolution
@@ -147,7 +148,7 @@ sample:
   ema: true            # with the EMA weights, as the checkpoints save them
 ```
 
-Images go to `<output.path>/samples/step<N>_<key>.png`. Training waits while one renders (30 steps with
+A progress bar counts the sampling steps of each image. Images go to `<output.path>/samples/step<N>_<key>.png` (`step<N>_p1.png` for the listed prompts). Training waits while one renders (30 steps with
 guidance is 60 DiT passes). The prompts' text features are made while the text encoder is loaded for the dataset,
 so a press never needs it; the VAE decoder loads for the press and is freed again. A press does not touch the
 training RNG, so a run with previews trains exactly as one without. Without a `sample:` section only `s q p h` exist.

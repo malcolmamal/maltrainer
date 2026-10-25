@@ -63,6 +63,7 @@ train:
 # into <output>/samples/. Training waits while it renders. Delete this section to switch the keys off.
 sample:
   keys: {w: "photo of a woman", m: "photo of a man"}
+  prompts: []   # more prompts for g only, e.g. ["a woman reading in a cafe"] (saved as p1, p2 ...)
   steps: 30
   guidance: 5.0
   resolution: 1024

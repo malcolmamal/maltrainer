@@ -8,6 +8,7 @@ fp32 noise; the guided velocity is ``uncond + guidance * (cond - uncond)`` again
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from typing import Any
 
 import torch
@@ -37,8 +38,10 @@ def sample_latents(
     seed: int,
     device: torch.device,
     dtype: torch.dtype,
+    on_step: Callable[[int, int], None] | None = None,
 ) -> torch.Tensor:
-    """Denoised latents [1, 128, h, w] for ``grid`` = (h, w); ``cond`` and ``uncond`` are [1, T, D] text features."""
+    """Denoised latents [1, 128, h, w] for ``grid`` = (h, w); ``cond`` and ``uncond`` are [1, T, D] text features.
+    ``on_step(done, total)`` is called after every step."""
     height, width = grid
     noise = torch.randn((1, 128, height, width), generator=torch.Generator().manual_seed(seed))
     latents = noise.to(device)
@@ -50,4 +53,6 @@ def sample_latents(
             plain = transformer(latents.to(dtype), sigma, uncond).float()
             velocity = plain + guidance * (velocity - plain)
         latents = latents + (sigmas[index + 1] - sigmas[index]).item() * velocity
+        if on_step is not None:
+            on_step(index + 1, steps)
     return latents

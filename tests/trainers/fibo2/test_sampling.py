@@ -101,3 +101,14 @@ def test_the_model_gets_the_compute_dtype_and_the_latents_stay_fp32() -> None:
     out = sample_latents(model, torch.zeros(1, 2, 4), torch.zeros(1, 2, 4), (2, 2), 2, 1.0, 1, CPU, torch.bfloat16)
 
     assert set(seen) == {torch.bfloat16} and out.dtype == torch.float32
+
+
+def test_the_step_callback_reports_every_step_in_order() -> None:
+    seen: list[tuple[int, int]] = []
+    zeros = torch.zeros(1, 2, 4)
+
+    sample_latents(
+        Marker(), zeros, zeros, (2, 2), 4, 1.0, 1, CPU, torch.float32, lambda done, total: seen.append((done, total))
+    )
+
+    assert seen == [(1, 4), (2, 4), (3, 4), (4, 4)]
