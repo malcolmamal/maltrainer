@@ -25,6 +25,10 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   template. Plain or structured JSON captions. Run it with
   `train_fibo2_lora.py`, `run_fibo2_training.bat` or the web UI. See the
   [Fibo 2.0 training guide](docs/fibo2-lora-training.md).
+- **Visage-Image LoRA Training**: trains Visage-Image (Sherstnev, 237M, 256 px faces) from ComfyUI's single files (the
+  DiT, the f16 VAE and Qwen3-0.6B), with an Automagic3 template and an AdamW one. Run it with `train_visage_lora.py`,
+  `run_visage_training.bat` or the web UI. Matches the upstream modules exactly on the real files; not yet run as a
+  training. See the [Visage-Image training guide](docs/visage-lora-training.md).
 - **LTX-2.5 LoRA Training**: trains LTX-2.5 Dev (Lightricks, 22B audio-video) on stills, video clips and their
   soundtracks, from ComfyUI's single files (the INT8 ConvRot DiT, the video and audio VAEs and Gemma 4 12B). Run it
   with `train_ltx25_lora.py`, `run_ltx25_training.bat` or the web UI. Checked against ComfyUI's code; not yet run

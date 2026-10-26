@@ -55,6 +55,16 @@ MODELS = {
             "text_encoder_path": ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
         },
     ),
+    "visage": (
+        "train_visage_lora.py",
+        "templates/visage_template.yaml",
+        {"adamw": "templates/visage_adamw_template.yaml"},
+        {
+            "transformer_path": ("diffusion_models", "visage-image.safetensors"),
+            "vae_path": ("vae", "visage_vae.safetensors"),
+            "text_encoder_path": ("text_encoders", "qwen3_0.6b.safetensors"),
+        },
+    ),
     "ltx25": (
         "train_ltx25_lora.py",
         "templates/ltx25_template.yaml",

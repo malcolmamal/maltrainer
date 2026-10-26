@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from backend.registry_fibo2 import FIBO2
 from backend.registry_ltx25 import LTX25
+from backend.registry_visage import VISAGE
 from backend.specs import ModelSpec, OptimizerSpec
 
 MODELS: dict[str, ModelSpec] = {
@@ -173,6 +174,7 @@ MODELS: dict[str, ModelSpec] = {
         ),
         FIBO2,
         LTX25,
+        VISAGE,
     )
 }
 
