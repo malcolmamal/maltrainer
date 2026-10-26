@@ -350,7 +350,8 @@ uv sync --extra cpu --group dev      # creates .venv: CPU torch, the pinned runt
 .venv/Scripts/python -m maltrainer_quality      # or quality.bat / ./quality.sh, which pick .venv
 ```
 
-It runs lint and formatting (ruff), the complexity and file-length limits, the type check (mypy),
+It runs lint and formatting (ruff), the complexity and file-length limits, the type check (mypy), dead code (vulture), `torch.load` without `weights_only=True` (bandit, B614 only; ruff's `S` rules
+have no such check), duplicate code (pylint),
 the tests (pytest), and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can.
 Every gate runs even after one fails; the failed ones are listed at the end. A tool that isn't
 installed in the interpreter you launched it with fails its gate.
@@ -377,7 +378,10 @@ python -m maltrainer_quality.requirements --write
 ```
 
 The gate fails when either lock is stale (`uv lock --check`, then a byte comparison with `uv export`) and when
-`pip-audit` finds a known vulnerability in `requirements.lock`; the audit needs network access, like `uv lock --check`.
+`pip-audit` finds a known vulnerability in `requirements.lock` or in the pinned dev tools (`audit dev` exports the `dev`
+group from `uv.lock`); the audits need network access, like `uv lock --check`. The duplicate-code gate flags a block of
+at least `min-similarity-lines` (`[tool.pylint.similarities]`) repeated across files; lower it as blocks move into shared
+helpers, never raise it.
 
 **Mutation testing** (not in the gate, it takes about five minutes): `python -m maltrainer_quality.mutation --changed`
 changes the pure-math modules one expression at a time and checks that the tests notice. Run it when a change touches

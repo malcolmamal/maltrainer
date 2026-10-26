@@ -8,9 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-import torch
-
-from maltrainer.finetune.resume import check_same_trainable_set
+from maltrainer.finetune.resume import check_same_trainable_set, load_resume_file
 from maltrainer.finetune.selection import select_trainable
 from maltrainer.models.flux3.loading import is_int8_convrot
 from maltrainer.models.moss_image.finetune import DEFAULT_TRAINABLE_PREFIXES, param_groups
@@ -111,9 +109,7 @@ def setup_optimizer(host: Any) -> None:
     logger.info("Optimizer: %s", host.run_metadata["optimizer_resolved"])
 
     if host.resume_dir is not None:
-        state = torch.load(host.resume_dir / STATE_TRAINER, map_location="cpu", weights_only=False)
+        state = load_resume_file(host.resume_dir / STATE_TRAINER, "cpu")
         check_same_trainable_set(state, [g["name"] for g in groups], [name for name, _ in host.named_trainable])
-        host.optimizer.load_state_dict(
-            torch.load(host.resume_dir / STATE_OPTIMIZER, map_location=host.device, weights_only=False)
-        )
+        host.optimizer.load_state_dict(load_resume_file(host.resume_dir / STATE_OPTIMIZER, host.device))
         host.resume_state = state

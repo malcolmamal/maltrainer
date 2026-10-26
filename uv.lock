@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.15' and extra != 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130'",
@@ -30,15 +30,15 @@ version = "1.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "packaging" },
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
     { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-10-maltrainer-cu130'" },
 ]
@@ -70,9 +70,9 @@ name = "anyio"
 version = "4.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
     { name = "idna" },
-    { name = "typing-extensions", marker = "python_full_version < '3.15' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.15'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/d2/f4d173e22df740bc37b1db102b386ba719b66e95b0f0d751f556b387e6d2/anyio-4.15.1.tar.gz", hash = "sha256:9f28306018cbd6d329e64a36d58256edff76dd996fe423bc957326e578b82a94", size = 276966, upload-time = "2026-09-05T10:42:39.44Z" }
 wheels = [
@@ -141,6 +141,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/66/83/6607060659998f00afdea0d8375c1e6e2b7d515ab905090d9a5a02f48851/ast_serialize-0.13.1-cp39-abi3-win32.whl", hash = "sha256:4f98da562e5901d69c7dd30885594c5438f859edf354e9ac7517d188fb026c3a", size = 1131889, upload-time = "2026-10-17T00:04:12.953Z" },
     { url = "https://files.pythonhosted.org/packages/9f/6f/bafd6490fe7b355627fabe95f4417e3d02da93102c8552550eb9a0774e1e/ast_serialize-0.13.1-cp39-abi3-win_amd64.whl", hash = "sha256:ddf7cbc9c8abf70102c4a088efe154bb86bfb825b0a10e556d2b15972cf99bd7", size = 1171153, upload-time = "2026-10-17T00:04:14.362Z" },
     { url = "https://files.pythonhosted.org/packages/11/25/4235f4b375a67a37ac595bf478a5407a744eaf7b64113c1c3a5432b8d954/ast_serialize-0.13.1-cp39-abi3-win_arm64.whl", hash = "sha256:48f11d96c9ec71119612f8e79a8c55c12f2b136716d68347433c561d27a25f43", size = 1139035, upload-time = "2026-10-17T00:04:15.767Z" },
+]
+
+[[package]]
+name = "astroid"
+version = "4.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2d/87/5732fa68bf100a095cfcbd108f919220d995db99e1a7502b8119a869fd62/astroid-4.3.4.tar.gz", hash = "sha256:d515a105722b72098bbe82d430d65e635f742b6cbac3bdfaf8b7c188b87c5e39", size = 444627, upload-time = "2026-10-08T09:36:44.122Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/16/d4/f23c0ac6e6de33ba5686cb21c672c95e0c2d3d4c9351f16d3b5fed818652/astroid-4.3.4-py3-none-any.whl", hash = "sha256:2bcd0d02648a443a4b818c952c3550091989daefac3c12d3b83b2289482e0818", size = 288310, upload-time = "2026-10-08T09:36:42.284Z" },
 ]
 
 [[package]]
@@ -255,16 +267,32 @@ wheels = [
 ]
 
 [[package]]
+name = "bandit"
+version = "1.9.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "stevedore", version = "5.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "stevedore", version = "5.9.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/aa/c3/0cb80dfe0f3076e5da7e4c5ad8e57bac6ac357ff4a6406205501cade4965/bandit-1.9.4.tar.gz", hash = "sha256:b589e5de2afe70bd4d53fa0c1da6199f4085af666fde00e8a034f152a52cd628", size = 4242677, upload-time = "2026-02-25T06:44:15.503Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/05/a4/a26d5b25671d27e03afb5401a0be5899d94ff8fab6a698b1ac5be3ec29ef/bandit-1.9.4-py3-none-any.whl", hash = "sha256:f89ffa663767f5a0585ea075f01020207e966a9c0f2b9ef56a57c7963a3f6f8e", size = 134741, upload-time = "2026-02-25T06:44:13.694Z" },
+]
+
+[[package]]
 name = "bitsandbytes"
 version = "0.50.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "packaging" },
     { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-10-maltrainer-cu130'" },
 ]
@@ -300,8 +328,8 @@ wheels = [
 
 [package.optional-dependencies]
 filecache = [
-    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [[package]]
@@ -609,7 +637,7 @@ wheels = [
 
 [package.optional-dependencies]
 toml = [
-    { name = "tomli", marker = "python_full_version <= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "tomli", marker = "python_full_version <= '3.11'" },
 ]
 
 [[package]]
@@ -671,43 +699,43 @@ wheels = [
 
 [package.optional-dependencies]
 cublas = [
-    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 cudart = [
-    { name = "nvidia-cuda-runtime", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cuda-runtime", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 cufft = [
-    { name = "nvidia-cufft", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cufft", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 cufile = [
-    { name = "nvidia-cufile", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'aarch64' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (platform_machine == 'x86_64' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cufile", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 cupti = [
-    { name = "nvidia-cuda-cupti", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cuda-cupti", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 curand = [
-    { name = "nvidia-curand", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-curand", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 cusolver = [
-    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "nvidia-cusolver", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cusolver", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 cusparse = [
-    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 nvjitlink = [
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 nvrtc = [
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 nvtx = [
-    { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 
 [[package]]
@@ -719,7 +747,7 @@ dependencies = [
     { name = "packageurl-python" },
     { name = "py-serializable" },
     { name = "sortedcontainers" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/17/40/6509e6cfd7f2f3255501690f46375fdd224949e21fd1e96f4f4c8a9041b1/cyclonedx_python_lib-11.12.0.tar.gz", hash = "sha256:16767c4039de90c04e9f03348f8f0ed4b8ff842eaa7eefcad3a95685f970dacf", size = 1445378, upload-time = "2026-08-13T07:52:18.675Z" }
 wheels = [
@@ -740,15 +768,15 @@ name = "diffusers"
 version = "0.41.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "huggingface-hub" },
     { name = "importlib-metadata" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "regex" },
     { name = "requests" },
     { name = "safetensors" },
@@ -759,11 +787,20 @@ wheels = [
 ]
 
 [[package]]
+name = "dill"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/e1/56027a71e31b02ddc53c7d65b01e68edf64dea2932122fe7746a516f75d5/dill-0.4.1.tar.gz", hash = "sha256:423092df4182177d4d8ba8290c8a5b640c66ab35ec7da59ccfa00f6fa3eea5fa", size = 187315, upload-time = "2026-01-19T02:36:56.85Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/77/dc8c558f7593132cf8fefec57c4f60c83b16941c574ac5f619abb3ae7933/dill-0.4.1-py3-none-any.whl", hash = "sha256:1e1ce33e978ae97fcfcff5638477032b801c46c7c65cf717f95fbc2248f79a9d", size = 120019, upload-time = "2026-01-19T02:36:55.663Z" },
+]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -787,8 +824,8 @@ dependencies = [
     { name = "annotated-doc" },
     { name = "opentelemetry-api" },
     { name = "pydantic" },
-    { name = "starlette", version = "1.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "starlette", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "starlette", version = "1.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "starlette", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
@@ -1023,14 +1060,14 @@ version = "1.33.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
-    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "fsspec" },
-    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
     { name = "httpx" },
     { name = "packaging" },
     { name = "pyyaml" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
@@ -1067,6 +1104,53 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/01/e1/2069291243c926a2ff1cd706c7f3eeb9b62144bf60f77c9fb9ff2fb26bd3/iniconfig-2.3.1.tar.gz", hash = "sha256:67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960", size = 21209, upload-time = "2026-10-06T22:48:38.076Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/56/43/4ca9e49d27a1fcf6bece6f6aec0ea46bb9112489b93d4b688fb415457bdb/iniconfig-2.3.1-py3-none-any.whl", hash = "sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7", size = 7552, upload-time = "2026-10-06T22:48:36.959Z" },
+]
+
+[[package]]
+name = "isort"
+version = "9.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mypy-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/cf/068066b8fdab91cd40bcd63e483137908710a3d25a4d3a01b538be45d9d6/isort-9.0.2.tar.gz", hash = "sha256:d2298980ce44350f11d9d24c8150eaef1883431ec203dddbb4e9b5c3ceb54c70", size = 685196, upload-time = "2026-09-28T19:21:58.07Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/16/02099475d03310b0a209ca4928bb0779fb273b97c8924a94a32c38cc1eeb/isort-9.0.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:b3e81cae981a52f94d5b31a474e1cbb033ea9cc850bc4c922117c0534a1864dd", size = 1070114, upload-time = "2026-09-28T19:20:58.339Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/36/60423264e176965fc0002bbb0a0a8b4ac21d4ee32dfef9a490767d5a7eb4/isort-9.0.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3cd67d39c3501d7227e8b229476da1d8679c03e0af97bd295876cf7070e5b709", size = 1625659, upload-time = "2026-09-28T19:21:00.076Z" },
+    { url = "https://files.pythonhosted.org/packages/20/75/b008785e61ccd53f6964501ef26a65c17ccc1c5ed9676dec6ebd2662cdb1/isort-9.0.2-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:288a320e6d52ba2d3447345390c8a8400591e4033ffbe4ce6bc3e50e5b4818e1", size = 1611889, upload-time = "2026-09-28T19:21:01.732Z" },
+    { url = "https://files.pythonhosted.org/packages/db/a1/da35cd0cf273d560c844f94e92f2b266e23b416edc8dd6b6db0934543863/isort-9.0.2-cp310-cp310-win_amd64.whl", hash = "sha256:67b12d9504e5bc6359bb3bb4493f36cf1093d15477c61c349f52f7d04209fb5d", size = 872900, upload-time = "2026-09-28T19:21:03.597Z" },
+    { url = "https://files.pythonhosted.org/packages/19/e2/73251e82fec4218d278c63be8de6d79de99dc04cd6219746d18502108079/isort-9.0.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:e4a54aed1bb731d7cf80ef5dfbae5b960f777cea70523b751ee6049bcb604371", size = 1057035, upload-time = "2026-09-28T19:21:05.383Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/04/dfa9686e44bb8e8a41ebbb77fae0b5bd7e3acbdd30c73c0dfef396ab54ca/isort-9.0.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b34a165cd4e25726930ed2eed8cf2fe46fb1a5ebacd9b28eaf566b343a6457ca", size = 1593851, upload-time = "2026-09-28T19:21:07.062Z" },
+    { url = "https://files.pythonhosted.org/packages/99/af/347958db3d7705116f7cadb718a37fddb24b52cf854032585cfae340208a/isort-9.0.2-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:5c929e8ec9d9fb83f034d5f50895503f40c624605f552b97ad090a37e62407ca", size = 1579176, upload-time = "2026-09-28T19:21:08.815Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/03/b323bf130ce480bd5ef9c90b874c03f1a10126b583b26b7be2b1dbebd5f3/isort-9.0.2-cp311-cp311-win_amd64.whl", hash = "sha256:5f448510ef0a92fa626a975759d76bdbe3b721c3d615da6d1010cc451de5610d", size = 873698, upload-time = "2026-09-28T19:21:10.34Z" },
+    { url = "https://files.pythonhosted.org/packages/41/c3/3cd3e0f66af21e1bf917f50b45d3389de3d9a25661f2e7f74e51c7fb37a8/isort-9.0.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:a05dc63cb6ae2a8e62ec4184153f424b1650593e00a24e6138184c46193891e9", size = 1062138, upload-time = "2026-09-28T19:21:11.782Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/36/512c41f0d9f4c2a61d56d383db21d42a9b82b4f768827f7e852139d14123/isort-9.0.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:af8be0b5cac101202c8255360e5de832ebbb84b2e863dc0f65dbb1a3d63dd40a", size = 1680120, upload-time = "2026-09-28T19:21:13.474Z" },
+    { url = "https://files.pythonhosted.org/packages/84/6f/44fa0de7eb71d576d08d0ad3a1d5d401d6cc0c4f908d76159c52b690e6de/isort-9.0.2-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:3fe693c1e56781de387a6c206306e9e5e560cfeb4acdfd85f0c46122afd48792", size = 1669955, upload-time = "2026-09-28T19:21:15.095Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/cc/89e9a499612665321a1f05e3bb1f4ff6f99e170568cff5c0162bd5d82ae6/isort-9.0.2-cp312-cp312-win_amd64.whl", hash = "sha256:f7a9efeb3689c7327a0d637eb4e12691e8d5ab1297caee997b144dc595ccb93f", size = 880360, upload-time = "2026-09-28T19:21:16.534Z" },
+    { url = "https://files.pythonhosted.org/packages/99/44/b51a78a2aee3bc14b91d5f071aea2fe35d9acde5f65f0ac5cb77800616a3/isort-9.0.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:f65ff614632ddc3306c40f619717b3b3ca69938ffee21d97110056d52472c79a", size = 1038192, upload-time = "2026-09-28T19:21:18.25Z" },
+    { url = "https://files.pythonhosted.org/packages/28/54/0ac6f7cf254c29bde0832dc655b0327d84752c4511f9f56fbd0778251542/isort-9.0.2-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e5f11c7ccd5f079ac0431fe52c7b38ea5d9f4e31a1889746de81dac0e7b0a766", size = 1670286, upload-time = "2026-09-28T19:21:19.895Z" },
+    { url = "https://files.pythonhosted.org/packages/65/0c/22a3f073415110f95a9fcfd9aaee72144545c66e5fd99a3ed15c8634e8f1/isort-9.0.2-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:810561edf6f1f5f3600f02aa709603a4360d5290c5fff2ae4b370090dd1a5445", size = 1660662, upload-time = "2026-09-28T19:21:21.599Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/da/c357996945d7fcd653281e2b53cf5f16ec7c540d86bac045581ecff5ed63/isort-9.0.2-cp313-cp313-pyemscripten_2025_0_wasm32.whl", hash = "sha256:e2636222848a48cadbd712280058b5da19fa147c501132e04a486a5bddcc9e28", size = 465149, upload-time = "2026-09-28T19:21:23.392Z" },
+    { url = "https://files.pythonhosted.org/packages/99/fc/3f477cb8ac91b116773bd0682d072c0bcf2bcf5d77ee288c1e46a95b0c8a/isort-9.0.2-cp313-cp313-win_amd64.whl", hash = "sha256:71870ac3b1afdf3c259b8404c05076d3ab874122fec6f78339f1c92d2c29b012", size = 884875, upload-time = "2026-09-28T19:21:25.403Z" },
+    { url = "https://files.pythonhosted.org/packages/53/25/b0dae3025157f020d9010bc126120e703b50ed74ebfb5ca56be81e064d0c/isort-9.0.2-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:bd8c4fb9829a5e7117d9f71f540ff1e8caafb471e574012057ce6dc35fda2d7b", size = 1039110, upload-time = "2026-09-28T19:21:27.024Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/da/f97a4905cf8212c31d584f0222ae8b1deed391e42db910e8e908eb89002e/isort-9.0.2-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6eb3e714d64de6eba78ee29051f7fc80613c74e90c6f54f84082f59c429c0a0b", size = 1674555, upload-time = "2026-09-28T19:21:28.645Z" },
+    { url = "https://files.pythonhosted.org/packages/90/f4/df11f0de3a2796ef1a74071d1331158b67961770c8066850d60f362ba7cc/isort-9.0.2-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:bf3ef0a91974f29f406e25eef0e04781fd5c2254b8ab55e7655b20d8cd7c5514", size = 1666034, upload-time = "2026-09-28T19:21:30.35Z" },
+    { url = "https://files.pythonhosted.org/packages/15/f0/0007f037135659de11f6ef29563b75c8080eeb51d67f37e82128d66613dc/isort-9.0.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl", hash = "sha256:cd1e0e5e61497e95a4e5be269088e6a1013f530aeccf6ebd6134f403285ecd63", size = 464424, upload-time = "2026-09-28T19:21:31.98Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/5c/f64d0cc97abbdf6f7902b0e38171e5101842ba75ac22212fd6d254156bb3/isort-9.0.2-cp314-cp314-win_amd64.whl", hash = "sha256:11da67a30f5a88383c71db075488ca3d081f427f53368f90bb1d74e958a9b040", size = 903922, upload-time = "2026-09-28T19:21:33.412Z" },
+    { url = "https://files.pythonhosted.org/packages/14/8a/c0bdd165c6cfcb7c87b3acdee5ebc03e10da5317482017084cdf92a2a076/isort-9.0.2-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:f7c2fa33e1c9fbcf9fd639997e4550515c0b712b52ed70a059124a5247825480", size = 1106274, upload-time = "2026-09-28T19:21:35.13Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/ec/4ab29f699d58baa7c00840bc66328ce8f06be31cd36250aef8d4f71bd24e/isort-9.0.2-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:85e859fd72e50c27306d05185f9472ed97fae9e1cce91c0e891260d16f2ecece", size = 1887727, upload-time = "2026-09-28T19:21:37.015Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/ec/12f58041288e08c35dc9a719108482c2c599b157ce0913454d57d32c7b5c/isort-9.0.2-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:2a960e4252ac5b00f78adc0f731529e122657ee642e650896b36e1ff83028023", size = 1905479, upload-time = "2026-09-28T19:21:38.789Z" },
+    { url = "https://files.pythonhosted.org/packages/56/ea/69fd476d07e5dddea5b41d6b3adfad4d2f5d251362f2fb594f2cfd0f5308/isort-9.0.2-cp314-cp314t-win_amd64.whl", hash = "sha256:91b60ce3d96fcb0730d61fc5ab84ee5b56d676fbb92550f7ea333f58778f2f20", size = 928154, upload-time = "2026-09-28T19:21:40.745Z" },
+    { url = "https://files.pythonhosted.org/packages/93/93/ed3f1894ec261381abbdc22a3216fa86ad8fb2ec5f5d1f414f1d56c94ffe/isort-9.0.2-cp315-cp315-macosx_11_0_arm64.whl", hash = "sha256:aa810daf72ff5d8ade462b2190dad9c0e16d6d428a3f9aea210f14cca2487d58", size = 1038495, upload-time = "2026-09-28T19:21:42.41Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/fd/4a911a73beb68a746a2f827a842f71030c3118a056585400023e37b5c8ec/isort-9.0.2-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8dde4e2d9cfb35390437353f0861ec41378f91ff958d8cd3051fb95cae59315a", size = 1686028, upload-time = "2026-09-28T19:21:44.107Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/3e/6fb9ab0f5a89e174d45ae2809970fcb908f2b261e1b77993101e52a20869/isort-9.0.2-cp315-cp315-musllinux_1_2_x86_64.whl", hash = "sha256:4315e23e701bb1fcdfd364da59da61d78c3332c554318b7eb635ea3924d24c5e", size = 1675313, upload-time = "2026-09-28T19:21:45.6Z" },
+    { url = "https://files.pythonhosted.org/packages/74/a2/e73c430847408ae900bf0fb7627daa87e939c80c2f0713fb9a163ec48663/isort-9.0.2-cp315-cp315-pyemscripten_2026_5_wasm32.whl", hash = "sha256:1c134ef9d94943eae14bf31c634db1904dd875e6e7280a60baee10ca06132db6", size = 464361, upload-time = "2026-09-28T19:21:47.142Z" },
+    { url = "https://files.pythonhosted.org/packages/08/29/236939344dc87499299f36469527fc01a516a51abcf0d82ba5b7644f5966/isort-9.0.2-cp315-cp315-win_amd64.whl", hash = "sha256:d4da51a99dfd00e5c51e507ed91ebad6aafd44dc65135c17e2ef37355cd9fa98", size = 904023, upload-time = "2026-09-28T19:21:48.583Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/ec/14dfd5e8e20a1500043d50053d899527c742dcebeaba2fb2633abfad2ec1/isort-9.0.2-cp315-cp315t-macosx_11_0_arm64.whl", hash = "sha256:16436aefeebe3aa2d5d7ae1ca895b2278f770fc4a41d95c22569a30f7413ec45", size = 1105456, upload-time = "2026-09-28T19:21:50.162Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/f7/c0e4d16a17f742b459397be8570af4edce4173e91d64ccf16c1ecd7826d8/isort-9.0.2-cp315-cp315t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a36f30b6b85d9726f79c7623d35f3e966d5d7d9d0a005af91ba19988fccd038b", size = 1874501, upload-time = "2026-09-28T19:21:51.786Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/98/226855cb96275e7df63167ed8fae3b65e0c94e38c9d63a6a80458da919b1/isort-9.0.2-cp315-cp315t-musllinux_1_2_x86_64.whl", hash = "sha256:d03c68e9d0a83b51ed381d04b0919f2d918fb66c1ca1766761157ff44149366f", size = 1890469, upload-time = "2026-09-28T19:21:53.42Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/e5/3a1c4748483a05533a065b49dcf64039a68162e84175e08d1d70db7e7413/isort-9.0.2-cp315-cp315t-win_amd64.whl", hash = "sha256:29669ea6c410528ffe3b632a41835757f08282257e4ddac892a5e6d01bd35201", size = 927256, upload-time = "2026-09-28T19:21:55.063Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/c9/0849e74b868ef10312eecfc24278710e97dd14bc49c1df629d7df142d318/isort-9.0.2-py3-none-any.whl", hash = "sha256:6c29deeb39698a8717823b7f75b2ac58c5e8ab8dcf6cf31205a72a6617fb454e", size = 105052, upload-time = "2026-09-28T19:21:56.512Z" },
 ]
 
 [[package]]
@@ -1229,17 +1313,17 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "accelerate" },
-    { name = "av", version = "17.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "av", version = "18.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "av", version = "19.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "av", version = "17.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "av", version = "18.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "av", version = "19.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "bitsandbytes" },
     { name = "diffusers" },
     { name = "fastapi" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "prodigyopt" },
     { name = "pyyaml" },
     { name = "safetensors" },
@@ -1262,10 +1346,12 @@ cu130 = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "bandit" },
     { name = "coverage" },
     { name = "httpx" },
     { name = "mypy" },
     { name = "pip-audit" },
+    { name = "pylint" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
@@ -1298,15 +1384,17 @@ provides-extras = ["cpu", "cu130"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "bandit", specifier = "==1.9.4" },
     { name = "coverage", specifier = "==7.14.1" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "mypy", specifier = "==2.4.0" },
     { name = "pip-audit", specifier = "==2.10.1" },
+    { name = "pylint", specifier = "==4.1.3" },
     { name = "pytest", specifier = "==9.1.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pytest-xdist", specifier = "==3.8.0" },
     { name = "ruff", specifier = "==0.15.18" },
-    { name = "uv", specifier = "==0.12.13" },
+    { name = "uv", specifier = "==0.13.4" },
     { name = "vulture", specifier = "==2.16" },
 ]
 
@@ -1466,6 +1554,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mccabe"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/ff/0ffefdcac38932a54d2b5eed4e0ba8a408f215002cd178ad1df0f2806ff8/mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325", size = 9658, upload-time = "2022-01-24T01:14:51.113Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/1a/1f68f9ba0c207934b35b86a8ca3aad8395a3d6dd7921c0686e23853ff5a9/mccabe-0.7.0-py2.py3-none-any.whl", hash = "sha256:6c2d30ab6be0e4a46919781807b4f0d834ebdd6c6e3dca0bda5a15f863427b6e", size = 7350, upload-time = "2022-01-24T01:14:49.62Z" },
+]
+
+[[package]]
 name = "mdurl"
 version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1587,10 +1684,10 @@ version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ast-serialize" },
-    { name = "librt", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "librt", marker = "platform_python_implementation != 'PyPy'" },
     { name = "mypy-extensions" },
     { name = "pathspec" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/34/4e/64300736cf0a0373a27b94a91b664ee7382e36f77b0621bae6381da3e180/mypy-2.4.0.tar.gz", hash = "sha256:77bdaebd452f43fcfc4cc3ba94352a3ea537cd01e3f2d0879f48673d2ec00d6e", size = 4064425, upload-time = "2026-10-01T20:40:39.229Z" }
@@ -1947,7 +2044,7 @@ name = "nvidia-cublas"
 version = "13.1.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-nvrtc", marker = "extra == 'extra-10-maltrainer-cu130' or extra != 'extra-10-maltrainer-cpu'" },
+    { name = "nvidia-cuda-nvrtc", marker = "extra != 'extra-10-maltrainer-cpu' or extra == 'extra-10-maltrainer-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/a1/0bd24ee8c8d03adac032fd2909426a00c88f8c57961b1277ded97f91119f/nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:b7a210458267ac818974c53038fbec2e969d5c99f305ab15c72522fa9f001dd5", size = 542848918, upload-time = "2026-04-08T18:46:22.985Z" },
@@ -1990,7 +2087,7 @@ name = "nvidia-cudnn-cu13"
 version = "9.24.0.43"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "extra == 'extra-10-maltrainer-cu130' or extra != 'extra-10-maltrainer-cpu'" },
+    { name = "nvidia-cublas", marker = "extra != 'extra-10-maltrainer-cpu' or extra == 'extra-10-maltrainer-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/30/7c257e3d5cb4fecb147b93895c66e29c93f8e76d74b45bb418ff0587c4ec/nvidia_cudnn_cu13-9.24.0.43-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:a6812a554a1ff0413e9c52b84c26c050380649ab9615f9c16bded368ce9f421f", size = 650976863, upload-time = "2026-07-02T16:23:39.248Z" },
@@ -2003,7 +2100,7 @@ name = "nvidia-cufft"
 version = "12.0.0.61"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "extra == 'extra-10-maltrainer-cu130' or extra != 'extra-10-maltrainer-cpu'" },
+    { name = "nvidia-nvjitlink", marker = "extra != 'extra-10-maltrainer-cpu' or extra == 'extra-10-maltrainer-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/ae/f417a75c0259e85c1d2f83ca4e960289a5f814ed0cea74d18c353d3e989d/nvidia_cufft-12.0.0.61-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:2708c852ef8cd89d1d2068bdbece0aa188813a0c934db3779b9b1faa8442e5f5", size = 214053554, upload-time = "2025-09-04T08:31:38.196Z" },
@@ -2035,9 +2132,9 @@ name = "nvidia-cusolver"
 version = "12.0.4.66"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "extra == 'extra-10-maltrainer-cu130' or extra != 'extra-10-maltrainer-cpu'" },
-    { name = "nvidia-cusparse", marker = "extra == 'extra-10-maltrainer-cu130' or extra != 'extra-10-maltrainer-cpu'" },
-    { name = "nvidia-nvjitlink", marker = "extra == 'extra-10-maltrainer-cu130' or extra != 'extra-10-maltrainer-cpu'" },
+    { name = "nvidia-cublas", marker = "extra != 'extra-10-maltrainer-cpu' or extra == 'extra-10-maltrainer-cu130'" },
+    { name = "nvidia-cusparse", marker = "extra != 'extra-10-maltrainer-cpu' or extra == 'extra-10-maltrainer-cu130'" },
+    { name = "nvidia-nvjitlink", marker = "extra != 'extra-10-maltrainer-cpu' or extra == 'extra-10-maltrainer-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/c3/b30c9e935fc01e3da443ec0116ed1b2a009bb867f5324d3f2d7e533e776b/nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:02c2457eaa9e39de20f880f4bd8820e6a1cfb9f9a34f820eb12a155aa5bc92d2", size = 223467760, upload-time = "2025-09-04T08:33:04.222Z" },
@@ -2050,7 +2147,7 @@ name = "nvidia-cusparse"
 version = "12.6.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "extra == 'extra-10-maltrainer-cu130' or extra != 'extra-10-maltrainer-cpu'" },
+    { name = "nvidia-nvjitlink", marker = "extra != 'extra-10-maltrainer-cpu' or extra == 'extra-10-maltrainer-cu130'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f8/94/5c26f33738ae35276672f12615a64bd008ed5be6d1ebcb23579285d960a9/nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:80bcc4662f23f1054ee334a15c72b8940402975e0eab63178fc7e670aa59472c", size = 162155568, upload-time = "2025-09-04T08:33:42.864Z" },
@@ -2381,8 +2478,8 @@ dependencies = [
     { name = "packaging" },
     { name = "pip-api" },
     { name = "pip-requirements-parser" },
-    { name = "platformdirs", version = "4.12.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "platformdirs", version = "4.13.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "platformdirs", version = "4.12.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "platformdirs", version = "4.13.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "requests" },
     { name = "rich" },
     { name = "tomli" },
@@ -2674,6 +2771,26 @@ wheels = [
 ]
 
 [[package]]
+name = "pylint"
+version = "4.1.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "astroid" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "dill" },
+    { name = "isort" },
+    { name = "mccabe" },
+    { name = "platformdirs", version = "4.12.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "platformdirs", version = "4.13.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomlkit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/38/c9/0bde4152a05a7686b431ce216fe3f3698b0c0d94c20bfa256dd935b608f6/pylint-4.1.3.tar.gz", hash = "sha256:9928603068edfa0d1a3c167f174b099d4b97c3db75d32d0fcdd029770b4713a9", size = 1756180, upload-time = "2026-10-11T07:49:10.69Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/ba/62b18e2e157d05f976bd490b349b55d8850c2a454a5c313c91af9d2e0baf/pylint-4.1.3-py3-none-any.whl", hash = "sha256:a85357cae24f33ad8d86c8f3daaa92c600ae4012b54a57299cee76000e9364cf", size = 588959, upload-time = "2026-10-11T07:49:08.272Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2687,13 +2804,13 @@ name = "pytest"
 version = "9.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
     { name = "pygments" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/84/0e/b5858858d74958632c49b72cb25a3976ff9f632397626715be71c89d3971/pytest-9.1.0.tar.gz", hash = "sha256:41dd9148c08072446394cefd3d79701701335a9f4cae69ba92e39f6c7f5c061c", size = 1634181, upload-time = "2026-06-13T18:52:45.983Z" }
 wheels = [
@@ -3052,8 +3169,8 @@ resolution-markers = [
     "python_full_version < '3.11' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
 ]
 dependencies = [
-    { name = "anyio", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "anyio" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7b/2b/3850dc6bf7ef71b088962eba31dafc6cffd2f96e577ebb0bb316df96da3e/starlette-1.7.0.tar.gz", hash = "sha256:c79f74ea63cff761804fbbfb182f1e0b440c2d07b164d24700c5a1bab5d6ff5d", size = 2736246, upload-time = "2026-09-23T07:30:26.35Z" }
 wheels = [
@@ -3079,12 +3196,50 @@ resolution-markers = [
     "python_full_version == '3.11.*' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
 ]
 dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "typing-extensions", marker = "(python_full_version >= '3.11' and python_full_version < '3.13') or (python_full_version < '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (python_full_version >= '3.13' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "anyio" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ad/eb/4e197bf26b023abafc5e9043ec8710d7de0fcb032d0969045236d72aa0b1/starlette-1.9.0.tar.gz", hash = "sha256:3d931de246ed870e35ce605974440816ef895e592f255d1396cfdf191d4c4318", size = 2732466, upload-time = "2026-10-18T15:50:33.189Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f3/93/181df62699d9b5aca1d87e5cfda131dac87e3cdaebf668662f7206ca3470/starlette-1.9.0-py3-none-any.whl", hash = "sha256:fd3f159936e882d06c1108f84688f7cda2cf85fc6a592a50edbd175e882c2ddc", size = 80335, upload-time = "2026-10-18T15:50:31.526Z" },
+]
+
+[[package]]
+name = "stevedore"
+version = "5.8.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.11' and extra != 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130'",
+    "python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version < '3.11' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/88/35e4d27d9177d7df76d060e0a18f69c6c5794c96960c94042e20a12c8ba2/stevedore-5.8.0.tar.gz", hash = "sha256:b49867b32ca3016e94100e68dbf26e72aa7b8708d0a3f73c08aeb220370ac715", size = 514710, upload-time = "2026-05-18T09:15:27.731Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/ac/19f9941c74add59d17694930ec8105d5eddeee4ce56dd8632b765ca16d6c/stevedore-5.8.0-py3-none-any.whl", hash = "sha256:88eede9e66ca80e34085b9174e2327da2c61ac91f24f70e41c3ad76e4bb4872b", size = 54553, upload-time = "2026-05-18T09:15:25.82Z" },
+]
+
+[[package]]
+name = "stevedore"
+version = "5.9.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.15' and extra != 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130'",
+    "python_full_version >= '3.15' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version >= '3.15' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version >= '3.15' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version >= '3.12' and python_full_version < '3.15' and extra != 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130'",
+    "python_full_version >= '3.12' and python_full_version < '3.15' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version >= '3.12' and python_full_version < '3.15' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version >= '3.12' and python_full_version < '3.15' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version == '3.11.*' and extra != 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130'",
+    "python_full_version == '3.11.*' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+    "python_full_version == '3.11.*' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/a1/3b8ed9c1fc3aa6eebb57732d924ddaa0500ecc3b638d0454816320994383/stevedore-5.9.1.tar.gz", hash = "sha256:e97a2667923efda926e8713fde6a73616df68210a3cbc6f02b48967b676fd8bf", size = 518111, upload-time = "2026-08-20T15:25:14.754Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c5/97/bba6e7ec2f5498b9dcb7b1b6400086b80ae5a8ebaff4b25e8c8add75f439/stevedore-5.9.1-py3-none-any.whl", hash = "sha256:5c8ff3a9f336cc1a06ac0f597bc79d11a2f950bfd32e290ca56b5a301fafafbf", size = 54931, upload-time = "2026-08-20T15:25:13.602Z" },
 ]
 
 [[package]]
@@ -3215,6 +3370,15 @@ wheels = [
 ]
 
 [[package]]
+name = "tomlkit"
+version = "0.15.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/72/fc01563df95c189a9f65850096bdc205bc2fe37da6c740cd64afaf18d07e/tomlkit-0.15.2.tar.gz", hash = "sha256:83e32755ba1d20d9340bd069ee97e9f6232ba2346b63ffcba425de01f7e327a6", size = 190522, upload-time = "2026-10-16T04:07:08.166Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/46/7d84138a60a8bd796825b2d38ebe92d0d16501ca57d501b7c5d677401bbc/tomlkit-0.15.2-py3-none-any.whl", hash = "sha256:05562412163a3037b94497385fb7f9204c637bc605af7a48199e41cf2272f437", size = 52225, upload-time = "2026-10-16T04:07:09.216Z" },
+]
+
+[[package]]
 name = "torch"
 version = "2.14.1"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
@@ -3225,13 +3389,13 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version != '3.11.*' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.12' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "setuptools", marker = "(sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
@@ -3262,8 +3426,8 @@ dependencies = [
     { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "fsspec", marker = "(extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130')" },
-    { name = "jinja2", marker = "(extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130')" },
+    { name = "fsspec", marker = "(extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "jinja2", marker = "(extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
@@ -3271,10 +3435,10 @@ dependencies = [
     { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "setuptools", marker = "(extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130')" },
-    { name = "sympy", marker = "(extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130')" },
+    { name = "setuptools", marker = "(extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "sympy", marker = "(extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "typing-extensions", marker = "(extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130')" },
+    { name = "typing-extensions", marker = "(extra != 'extra-10-maltrainer-cpu' and extra != 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/45/b0c389051ed02d77227202caf2c2abb1706ca4362781eb79bd6707359970/torch-2.14.1-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:e24b9815001d18e73e76eae1ea25f8ef908c6103e857378ad20f8f6cf5c954f5", size = 127249640, upload-time = "2026-09-30T17:43:48.426Z" },
@@ -3314,13 +3478,13 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version != '3.11.*' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.12' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "setuptools", marker = "(sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
@@ -3372,7 +3536,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "cuda-bindings", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'extra-10-maltrainer-cu130') or (python_full_version >= '3.15' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "cuda-bindings", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra == 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "filelock", version = "4.2.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
@@ -3387,7 +3551,7 @@ dependencies = [
     { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "setuptools", marker = "extra == 'extra-10-maltrainer-cu130'" },
     { name = "sympy", marker = "extra == 'extra-10-maltrainer-cu130'" },
-    { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'extra-10-maltrainer-cu130') or (python_full_version >= '3.15' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'linux' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'extra-10-maltrainer-cu130') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "typing-extensions", marker = "extra == 'extra-10-maltrainer-cu130'" },
 ]
 wheels = [
@@ -3428,11 +3592,11 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version != '3.11.*' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.12' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
 ]
 wheels = [
@@ -3457,11 +3621,11 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'darwin'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version != '3.11.*' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.12' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version >= '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (python_full_version < '3.11' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform != 'darwin' and extra == 'extra-10-maltrainer-cpu') or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
@@ -3541,7 +3705,7 @@ name = "tqdm"
 version = "4.70.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0d/ea/b2a5bd54b28a324dae8211928b2d730b6547500342c7e6c6dea08bd0a485/tqdm-4.70.1.tar.gz", hash = "sha256:cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4", size = 171846, upload-time = "2026-09-11T07:25:16.601Z" }
 wheels = [
@@ -3554,9 +3718,9 @@ version = "5.20.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "regex" },
@@ -3595,7 +3759,7 @@ version = "0.27.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "rich" },
     { name = "shellingham" },
 ]
@@ -3636,28 +3800,28 @@ wheels = [
 
 [[package]]
 name = "uv"
-version = "0.12.13"
+version = "0.13.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/13/24/c4c6633e70c6ea353d31d2d45aac09e7cbcd3a7e62cd9f558d4c7a1aa4a4/uv-0.12.13.tar.gz", hash = "sha256:80c05ac556fec1504466c4cdcd135eb8f99e358ce3f17da336de696852791551", size = 7172692, upload-time = "2026-09-10T19:25:50.134Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/55/609455d21e87430c11fe734abfced50a3bdf177b2f49d41fbb19c199cbc3/uv-0.13.4.tar.gz", hash = "sha256:b0bff5b9a5061f7a35b1d0c1a94c19af134222c48eb7aadc42f85a038be1b248", size = 7482486, upload-time = "2026-10-20T15:12:06.801Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/c2/144e91ebc02fa9a5b750d1fc82c77041e0b20021b84eab0ee4b62144a4e5/uv-0.12.13-py3-none-linux_armv6l.whl", hash = "sha256:7aafa9fad6d8a2f0eec5dafdc6279633fb8fd5642c0934d4d73696c4edb9379e", size = 22233722, upload-time = "2026-09-10T19:25:01.982Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/e9/de1916ac6602c226838aa1eee1033ce68138427399c63f9b47a5a1fa3dba/uv-0.12.13-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:ac7f135750b7419283029edb93453b4d41c7d7ff90f9b3860a6e474ddf98f016", size = 20486403, upload-time = "2026-09-10T19:25:05.749Z" },
-    { url = "https://files.pythonhosted.org/packages/2a/33/ef14dc7c9c4cfaf0c3a4aed5a298b76b5dea94c75b233f7620c49c9b2e09/uv-0.12.13-py3-none-macosx_11_0_arm64.whl", hash = "sha256:f86e5f02883c2e7a21bf522f4aa520c20d4f779d9a3368fbd6cdfe4a8f9549b5", size = 16796030, upload-time = "2026-09-10T19:25:08.355Z" },
-    { url = "https://files.pythonhosted.org/packages/6a/94/0b1156a245e6ce20d68fa401c34a18d304d7dd0be0569345e62459e34821/uv-0.12.13-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:891aff3e186cd5844102750372304e9ca20edffc50cb39a14cd047ea3416de75", size = 21699128, upload-time = "2026-09-10T19:25:10.889Z" },
-    { url = "https://files.pythonhosted.org/packages/4e/08/3d5d282c5b016e424d01f25d555200cff7c64eb9c69719d06e6c9a0b2181/uv-0.12.13-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l.whl", hash = "sha256:b9854ef55f665401f95237e1db55162dd9d7a4a46929326e6f52a5388ca57842", size = 21731754, upload-time = "2026-09-10T19:25:13.565Z" },
-    { url = "https://files.pythonhosted.org/packages/94/40/93e520a6acc3acbc9e7d3c0af3a88395f65c552c054e5a1aa16fcdbebcf3/uv-0.12.13-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:263700a9b02d12bc8f1322b250f959435c4077fe3c16ff588e68672f3eddbd07", size = 21793261, upload-time = "2026-09-10T19:25:16.107Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/d3/71005d10201428abe7610259b96d87d536a569a052fd2e7fdfecca4cd1f7/uv-0.12.13-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:9ecd65bb4fbae642418ecc2f92d0811143eeaa96fcf96a7f18b74c475a7601c5", size = 22387944, upload-time = "2026-09-10T19:25:19.195Z" },
-    { url = "https://files.pythonhosted.org/packages/2f/f0/8533c6a2f485a79cfd772f5a39a440a21a47f0629b76da61ea0dc96d9107/uv-0.12.13-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:959d330f99a653d115b440c28fb2abc3e720ca10e9f0131d97a48bfd5e59b4d2", size = 23729708, upload-time = "2026-09-10T19:25:21.959Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/06/03cab2f43fca04d0613819f9b8254d34fb776a26952baa2ac8ffb5adf420/uv-0.12.13-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:19264bcb664138bd94f66a39d6d1fe7bc4614f94deea98a995f88d779db0c4ba", size = 23361433, upload-time = "2026-09-10T19:25:24.514Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/31/f774e18ea9282f63fb3a4f83db8b818b860fb10efda1d295e4547e993bf8/uv-0.12.13-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5312891392eb5b72eaca9b880e85fe3e706a2b11342e59f7a5cf0304d14d5cc5", size = 20029009, upload-time = "2026-09-10T19:25:27.135Z" },
-    { url = "https://files.pythonhosted.org/packages/ca/f5/74a2b7e9c8aaa2d53bd16626ee68ebc0d3c2f58a36d4f3ae5939db455668/uv-0.12.13-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:b9c703a4aaee1288f33e2ce8b39a0245f432b57bd5d769073756b68e9ca6bafe", size = 19432758, upload-time = "2026-09-10T19:25:29.626Z" },
-    { url = "https://files.pythonhosted.org/packages/f3/3e/c2b963e3550932669a8ed7b917cd1e0a58d9a46430958afbf8c2b442540f/uv-0.12.13-py3-none-manylinux_2_31_riscv64.musllinux_1_1_riscv64.whl", hash = "sha256:bc83ca045c140fcc5d010d451def731be1d225c472f7e4d474610f9e8deb88db", size = 22498193, upload-time = "2026-09-10T19:25:32.252Z" },
-    { url = "https://files.pythonhosted.org/packages/15/3c/2efd62c47cc046f0b4f554a5189a64381ca3158853290940d24d0032b1fc/uv-0.12.13-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:6e6b9b2464aa917699fd6206932fca89483e45663ce438dac4e5bca5342e9bd0", size = 22614561, upload-time = "2026-09-10T19:25:34.821Z" },
-    { url = "https://files.pythonhosted.org/packages/1d/6e/60595f41d159110f45301cee23fe0ae440ddfc1adfd64361c0b17e9c7a88/uv-0.12.13-py3-none-musllinux_1_1_i686.whl", hash = "sha256:93efdd41ccce008368ba6677ac9f788203b3c95cb2424657c3079b2f1d0022ee", size = 21537620, upload-time = "2026-09-10T19:25:37.546Z" },
-    { url = "https://files.pythonhosted.org/packages/10/bd/1e34c94b846965cb9dbd94da9fffd22f4ebaa3896307b13394cc960a3047/uv-0.12.13-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:15f368be55e87109391a31c50846e81086b9792ccb43a1731774e961ea0641b7", size = 22903874, upload-time = "2026-09-10T19:25:40.166Z" },
-    { url = "https://files.pythonhosted.org/packages/8e/e9/4d61956aab93ccd97003e2281e25258222250f4f8bd3730c5f01dbe15813/uv-0.12.13-py3-none-win32.whl", hash = "sha256:970ef5e688bce5936172bec9b2c73876fc1996d4e0318a26562310af92b0a75d", size = 19592237, upload-time = "2026-09-10T19:25:42.733Z" },
-    { url = "https://files.pythonhosted.org/packages/69/1b/f40b1ad51226c2ae8707aa124f3b31f9b176a00482048dadd42d9b953d1e/uv-0.12.13-py3-none-win_amd64.whl", hash = "sha256:3efae0a910a25e18732f38ac1ef7b02e23f47b7fe67735039921fceff01d518c", size = 17708127, upload-time = "2026-09-10T19:25:45.105Z" },
-    { url = "https://files.pythonhosted.org/packages/af/c8/d7629ecca85ee889bf8375730435e8c2dd920071a55c1d797e60200816e8/uv-0.12.13-py3-none-win_arm64.whl", hash = "sha256:ad61c396a57caac8b351429294e44ee52a1ecb1629b95d6898bd7c63ed3c13f3", size = 18913765, upload-time = "2026-09-10T19:25:47.754Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/bd/4349da5356b17a1c0e36c8552c809925f86f6292de9b1f599f01e8e8093d/uv-0.13.4-py3-none-linux_armv6l.whl", hash = "sha256:205a4f93e568fb24f45a2f3834f1c0a8f1adb5f396bf473c71030ed707dce048", size = 18272390, upload-time = "2026-10-20T15:11:02.468Z" },
+    { url = "https://files.pythonhosted.org/packages/21/f2/0cb77a1ae43959772f8f7873eb1f4061907fbb1694ce55c79b231f639b1d/uv-0.13.4-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:b4bbacea78c9db136cd2ec3147cbfd9ed910b4db5e1877109bd74d0e73bb2eaf", size = 17384113, upload-time = "2026-10-20T15:11:07.172Z" },
+    { url = "https://files.pythonhosted.org/packages/26/44/5a8733dd1b2e8d6f9cffd1ff6428a3e11dcc7e146a7657e32cfb8d9fb4a4/uv-0.13.4-py3-none-macosx_11_0_arm64.whl", hash = "sha256:95f4eb2b991b53b50ec2b18ab612fca8ba1e7a75a47af0331fb8bcd21da3eb03", size = 14433723, upload-time = "2026-10-20T15:11:10.185Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/39/be14f051bf34a1822d634819890a2d0cba3b69101e633fb7b9f54d7b4020/uv-0.13.4-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:e90ab42825587821096cb0d071e387468da38cfa22818c91f9c0b3c0453048e8", size = 17816443, upload-time = "2026-10-20T15:11:13.674Z" },
+    { url = "https://files.pythonhosted.org/packages/97/a0/5df0f8bc6367dd37b98432a7c462e2918554f6db2a71211574852b8f0727/uv-0.13.4-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l.whl", hash = "sha256:3a9dcb6762c3ba249d8c084315ba03839082af3ece3536cc4164ec735c351d68", size = 17828025, upload-time = "2026-10-20T15:11:16.806Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/9c/2fed5357700b7c304b94214979e4efe680c3bc6e337a97eedaa372fe0947/uv-0.13.4-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:8ae6ff2b07892379dc767c9064c2b8bbfac88e767edac7ce28e1b0f15d86abb4", size = 17843737, upload-time = "2026-10-20T15:11:20.043Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/2e/ee026284f096236dc3e1abed0316f9edab65c0ea176ea0072c064e62478d/uv-0.13.4-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:25cc14ff4fd8335d3be2cc493a621a003fdafcb0fb1c953c905daabe4def5ab8", size = 18576350, upload-time = "2026-10-20T15:11:24.035Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/f1/67fbdb649c8c5d0cb38ea74829080479b77c8631cda5d77fc1b28f027ca7/uv-0.13.4-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:77062b02856c74697f48328d8a6583ab07e6da0a993e86c2db46f3d1da27c637", size = 19831234, upload-time = "2026-10-20T15:11:27.627Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/00/7d49e3a1a3e98e5244fa38e0c964dc8de568bf3bb101257a63dc2602efed/uv-0.13.4-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:fb0e2028d9a8929884344afb7d91d0f65d9783f640d28aede89fca3602bedde9", size = 19702886, upload-time = "2026-10-20T15:11:31.128Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/a1/de02c0913726728eca56ee258875cbba9c7b0572c63f494fd9f55c7852e3/uv-0.13.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:05e4332791b4d55b6dde8695b7fa6079b26991519f44760887c5dfbd5ca4fe53", size = 17181168, upload-time = "2026-10-20T15:11:34.583Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/cd/f4a3c7377674366798c56aabd0f9a1f05687c3939f5ba857a3ea6093ff84/uv-0.13.4-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:7b3cdf868e5415631fe797b648c0d6945d38d388f23367bdd0b6332e80a1fcb0", size = 16502020, upload-time = "2026-10-20T15:11:37.88Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/f4/ce79657c5a0f51b602db9a663529baafff03b9fe8cc41e09ad3f7246b88a/uv-0.13.4-py3-none-manylinux_2_31_riscv64.musllinux_1_1_riscv64.whl", hash = "sha256:4e6b08578c920b86910897f36bb6da7229c8e7e0187976570e2a538cb28b777e", size = 18000980, upload-time = "2026-10-20T15:11:41.59Z" },
+    { url = "https://files.pythonhosted.org/packages/21/e6/7d77022d5661f8e01578bc5423bf02af408220e7e7ac5ee15eb94742c7cb/uv-0.13.4-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:d86a5dec8ab30c70519c71ca5085c8aaf28664836cbc600951cedaa3fc678cbf", size = 18179083, upload-time = "2026-10-20T15:11:45.191Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/40/1bf0324800d38009774ba087a6fbffddc76a3e5bf42c081b9298b1236fb5/uv-0.13.4-py3-none-musllinux_1_1_i686.whl", hash = "sha256:5d89d1028c2e22977d9215cbb79cfe12559cb0c8a507a12e2f3a7e47930cf1bf", size = 18010389, upload-time = "2026-10-20T15:11:48.963Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/ec/f352ca2cc3b4b6191bb4ec8cdf4bc190eed0ba8bda4c33b7fd66c5d33cec/uv-0.13.4-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:52b5c753a7c2d5f8323a70bb4c93118988356331d0758afa6446c81f974e7196", size = 19004998, upload-time = "2026-10-20T15:11:52.628Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/4f/fc05ff4292edfe785b47874ec86d3d83ca2bf735cff8a9d2170ffb66ad83/uv-0.13.4-py3-none-win32.whl", hash = "sha256:d333f01852b817ba05612de31474739da1af7e5463d119b30a9c4331eba1f408", size = 16190502, upload-time = "2026-10-20T15:11:56.657Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/b9/b526eab6c72eacc705a58378f6850fde046b28c86fed01bd42da61367c6b/uv-0.13.4-py3-none-win_amd64.whl", hash = "sha256:b2ff80397273fff0e02c20eacae6882834c811827d6fc08f658db156fe754386", size = 15331833, upload-time = "2026-10-20T15:11:59.733Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/f7/4d5fa89d3d10ff6a84e547ef6e02c45b2f2d50e66682da778acf60db63f1/uv-0.13.4-py3-none-win_arm64.whl", hash = "sha256:deffa5a4afdb48f3e44fb26e80377d256b330ddcad0373daff4b54f6162b43a4", size = 15690151, upload-time = "2026-10-20T15:12:02.74Z" },
 ]
 
 [[package]]
@@ -3667,7 +3831,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/da/34/30e9280707135d2cfc589dfff3cb796bd07a3aeb1a3e415ba09dd89d7bb4/uvicorn-0.54.0.tar.gz", hash = "sha256:a2e33cbfaa0306f8e6b0c13e0cb89d7d7a2da3e62b90c66e18c33d9807b28620", size = 112283, upload-time = "2026-09-25T06:52:37.601Z" }
 wheels = [
@@ -3679,10 +3843,10 @@ standard = [
     { name = "httptools" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "uvloop", marker = "(platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'cygwin' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130') or (sys_platform == 'win32' and extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'" },
     { name = "watchfiles" },
-    { name = "websockets", version = "16.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
-    { name = "websockets", version = "17.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "websockets", version = "16.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "websockets", version = "17.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [[package]]
@@ -3746,7 +3910,7 @@ name = "vulture"
 version = "2.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-10-maltrainer-cpu' and extra == 'extra-10-maltrainer-cu130')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/3e/4d08c5903b2c0c70cad583c170cc4a663fc6a61e2ad00b711fcda61358cd/vulture-2.16.tar.gz", hash = "sha256:f8d9f6e2af03011664a3c6c240c9765b3f392917d3135fddca6d6a68d359f717", size = 52680, upload-time = "2026-03-25T14:41:27.141Z" }
 wheels = [
