@@ -405,6 +405,7 @@ C4 diagrams.
 ## Documentation
 
 See `docs/` directory for detailed documentation:
+- [Steps, epochs and what happens in one step (for dummies)](docs/steps-and-epochs-for-dummies.md)
 - [Code layout: where things live](docs/code-layout.md)
 - [Mutation testing: policy, scores, how to run](docs/mutation-testing.md)
 - [Architecture: C4 diagrams and description](docs/architecture.md)
