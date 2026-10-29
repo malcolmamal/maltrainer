@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from backend.registry_fibo2 import FIBO2
+from backend.registry_ltx25 import LTX25
+from backend.registry_visage import VISAGE
 from backend.specs import ModelSpec, OptimizerSpec
 
 MODELS: dict[str, ModelSpec] = {
@@ -171,6 +173,8 @@ MODELS: dict[str, ModelSpec] = {
             caption_from_trigger=True,
         ),
         FIBO2,
+        LTX25,
+        VISAGE,
     )
 }
 

@@ -25,7 +25,7 @@ from maltrainer.trainers.moss_image.finetune_host import (
 )
 from maltrainer.trainers.moss_image.finetune_prior import FinetunePrior
 from maltrainer.utils.ema import OffloadedParameterEMA
-from maltrainer.utils.fsutil import replace_directory
+from maltrainer.utils.fsutil import replace_directory, torch_save_closed
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class FinetuneState(FinetunePrior):
                 tmp / STATE_MODEL,
                 metadata={"maltrainer_state_step": str(self.global_step)},
             )
-        torch.save(self.optimizer.state_dict(), tmp / STATE_OPTIMIZER)
+        torch_save_closed(self.optimizer.state_dict(), tmp / STATE_OPTIMIZER)
         if self.prior is not None and self.prior_path is not None:
             try:
                 os.link(self.prior_path, tmp / STATE_PRIOR)
@@ -71,7 +71,7 @@ class FinetuneState(FinetunePrior):
         if self.ema is not None:
             tensors, ema_counters = self.ema.state()
             save_file(tensors, str(tmp / STATE_EMA))
-        torch.save(
+        torch_save_closed(
             {
                 "global_step": self.global_step,
                 "epoch": self.epoch,

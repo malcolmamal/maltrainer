@@ -106,6 +106,28 @@ def test_fibo2_is_offered_and_its_checkpoints_are_found_below_the_fibo2_folder(
     assert entry["label"] == "Fibo 2.0 (Dev)"
 
 
+def test_ltx25_is_offered_with_its_four_model_files(client: TestClient, install_models: Installer) -> None:
+    install_models("ltx25")
+
+    entry = _models(client)["ltx25"]
+    assert entry["missing_files"] == [] and entry["label"].startswith("LTX-2.5")
+    assert len(registry.MODELS["ltx25"].model_files) == 4
+
+
+def test_visage_is_offered_with_its_three_model_files_found_below_the_visage_folder(
+    client: TestClient, install_models: Installer
+) -> None:
+    install_models("visage", nested="Visage")
+
+    entry = _models(client)["visage"]
+    assert entry["missing_files"] == [] and entry["label"].startswith("Visage-Image")
+    assert [name for _, _, name in registry.MODELS["visage"].model_files] == [
+        "visage-image.safetensors",
+        "visage_vae.safetensors",
+        "qwen3_0.6b.safetensors",
+    ]
+
+
 def test_resolved_files_map_config_keys_to_absolute_paths(install_models: Installer) -> None:
     paths = install_models("krea2", nested="deep")
 

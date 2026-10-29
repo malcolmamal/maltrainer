@@ -114,7 +114,7 @@ def test_a_failed_state_write_keeps_the_previous_state_and_the_new_model(
     marker = workspace.out / "ft_state" / "marker.txt"
     marker.write_text("previous", encoding="utf-8")
 
-    def fail(_state_dir: Path, _weights: Path | None = None) -> None:
+    def fail(_state_dir: Path, **_kwargs: Any) -> None:  # called with weights=
         (workspace.out / "ft_state.tmp").mkdir()
         raise OSError("disk full")
 
