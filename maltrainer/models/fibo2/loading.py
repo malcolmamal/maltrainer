@@ -1,8 +1,9 @@
 """
 Loading ComfyUI's Fibo 2.0 single-file DiT (``fibo2_dev_bf16.safetensors``).
 
-The file is the plain bf16 DiT. ComfyUI's INT8 ConvRot repack (``fibo2_edit_turbo_int8_convrot``) is the
-step-distilled Edit Turbo model, which BRIA says is not a fine-tuning base, so it is refused with that reason.
+The file is the plain bf16 DiT. The INT8 ConvRot repacks Comfy-Org publishes (``fibo2_dev_int8_convrot`` for Dev,
+``fibo2_edit_turbo_int8_convrot`` for the step-distilled Edit Turbo, which BRIA says is not a fine-tuning base) are
+refused: this trainer does not decode INT8 ConvRot weights.
 """
 
 from __future__ import annotations
@@ -45,8 +46,8 @@ def load_fibo2_transformer(
         raise FileNotFoundError(f"Fibo 2.0 transformer not found at {path}")
     if is_quantized(path):
         raise ValueError(
-            f"{path.name} is an INT8 ConvRot file. ComfyUI ships those only for Fibo 2.0 Edit Turbo, which is "
-            "distilled and not a fine-tuning base. Train on fibo2_dev_bf16.safetensors."
+            f"{path.name} is an INT8 ConvRot file and this trainer does not decode INT8 ConvRot weights (Edit Turbo's "
+            "build is also distilled, not a fine-tuning base). Train on fibo2_dev_bf16.safetensors."
         )
     logger.info("Loading Fibo 2.0 DiT from %s...", path)
     state = strip_container_prefix(load_file(str(path)))

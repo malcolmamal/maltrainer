@@ -77,13 +77,14 @@ def test_a_missing_file_is_reported_by_name(tmp_path: Path) -> None:
         load_fibo2_transformer(tmp_path / "nope.safetensors", CPU)
 
 
-def test_an_int8_convrot_file_is_refused_with_the_reason(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", ["fibo2_edit_turbo_int8_convrot", "fibo2_dev_int8_convrot"])
+def test_an_int8_convrot_file_is_refused_with_the_reason(tmp_path: Path, name: str) -> None:
     state = tiny_transformer().state_dict()
     state["layers.0.attention.qkv.comfy_quant"] = torch.zeros(4, dtype=torch.uint8)
-    path = write(tmp_path / "fibo2_edit_turbo_int8_convrot.safetensors", state)
+    path = write(tmp_path / f"{name}.safetensors", state)
 
     assert is_quantized(path)
-    with pytest.raises(ValueError, match=r"Edit Turbo, which is\s+distilled.*fibo2_dev_bf16"):
+    with pytest.raises(ValueError, match=r"does not decode INT8 ConvRot.*Edit Turbo.*distilled.*fibo2_dev_bf16"):
         load_fibo2_transformer(path, CPU)
 
 

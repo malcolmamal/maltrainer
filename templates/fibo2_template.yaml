@@ -6,7 +6,7 @@
 # For the CLI, copy this file and replace the placeholders yourself.
 #
 # Recipe sources (docs/fibo2-lora-training.md):
-#   BRIA's fine_tuning/train_lora.py -- the Dev model, rank 64, timesteps sigmoid(N(shift, 1)) with the shift
+#   BRIA's fine_tuning/train_lora.py -- the Dev model, every Linear adapted, timesteps sigmoid(N(shift, 1)) with the shift
 #     rising with the token count (10 % uniform), a null-caption dropout of 0.1
 #   maltrainer's FLUX.3 Automagic3 setup -- one adaptive rate per module family, a 16-step sign window, no
 #     weight decay, EMA 0.98, 1e-6 launch point
@@ -27,12 +27,13 @@ dataset:
   repeats: 1
 
 lora:
-  rank: 16
-  alpha: 16
+  rank: 32
+  alpha: 32
   prefix: "diffusion_model."
-  # blocks (attention, SwiGLU and the injection blocks' cross-attention of the 2 refiner and 44 main blocks = 199)
-  # | main (the 44 main blocks only = 191) | all (blocks + Perceiver, adaLN, input/timestep/output)
-  targets: "blocks"
+  # all (blocks + Perceiver, adaLN, input/timestep/output: every Linear, as BRIA's script and Fizgig's rank-32 "full
+  # model" preset) | blocks (attention, SwiGLU and the injection blocks' cross-attention of the 2 refiner and 44 main
+  # blocks = 199) | main (the 44 main blocks only = 191)
+  targets: "all"
   dtype: "float32"
 
 train:

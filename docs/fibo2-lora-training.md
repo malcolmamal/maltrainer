@@ -28,7 +28,7 @@ placeholders and writes the filled config into the output folder before it start
 
 | Key | File | Notes |
 |---|---|---|
-| `model.transformer_path` | `diffusion_models/Fibo2/fibo2_dev_bf16.safetensors` | The **Dev** model: full, not distilled, with CFG. The INT8 ConvRot file is Edit Turbo, which is distilled and not a fine-tuning base; the trainer refuses it |
+| `model.transformer_path` | `diffusion_models/Fibo2/fibo2_dev_bf16.safetensors` | The **Dev** model: full, not distilled, with CFG. The INT8 ConvRot files (`fibo2_dev_int8_convrot`, and Edit Turbo's, which is distilled and not a fine-tuning base) are refused: the trainer does not decode INT8 ConvRot weights |
 | `model.vae_path` | `vae/flux2_vae.safetensors` | The Flux2 VAE (128-channel latents, 16x down), the same file FLUX.3 and MOSS-Image use |
 | `model.text_encoder_path` | `text_encoders/qwen3vl_4b_int8_convrot.safetensors` | Qwen3-VL-4B-Instruct, the same file FLUX.3 uses |
 
@@ -85,7 +85,7 @@ Checked numerically against ComfyUI's own modules (checkout of 2026-10-24):
 
 | Setting | Value | Source |
 |---|---|---|
-| LoRA | rank 16 / alpha 16, attention + SwiGLU + the injection blocks' cross-attention of the 2 refiner and 44 main blocks (`targets: blocks`, 199 adapters) | BRIA's script adapts every Linear at rank 64; this is the same families at a lighter rank |
+| LoRA | rank 32 / alpha 32, every Linear (`targets: all`: attention, SwiGLU and cross-attention of the refiner and main blocks, the Perceiver, every adaLN modulation, the input, timestep and output layers) | BRIA's script adapts every Linear at rank 64; Fizgig's Fibo 2.0 preset is rank 32 on all of them (it dropped the lighter preset that skipped the refiner and Perceiver). `targets: blocks` (199 adapters, rank 16) was this template's earlier setting |
 | Optimizer | Automagic3 from 1e-6, no weight decay | maltrainer's FLUX.3 / Krea 2 setup |
 | Timesteps | `bria`: sigma = sigmoid(N(shift, 1)), shift rising linearly from 0.5 at 256 tokens to 1.15 at 4096; 10 % uniform | BRIA's `fine_tuning/train_lora.py` (the Flux2 scheduler's `mu` range) |
 | Caption dropout | 0.1 | BRIA |
@@ -186,4 +186,4 @@ are saved in bf16 and load in ComfyUI's Fibo 2.0 workflows without conversion.
   about 14 s per step, finite loss, a loadable LoRA), but speed and VRAM at 1024 px are not
   measured. BRIA reports 31 GiB at 1024 px, rank 128 and 8 gradient-accumulation steps on an L40S.
 - Edit training, and the `text_render` images.
-- INT8 ConvRot DiT weights: ComfyUI ships those only for Edit Turbo.
+- INT8 ConvRot DiT weights: Comfy-Org publishes `fibo2_dev_int8_convrot.safetensors` (8.4 GB) as well as Edit Turbo's; Fizgig decodes it to bf16 at load, this trainer does not yet.
