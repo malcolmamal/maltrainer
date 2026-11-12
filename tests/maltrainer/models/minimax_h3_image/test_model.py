@@ -101,3 +101,23 @@ def test_a_file_that_does_not_state_its_grid_gets_the_released_one(tmp_path: Pat
 def test_a_missing_or_unreadable_file_gets_the_released_grid(tmp_path: Path) -> None:
     assert file_pdd_sigmas(tmp_path / "absent.safetensors") == PDD_SIGMAS
     assert file_pdd_sigmas(_write_header(tmp_path / "bad.safetensors", b"{broken")) == PDD_SIGMAS
+
+
+def test_the_final_modulation_is_applied_in_float32_as_comfyui_does() -> None:
+    final = _model().final_layer
+    final.norm.to(torch.bfloat16)  # the checkpoint stores its norms in bf16
+    with torch.no_grad():
+        final.adaln_proj.linear.bias.copy_(torch.linspace(0.1234567, 0.7654321, final.adaln_proj.linear.bias.numel()))
+    hidden = torch.randn(1, 5, 16).to(torch.bfloat16)
+    timestep_embedding = torch.randn(1, 10)
+    indices = torch.zeros(5, dtype=torch.long)
+    video = torch.arange(5)
+
+    with torch.no_grad():
+        out = final(hidden, timestep_embedding, (indices, video), 2)
+        shift, scale = final.adaln_proj(timestep_embedding).chunk(2, dim=-1)
+        modulated = final.norm(hidden).float() * (1.0 + scale.float()) + shift.float()
+        weight, bias = final.head(2)
+        expected = torch.nn.functional.linear(modulated, weight, bias)
+
+    torch.testing.assert_close(out, expected, rtol=0, atol=1e-6)

@@ -43,9 +43,9 @@ class MiniMaxH3ImageFinalLayer(nn.Module):
         level: int,
     ) -> torch.Tensor:
         timestep_indices, video_indices = timing
-        shift, scale = self.adaln_proj(timestep_embedding).chunk(2, dim=-1)
-        shift, scale = shift.to(hidden_states.dtype), scale.to(hidden_states.dtype)
-        hidden_states = self.norm(hidden_states) * (1.0 + scale.index_select(0, timestep_indices))
+        shift, scale = self.adaln_proj(timestep_embedding).float().chunk(2, dim=-1)
+        # ComfyUI modulates in float32 (the heads are its fp32 island): the scale is not rounded to the activations'
+        hidden_states = self.norm(hidden_states).float() * (1.0 + scale.index_select(0, timestep_indices))
         hidden_states = hidden_states + shift.index_select(0, timestep_indices)
         weight, bias = self.head(level)
         hidden_states = hidden_states.index_select(1, video_indices).to(weight.dtype)
