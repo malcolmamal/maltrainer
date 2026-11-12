@@ -55,6 +55,8 @@ class MiniMaxH3ImageFinalLayer(nn.Module):
 class MiniMaxH3ImageTransformer(MiniMaxH3Backbone):
     """[text | image] packed sequence in, the image tokens' ``x0 - noise`` prediction out."""
 
+    label = "MiniMax H3 Image"
+
     def __init__(self, config: MiniMaxH3TransformerConfig | None = None, levels: int = 6):
         super().__init__(config)
         self.final_layer = MiniMaxH3ImageFinalLayer(self.config, levels)

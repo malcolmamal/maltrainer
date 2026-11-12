@@ -21,7 +21,7 @@ from train_minimax_h3_lora import MiniMaxH3LoRATrainer, _say
 class MiniMaxH3ImageTrainer(MiniMaxH3LoRATrainer):
     """Trainer for MiniMax H3 Image LoRA models (the H3 trainer's caching, loop, adapters and saving)."""
 
-    checkpoint_prefix = "minimax_h3_image_lora"
+    checkpoint_prefix, label = "minimax_h3_image_lora", "MiniMax H3 Image"
 
     def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
         config["dataset"] = {**config.get("dataset", {}), "media": ["image"]}  # no audio and no clips here

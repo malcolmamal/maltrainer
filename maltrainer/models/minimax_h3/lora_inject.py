@@ -75,8 +75,9 @@ def inject_lora_layers(
     if injected == 0:
         raise ValueError("No MiniMax H3 modules matched the LoRA targets / block_range")
     logger.info(
-        "Injected %d LoRA layers into MiniMax H3 transformer (rank=%d, alpha=%s%s, blocks %s%s)",
+        "Injected %d LoRA layers into %s transformer (rank=%d, alpha=%s%s, blocks %s%s)",
         injected,
+        getattr(transformer, "label", "MiniMax H3"),
         rank,
         alpha,
         f", including {adaln} per-block adaln_proj" if adaln else ", adaln_proj excluded",

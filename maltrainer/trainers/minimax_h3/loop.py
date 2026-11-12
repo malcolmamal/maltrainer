@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class LoopHost(StepHost, Protocol):
     """What the loop reads from the trainer; the methods stay the trainer's (tests patch them there)."""
 
+    label: str
     accelerator: Any
     lora_network: Any
     optimizer: Any
@@ -56,7 +57,7 @@ def train(host: LoopHost) -> None:
     host.run_metadata["planned_total_steps"] = total_steps
     host.run_metadata["dataset_samples"] = len(host.samples)
     logger.info(
-        "Starting accelerated MiniMax H3 LoRA training for %d epochs (%d total steps)...", num_epochs, total_steps
+        "Starting accelerated %s LoRA training for %d epochs (%d total steps)...", host.label, num_epochs, total_steps
     )
     shift_logged = [False]
     progress_bar = tqdm(total=total_steps, desc="Training Steps", disable=not host.is_main_process)
@@ -71,7 +72,7 @@ def train(host: LoopHost) -> None:
             )
     progress_bar.close()
     host.save_checkpoint("final")
-    logger.info("MiniMax H3 LoRA training completed!")
+    logger.info("%s LoRA training completed!", host.label)
 
 
 def _sample_step(

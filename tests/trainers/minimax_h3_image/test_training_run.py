@@ -106,3 +106,12 @@ def test_a_dry_run_writes_records_named_for_h3_image(workspace: Workspace) -> No
     trainer.run()
 
     assert (workspace.out / FINAL).exists()
+
+
+def test_the_log_names_the_model_it_trains(workspace: Workspace, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("INFO"):
+        _run(workspace)
+
+    assert "Starting accelerated MiniMax H3 Image LoRA training" in caplog.text
+    assert "MiniMax H3 Image LoRA training completed!" in caplog.text
+    assert "LoRA layers into MiniMax H3 Image transformer" in caplog.text

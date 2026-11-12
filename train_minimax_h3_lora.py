@@ -35,7 +35,7 @@ _say = partial(print, flush=True)
 class MiniMaxH3LoRATrainer:
     """Trainer for MiniMax H3 LoRA models."""
 
-    checkpoint_prefix = "minimax_h3_lora"
+    checkpoint_prefix, label = "minimax_h3_lora", "MiniMax H3"
     transformer: MiniMaxH3Backbone  # H3's, or the image model's
     _guided_target = staticmethod(guided_target)
 
