@@ -50,6 +50,10 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   one window of blocks at a time over an fp8 frozen trunk, with prior preservation, regularisation images, per-folder
   repeats, previews and an exact resume (also with people added). Measured on an RTX 5090: 29.3 GB peak, ~2 s a step
   at 512 px. See [Krea 2 finetuning](docs/krea2-finetuning.md) (with the results of an eight-person run).
+- **MiniMax H3 Image full finetuning**: `train_minimax_h3_image_finetune.py` trains the DiT's own weights from ComfyUI's
+  INT8 file on a 32 GB GPU, a window of blocks at a time over the frozen INT8 model, with fused Automagic3, Fizgig's
+  training adapter as a switch, an INT8 file out and an exact resume. Not yet run on the GPU. See
+  [MiniMax H3 Image finetuning](docs/minimax-h3-image-finetuning.md).
 - **Lossless LoRA merging**: `scripts/merge_loras.py` merges LoRAs into one file that applies
   exactly what stacking them does, with per-LoRA strengths given on the command line or in a YAML
   config. It also bakes a strength into a single LoRA. See [merging LoRAs](docs/merge-loras.md).
@@ -414,6 +418,7 @@ See `docs/` directory for detailed documentation:
 - [Architecture: C4 diagrams and description](docs/architecture.md)
 - [Finetuning walkthrough: setup, commands, troubleshooting](docs/finetune-tutorial.md)
 - [Krea 2 full finetuning on 32 GB (rotating windows)](docs/krea2-finetuning.md)
+- [MiniMax H3 Image full finetuning from the INT8 file (rotating windows)](docs/minimax-h3-image-finetuning.md)
 - [MOSS-Image finetune in ComfyUI: 8-step setup and prompting](docs/moss-image-comfyui-prompting.md)
 - [Qwen-Image 2.1 LoRA Training](docs/qwen-image-2.1-lora-training.md)
 - [Qwen-Image 2.1 Optimizer Benchmark: AdamW vs Prodigy vs Automagic3](docs/qwen-image-2.1-optimizer-benchmark.md)

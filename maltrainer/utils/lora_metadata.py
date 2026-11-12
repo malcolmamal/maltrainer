@@ -39,6 +39,11 @@ ARCHITECTURES = {
         "minimax_h3_image",
         "maltrainer.models.minimax_h3.lora",
     ),
+    "minimax_h3_image_finetune": (
+        "train_minimax_h3_image_finetune.py",
+        "minimax_h3_image",
+        "maltrainer.models.minimax_h3_image.finetune",
+    ),
     "qwen_image_2_1": ("train_qwen_image_2_1_lora.py", "qwen_image_2_1", "maltrainer.models.qwen_image_2_1.lora"),
     "krea2": ("train_krea2_lora.py", "krea2_raw", "maltrainer.models.krea2.lora"),
     "flux3_klein": ("train_flux3_klein_lora.py", "flux3_image_klein_base", "maltrainer.models.flux3.lora"),

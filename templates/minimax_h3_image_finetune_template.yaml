@@ -1,0 +1,76 @@
+# MiniMax H3 Image full finetune template -- rotating windows over the INT8 file, fused Automagic3
+# (train_minimax_h3_image_finetune.py).
+#
+# For the CLI: copy this file and replace the placeholders:
+#   [person_to_train]   dataset folder name
+#   [comfyui_models]    your ComfyUI models folder
+#
+# Trains the DiT's own weights, not a LoRA, a window at a time (docs/minimax-h3-image-finetuning.md): the frozen model
+# stays on the GPU as INT8 ConvRot codes (21 GB), one window of 5 blocks trains in bf16, then goes back to INT8 codes.
+# Caching, noise levels and loss are the LoRA's (templates/examples/train_minimax_h3_image_lora.yaml).
+# Each checkpoint is an INT8 file of the original's size (~21 GB); the resume state adds the trained weights in bf16
+# (up to ~39 GB) and the optimizer (~19 GB).
+
+model:
+  # ComfyUI's INT8 ConvRot file: the only one the trainer reads (the saved model is one too, so a finetune can be
+  # the start of the next run or of a LoRA).
+  transformer_path: "[comfyui_models]/diffusion_models/MinimaxH3Image/minimax_h3_image_pruned_int8_convrot.safetensors"
+  vae_path: "[comfyui_models]/vae/minimax_h3_image_vae_fp16.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+  # Fizgig's training adapter (rank 16). Switched by finetune.training_adapter; leave the path out for none.
+  training_adapter_path: "fizgig_minimax_h3_image_training_adapter.safetensors"   # the file you downloaded
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512            # area target; buckets keep each photo's aspect ratio
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "photo of [person_to_train]"
+  repeats: 1
+
+finetune:
+  # One window trains at a time, every rotate_every steps the next (a full cycle = 10 windows of 5 blocks, 1.9B each).
+  rotate_every: 100
+  blocks_per_window: 5
+  # block_range: [20, 49]   # only these blocks (identity is made in the back of the stack); the others stay INT8
+  # targets: ["attn.qkv_proj", "attn.out_proj", "mlp.fc1", "mlp.fc2"]
+  # Modules trained all run in bf16/fp32 beside the windows, e.g. ["final_layer.video_out"] (the output heads). [] = none.
+  always_on: []
+  # Fizgig's adapter rides frozen over the Linears while training, as in the LoRA recipe, and is not in the saved
+  # model. false = train against the plain model.
+  training_adapter: true
+  training_adapter_multiplier: 1.0
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1  # must stay 1: the optimizer steps inside backward
+  num_epochs: 40             # max_steps > 0 wins; a multiple of 10 x rotate_every trains each window equally
+  max_steps: 0
+  save_every: 0              # 0 = only at the end; each save is a ~21 GB model plus a resume state
+  save_state: true           # also write <name>_state/ for resume_from (latest save only)
+  resume_from: ""
+  likeness_opt: true         # 75 % of steps at the clean end for 8 epochs, then 50 / 75 in turn; false = even draw
+  optimizer: "automagic3"    # the only one supported here
+  # Pinned (min = max = learning_rate). 3e-5 is Fizgig's tested H3 finetune rate ("1e-4 destroys, 1e-5 is too slow
+  # to judge from"). When a run looks almost right but overcooked, lower the rate rather than the step count.
+  learning_rate: 3.0e-5
+  automagic_min_lr: 3.0e-5
+  automagic_max_lr: 3.0e-5
+  weight_decay: 0.0
+  automagic_polarity_history: 8   # 1 byte per trained weight on the GPU (1.9 GB per window)
+  automagic_clip_threshold: 1.0   # per-tensor update clip; there is no global gradient clip
+  automagic_beta2: 0.999
+  automagic_eps: 1.0e-30
+  caption_dropout: 0.05
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/minimax_h3_image_finetune/[person_to_train]"
+  name: "minimax_h3_image_ft_[person_to_train]"
+  embed_config: true
+
+logging:
+  level: "INFO"

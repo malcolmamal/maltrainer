@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 import torch
@@ -147,3 +148,33 @@ class AssistantAttacher:
             self.multiplier,
             Path(path).name,
         )
+
+
+def attach_assistant(
+    transformer: nn.Module,
+    path: str,
+    options: tuple[str, float, str | None],
+    on: tuple[torch.device | str | None, torch.dtype | None],
+    wrap: Callable[[nn.Linear, nn.Module], None],
+    log: logging.Logger,
+) -> tuple[dict[str, nn.Module], int]:
+    """Attach a frozen adapter's layers to ``transformer`` through ``wrap``: ({module name: layer}, how many).
+
+    ``options``: the adapter's module-name prefix, its multiplier and the AdaLN grid file; ``on``: device and
+    dtype; ``log`` gets the report.
+    """
+    prefix, multiplier, adaln_grid_path = options
+    attacher = AssistantAttacher(transformer, prefix, multiplier, on[0], on[1], adaln_grid_path)
+    layers: dict[str, nn.Module] = {}
+    for name, parts in sorted(read_adapter_pairs(path).items()):
+        if "down" not in parts or "up" not in parts:
+            continue
+        module_path, module = attacher.resolve(name)
+        layer = None if module is None else attacher.build(module_path, module, parts)
+        if module is None or layer is None:
+            continue
+        layers[module_path.replace(".", "_")] = layer
+        wrap(module, layer)
+        attacher.attached += 1
+    attacher.report(path, log)
+    return layers, attacher.attached
