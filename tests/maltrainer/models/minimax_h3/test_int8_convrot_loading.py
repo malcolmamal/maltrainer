@@ -110,3 +110,12 @@ def test_markers_scales_and_int8_weights_must_describe_the_same_layers(tmp_path:
 
     with pytest.raises(ValueError, match=counts):
         load_comfy_int8_convrot_state_dict(_write(tmp_path, tensors), device=CPU)
+
+
+def test_an_attention_kernel_hint_is_not_a_model_tensor(tmp_path: Path) -> None:
+    # H3 Image's file carries blocks.N.attn.comfy_attention.config: ComfyUI's choice of attention kernel
+    tensors = {**_layer("blk.0"), "blk.0.attn.comfy_attention.config": _blob({"attention": "int8"})}
+
+    state, count = load_comfy_int8_convrot_state_dict(_write(tmp_path, tensors), device=CPU)
+
+    assert count == 1 and not [key for key in state if "comfy_attention" in key]

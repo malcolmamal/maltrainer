@@ -107,8 +107,8 @@ def load_comfy_int8_convrot_state_dict(checkpoint_path: str, *, device: torch.de
             )
 
         for key in keys:
-            if key.endswith(".comfy_quant"):
-                continue
+            if key.endswith((".comfy_quant", ".comfy_attention.config")):
+                continue  # a layer's marker, and ComfyUI's attention-kernel hint (H3 Image): neither is a weight
             value = handle.get_tensor(key)
             if key.endswith(".weight_scale"):
                 base = key[: -len(".weight_scale")]
