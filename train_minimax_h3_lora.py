@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-"""
-MiniMax H3 LoRA Training Script for Maltrainer.
-Trains LoRA adapters for MiniMax H3 using INT8 ConvRot transformer, FP16 Video VAE, FP32 audio
-VAE and Qwen3-VL text encoder, on stills, video clips with sound, and audio-only recordings.
-Uses automated dataset pre-caching for 40x step acceleration (~0.8s/step).
-"""
+"""MiniMax H3 LoRA training for Maltrainer: an INT8 ConvRot transformer, FP16 video VAE, FP32 audio VAE and
+Qwen3-VL text encoder, on stills, video clips with sound and audio-only recordings, from a pre-cached dataset."""
 
 from __future__ import annotations
 
 import logging
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import torch
 from accelerate.utils import set_seed
 
+from maltrainer.models.minimax_h3.model import MiniMaxH3Backbone, MiniMaxH3Transformer
 from maltrainer.models.minimax_h3.packing import packed_layout
 from maltrainer.trainers.minimax_h3 import dry_run, loop
 from maltrainer.trainers.minimax_h3.data import count_dataset_samples, precache
@@ -22,7 +20,7 @@ from maltrainer.trainers.minimax_h3.model import add_lora, load_transformer
 from maltrainer.trainers.minimax_h3.optimizer import build_optimizer, warmup_scheduler
 from maltrainer.trainers.minimax_h3.sample import H3Sample
 from maltrainer.trainers.minimax_h3.step import guided_target, training_step
-from maltrainer.trainers.minimax_h3.timesteps import resolve_flow_shift, sample_timesteps
+from maltrainer.trainers.minimax_h3.timesteps import resolve_flow_shift, sample_timesteps, schedule_note
 from maltrainer.training.cli import start_run, training_arguments
 from maltrainer.training.saving import write_lora
 from maltrainer.training.session import log_device, make_accelerator, open_training_log, start_metadata
@@ -31,15 +29,14 @@ from maltrainer.utils.config import load_config
 from maltrainer.utils.ema import ParameterEMA
 
 logger = logging.getLogger(__name__)
-
-
-def _say(text: str) -> None:
-    print(text, flush=True)
+_say = partial(print, flush=True)
 
 
 class MiniMaxH3LoRATrainer:
     """Trainer for MiniMax H3 LoRA models."""
 
+    checkpoint_prefix = "minimax_h3_lora"
+    transformer: MiniMaxH3Backbone  # H3's, or the image model's
     _guided_target = staticmethod(guided_target)
 
     def __init__(self, config: dict[str, Any], dry_run: bool = False, dry_run_step_time: float = 0.025):
@@ -47,8 +44,7 @@ class MiniMaxH3LoRATrainer:
         self.dry_run, self.dry_run_step_time = dry_run, dry_run_step_time
         self.last_saved_path: str | None = None
         self.lr_scheduler: Any = None
-        # Resolved facts about this run, embedded into every checkpoint's metadata. Populated
-        # as they become known, since several are only decided at load/first-step time.
+        # Resolved facts about this run, embedded into every checkpoint's metadata; several are only known later.
         self.run_metadata = start_metadata(None)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = getattr(torch, config.get("dtype", "bfloat16"))
@@ -57,8 +53,7 @@ class MiniMaxH3LoRATrainer:
         self.text_cache: dict[str, torch.Tensor] = {}
         self.ema: ParameterEMA | None = None
         if int(config.get("train", {}).get("batch_size", 1) or 1) != 1:
-            # Every item packs its own sequence (text length, frame count, aspect and audio
-            # length all vary) and H3's per-timestep modulation is shared across the batch.
+            # Every item packs its own sequence (text, frames, aspect, audio all vary); the modulation is shared.
             raise ValueError(
                 "MiniMax H3 trains at batch_size 1; use train.gradient_accumulation_steps for a larger effective batch."
             )
@@ -86,8 +81,7 @@ class MiniMaxH3LoRATrainer:
     def load_transformer_and_lora(self) -> None:
         """Load INT8 ConvRot transformer base and inject LoRA network."""
         print("=== Step 2/2: Loading MiniMax H3 INT8 Transformer Base ===", flush=True)
-        logger.info("Loading Transformer base and LoRA network...")
-        self.transformer = load_transformer(self.config, self.device, self.run_metadata, _say)
+        self.transformer = load_transformer(self.config, self.device, self.run_metadata, _say, MiniMaxH3Transformer)
         on = (self.device, self.dtype)
         self.lora_network, self.lora_dtype = add_lora(self.transformer, self.config, on, self.run_metadata)
         print("Transformer and LoRA network ready on GPU!", flush=True)
@@ -103,7 +97,9 @@ class MiniMaxH3LoRATrainer:
     def dry_run_training(self) -> None:
         """Simulate training without downloading or loading models (maltrainer.trainers.minimax_h3.dry_run)."""
         samples = self._count_dataset_samples()
-        self.last_saved_path = dry_run.simulate(self.config, samples, self.dry_run_step_time, self.is_main_process)
+        self.last_saved_path = dry_run.simulate(
+            self.config, samples, self.dry_run_step_time, self.is_main_process, self.checkpoint_prefix
+        )
 
     def _build_packed_layout(
         self, num_text_tokens: int, latent_t: int, latent_h: int, latent_w: int, audio_t: int = 0
@@ -119,6 +115,9 @@ class MiniMaxH3LoRATrainer:
 
     def _resolve_flow_shift(self, latent_h: int, latent_w: int) -> float:
         return resolve_flow_shift(self.config.get("train", {}), latent_h, latent_w)
+
+    def _schedule_note(self, flow_shift: float, latent_h: int, latent_w: int) -> str:
+        return schedule_note(self.config["train"], flow_shift, (latent_h, latent_w))
 
     def setup_optimizer(self) -> None:
         """Setup optimizer over the LoRA adapters only (maltrainer.trainers.minimax_h3.optimizer)."""
@@ -157,7 +156,7 @@ class MiniMaxH3LoRATrainer:
         """Save LoRA checkpoint safetensors file (checkpoints carry the EMA average; training goes on live)."""
         if not self.is_main_process:
             return
-        save_path = Path(self.config["output"]["path"]) / f"minimax_h3_lora_step_{step}.safetensors"
+        save_path = Path(self.config["output"]["path"]) / f"{self.checkpoint_prefix}_step_{step}.safetensors"
         save_path.parent.mkdir(parents=True, exist_ok=True)
         save_dtype = getattr(torch, str(self.config.get("output", {}).get("dtype", "bfloat16")))
         network = self.accelerator.unwrap_model(self.lora_network)

@@ -33,12 +33,14 @@ from maltrainer.models.minimax_h3.model_layers import (
     MiniMaxH3TimeEmbedder,
     _apply_rotary_emb,
     get_timestep_embedding,
+    table_embedding,
 )
 
 __all__ = [
     "MINIMAX_H3_MODALITY_COUNT",
     "MiniMaxH3AdaLNProjection",
     "MiniMaxH3Attention",
+    "MiniMaxH3Backbone",
     "MiniMaxH3FeedForward",
     "MiniMaxH3FinalLayer",
     "MiniMaxH3RotaryPosEmbed",
@@ -70,8 +72,9 @@ class MiniMaxH3TokenRefiner(nn.Module):
         return cast(torch.Tensor, self.final_norm(hidden_states))
 
 
-class MiniMaxH3Transformer(nn.Module):
-    """Single-stream MiniMax H3 video-audio transformer."""
+class MiniMaxH3Backbone(nn.Module):
+    """What H3's video-audio transformer and its image-only variant share: the video and text inputs, the time
+    embedding, the token refiner and the blocks."""
 
     def __init__(self, config: MiniMaxH3TransformerConfig | None = None):
         super().__init__()
@@ -83,7 +86,6 @@ class MiniMaxH3Transformer(nn.Module):
 
         video_patch_dim = config.in_channels * torch.Size(config.patch_size).numel()
         self.video_patch_proj = nn.Linear(video_patch_dim, config.hidden_size)
-        self.audio_patch_proj = nn.Linear(config.audio_in_channels, config.hidden_size)
         self.condition_proj = nn.Linear(config.text_dim, config.hidden_size)
         if config.adaln_t_table_size is None:
             self.time_embedder: MiniMaxH3TimeEmbedder | None = MiniMaxH3TimeEmbedder(
@@ -103,7 +105,6 @@ class MiniMaxH3Transformer(nn.Module):
         self.rope = MiniMaxH3RotaryPosEmbed(config.rope_freq_dim, config.rope_theta)
         self.token_refiner = MiniMaxH3TokenRefiner(config)
         self.blocks = nn.ModuleList([MiniMaxH3TransformerBlock(config) for _ in range(config.num_layers)])
-        self.final_layer = MiniMaxH3FinalLayer(config)
         self.gradient_checkpointing = False
 
     @property
@@ -123,13 +124,44 @@ class MiniMaxH3Transformer(nn.Module):
     def _time_embedding(self, timestep: torch.Tensor) -> torch.Tensor:
         if self.time_embedder is not None:
             return cast(torch.Tensor, self.time_embedder(timestep))
-        table = self.get_buffer("adaln_t_table").float()
-        position = timestep.to(device=table.device, dtype=torch.float32).clamp(0.0, 1.0) * (table.shape[0] - 1)
-        lower = position.floor().long()
-        upper = (lower + 1).clamp(max=table.shape[0] - 1)
-        fraction = (position - lower.float()).unsqueeze(1)
-        embedding = table.index_select(0, lower) * (1.0 - fraction) + table.index_select(0, upper) * fraction
-        return embedding.to(timestep.device)
+        return table_embedding(self.get_buffer("adaln_t_table"), timestep)
+
+    def run_blocks(
+        self,
+        hidden_states: torch.Tensor,
+        timing: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+        rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """The packed sequence through every block: (hidden states, the timestep embedding). ``timing`` is the
+        (timestep, timestep_indices, token_tags) of the packed layout."""
+        timestep, timestep_indices, token_tags = timing
+        timestep_embedding = self._time_embedding(timestep)
+        adaln_indices = timestep_indices * MINIMAX_H3_MODALITY_COUNT + token_tags.clamp(min=0)
+
+        for block in self.blocks:
+            if torch.is_grad_enabled() and self.gradient_checkpointing:
+                hidden_states = checkpoint(
+                    block,
+                    hidden_states,
+                    timestep_embedding,
+                    adaln_indices,
+                    rotary_emb,
+                    attention_mask,
+                    use_reentrant=False,
+                )
+            else:
+                hidden_states = block(hidden_states, timestep_embedding, adaln_indices, rotary_emb, attention_mask)
+        return hidden_states, timestep_embedding
+
+
+class MiniMaxH3Transformer(MiniMaxH3Backbone):
+    """Single-stream MiniMax H3 video-audio transformer."""
+
+    def __init__(self, config: MiniMaxH3TransformerConfig | None = None):
+        super().__init__(config)
+        self.audio_patch_proj = nn.Linear(self.config.audio_in_channels, self.config.hidden_size)
+        self.final_layer = MiniMaxH3FinalLayer(self.config)
 
     def forward(
         self,
@@ -156,22 +188,9 @@ class MiniMaxH3Transformer(nn.Module):
         hidden_states = hidden_states.index_copy(1, video_indices, video.to(text.dtype))
         hidden_states = hidden_states.index_copy(1, audio_indices, audio.to(text.dtype))
 
-        timestep_embedding = self._time_embedding(timestep)
-        adaln_indices = timestep_indices * MINIMAX_H3_MODALITY_COUNT + token_tags.clamp(min=0)
-
-        for block in self.blocks:
-            if torch.is_grad_enabled() and self.gradient_checkpointing:
-                hidden_states = checkpoint(
-                    block,
-                    hidden_states,
-                    timestep_embedding,
-                    adaln_indices,
-                    rotary_emb,
-                    attention_mask,
-                    use_reentrant=False,
-                )
-            else:
-                hidden_states = block(hidden_states, timestep_embedding, adaln_indices, rotary_emb, attention_mask)
+        hidden_states, timestep_embedding = self.run_blocks(
+            hidden_states, (timestep, timestep_indices, token_tags), rotary_emb, attention_mask
+        )
 
         output: MiniMaxH3TransformerOutput = self.final_layer(
             hidden_states, timestep_embedding, timestep_indices, video_indices, audio_indices

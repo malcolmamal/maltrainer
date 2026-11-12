@@ -9,7 +9,6 @@ from typing import Any, Protocol
 
 from tqdm import tqdm
 
-from maltrainer.models.minimax_h3.packing import AUDIO_SIGMA_SHIFT, VIDEO_SIGMA_SHIFT
 from maltrainer.trainers.minimax_h3.sample import H3Sample
 from maltrainer.trainers.minimax_h3.step import StepHost
 from maltrainer.training.progress import log_step
@@ -34,6 +33,7 @@ class LoopHost(StepHost, Protocol):
     def _epoch_order(self) -> list[int]: ...
     def _training_step(self, sample: H3Sample, flow_shift: float) -> Any: ...
     def _resolve_flow_shift(self, latent_h: int, latent_w: int) -> float: ...
+    def _schedule_note(self, flow_shift: float, latent_h: int, latent_w: int) -> str: ...
     def save_checkpoint(self, step: int | str) -> None: ...
 
 
@@ -117,14 +117,5 @@ def _flow_shift(host: LoopHost, sample: H3Sample, logged: list[bool]) -> float:
         logged[0] = True
         host.run_metadata["resolved_sigma_shift"] = round(flow_shift, 6)
         host.run_metadata["latent_size"] = f"{h_lat}x{w_lat}"
-        logger.info(
-            "Timestep schedule: %s, sigma shift %.3f (latent %dx%d); audio sigma follows "
-            "the inference coupling (video shift %.0f -> audio shift %.0f)",
-            host.config["train"].get("timestep_distribution", "krea2_shift"),
-            flow_shift,
-            h_lat,
-            w_lat,
-            VIDEO_SIGMA_SHIFT,
-            AUDIO_SIGMA_SHIFT,
-        )
+        logger.info("%s", host._schedule_note(flow_shift, h_lat, w_lat))
     return flow_shift

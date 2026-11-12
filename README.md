@@ -25,6 +25,9 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   template. Plain or structured JSON captions. Run it with
   `train_fibo2_lora.py`, `run_fibo2_training.bat` or the web UI. See the
   [Fibo 2.0 training guide](docs/fibo2-lora-training.md).
+- **MiniMax H3 Image LoRA Training**: trains MiniMax H3 Image (the picture model, not the audio/video H3) at its 6
+  distilled noise levels, each through its own head, with Fizgig's default recipe. Run it with
+  `train_minimax_h3_image_lora.py`. See the [MiniMax H3 Image training guide](docs/minimax-h3-image-lora-training.md).
 - **Visage-Image LoRA Training**: trains Visage-Image (Sherstnev, 237M, 256 px faces) from ComfyUI's single files (the
   DiT, the f16 VAE and Qwen3-0.6B), with an Automagic3 template and an AdamW one. Run it with `train_visage_lora.py`,
   `run_visage_training.bat` or the web UI. Matches the upstream modules exactly on the real files; not yet run as a

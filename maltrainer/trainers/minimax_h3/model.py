@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import torch
 from accelerate import init_empty_weights
+from torch import nn
 
 from maltrainer.models.minimax_h3.int8_convrot import (
     enable_int8_convrot,
@@ -16,15 +17,23 @@ from maltrainer.models.minimax_h3.int8_convrot import (
     prepare_int8_convrot_modules,
 )
 from maltrainer.models.minimax_h3.lora import MiniMaxH3LoRANetwork
-from maltrainer.models.minimax_h3.model import MiniMaxH3Transformer, MiniMaxH3TransformerConfig
+from maltrainer.models.minimax_h3.model import MiniMaxH3Backbone
+from maltrainer.models.minimax_h3.model_config import MiniMaxH3TransformerConfig
 
 logger = logging.getLogger(__name__)
 
+_Model = TypeVar("_Model", bound=MiniMaxH3Backbone)
+
 
 def load_transformer(
-    config: dict[str, Any], device: torch.device, run_metadata: dict[str, object], say: Callable[[str], None]
-) -> MiniMaxH3Transformer:
-    """The transformer from ComfyUI's INT8 ConvRot file, frozen, gradient-checkpointed, on ``device``."""
+    config: dict[str, Any],
+    device: torch.device,
+    run_metadata: dict[str, object],
+    say: Callable[[str], None],
+    build: Callable[[MiniMaxH3TransformerConfig], _Model],
+) -> _Model:
+    """The transformer from ComfyUI's INT8 ConvRot file, frozen, gradient-checkpointed, on ``device``. ``build``
+    makes the (empty) model from its config."""
     int8_state_dict, num_quant_layers = load_comfy_int8_convrot_state_dict(
         config.get("model", {})["transformer_path"], device=torch.device("cpu")
     )
@@ -40,7 +49,7 @@ def load_transformer(
 
     say("Instantiating Transformer structure on GPU...")
     with init_empty_weights(include_buffers=True):
-        transformer = MiniMaxH3Transformer(transformer_cfg)
+        transformer = build(transformer_cfg)
 
     prepare_int8_convrot_modules(transformer, int8_state_dict)
     info = transformer.load_state_dict(int8_state_dict, strict=False, assign=True)
@@ -68,7 +77,7 @@ def load_transformer(
 
 
 def add_lora(
-    transformer: MiniMaxH3Transformer,
+    transformer: nn.Module,
     config: dict[str, Any],
     on: tuple[torch.device, torch.dtype],
     run_metadata: dict[str, object],
