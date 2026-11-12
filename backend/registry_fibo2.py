@@ -17,6 +17,12 @@ FIBO2 = ModelSpec(
             "self-tuning; per module family, 16-step sign window",
         ),
         OptimizerSpec(
+            "muon",
+            "Muon (Fizgig's preset)",
+            1e-4,
+            "orthogonalised momentum with AdamW-sized steps, so AdamW's rates apply; Fizgig's Fibo 2.0 preset",
+        ),
+        OptimizerSpec(
             "adamw",
             "AdamW (BRIA's recipe)",
             1e-4,

@@ -28,11 +28,12 @@ placeholders and writes the filled config into the output folder before it start
 
 | Key | File | Notes |
 |---|---|---|
-| `model.transformer_path` | `diffusion_models/Fibo2/fibo2_dev_bf16.safetensors` | The **Dev** model: full, not distilled, with CFG. The INT8 ConvRot files (`fibo2_dev_int8_convrot`, and Edit Turbo's, which is distilled and not a fine-tuning base) are refused: the trainer does not decode INT8 ConvRot weights |
+| `model.transformer_path` | `diffusion_models/Fibo2/fibo2_dev_bf16.safetensors` (16.5 GB), or `fibo2_dev_int8_convrot.safetensors` (8.4 GB) | The **Dev** model: full, not distilled, with CFG. Edit Turbo is distilled and not a fine-tuning base: its INT8 file is refused, and a bf16 one only warns |
+| `model.int8_load` | `decode` (default) or `runtime` | For the INT8 file only. `decode` turns every int8 Linear back into a bf16 weight, so the run trains and needs VRAM exactly as from the bf16 file. `runtime` keeps them int8 on the GPU (about 8.4 GB for the DiT instead of 16) and runs the int8 kernels shared with MOSS-Image and FLUX.3; `train.int8_grad_precision` is their backward precision |
 | `model.vae_path` | `vae/flux2_vae.safetensors` | The Flux2 VAE (128-channel latents, 16x down), the same file FLUX.3 and MOSS-Image use |
 | `model.text_encoder_path` | `text_encoders/qwen3vl_4b_int8_convrot.safetensors` | Qwen3-VL-4B-Instruct, the same file FLUX.3 uses |
 
-The DiT stays in bf16 on the GPU (about 16 GB). The text encoder and the VAE are loaded only while
+The DiT stays in bf16 on the GPU (about 16 GB; an INT8 file in `runtime` mode stays int8, about half). The text encoder and the VAE are loaded only while
 caching.
 
 ## What the model is
@@ -86,12 +87,16 @@ Checked numerically against ComfyUI's own modules (checkout of 2026-10-24):
 | Setting | Value | Source |
 |---|---|---|
 | LoRA | rank 32 / alpha 32, every Linear (`targets: all`: attention, SwiGLU and cross-attention of the refiner and main blocks, the Perceiver, every adaLN modulation, the input, timestep and output layers) | BRIA's script adapts every Linear at rank 64; Fizgig's Fibo 2.0 preset is rank 32 on all of them (it dropped the lighter preset that skipped the refiner and Perceiver). `targets: blocks` (199 adapters, rank 16) was this template's earlier setting |
-| Optimizer | Automagic3 from 1e-6, no weight decay | maltrainer's FLUX.3 / Krea 2 setup |
+| Optimizer | Automagic3 from 1e-6, no weight decay | maltrainer's FLUX.3 / Krea 2 setup. `optimizer: muon` at `learning_rate: 1e-4` is Fizgig's Fibo 2.0 preset (see below) |
 | Timesteps | `bria`: sigma = sigmoid(N(shift, 1)), shift rising linearly from 0.5 at 256 tokens to 1.15 at 4096; 10 % uniform | BRIA's `fine_tuning/train_lora.py` (the Flux2 scheduler's `mu` range) |
 | Caption dropout | 0.1 | BRIA |
 | EMA | 0.98 with warm-up; checkpoints save the average | as FLUX.3 |
 | Duration | 1500 steps, a checkpoint every 250 | as FLUX.3 |
 | Resolution | 1024 aspect buckets on a 16 px grid | the model's training area. 768 or 512 are faster and lighter |
+
+## Muon
+
+`train.optimizer: muon` (the web UI's **Muon (Fizgig's preset)**) is Fizgig's choice for its Fibo 2.0 LoRA presets: rank 32 on every Linear, EMA 0.98, 1e-4. Muon orthogonalises the momentum of each LoRA matrix (five Newton-Schulz iterations) and scales the step to AdamW's size, so AdamW's rates apply. It is PyTorch's `torch.optim.Muon` with the matrices of one shape done together, and takes the same steps as it (tested). Settings: `muon_weight_decay` (0.01), `muon_momentum` (0.95), `muon_nesterov` (true), `muon_ns_steps` (5), `muon_adjust_lr_fn` (`match_rms_adamw`; also `original`, `spectral_unclamped`). `train.weight_decay` is not read. Fizgig's preset trains 40 epochs at 0.25 MP; take `dataset.resolution: 512` for that size.
 
 ## Template: `templates/fibo2_bria_template.yaml` (BRIA's official recipe)
 
@@ -186,4 +191,4 @@ are saved in bf16 and load in ComfyUI's Fibo 2.0 workflows without conversion.
   about 14 s per step, finite loss, a loadable LoRA), but speed and VRAM at 1024 px are not
   measured. BRIA reports 31 GiB at 1024 px, rank 128 and 8 gradient-accumulation steps on an L40S.
 - Edit training, and the `text_render` images.
-- INT8 ConvRot DiT weights: Comfy-Org publishes `fibo2_dev_int8_convrot.safetensors` (8.4 GB) as well as Edit Turbo's; Fizgig decodes it to bf16 at load, this trainer does not yet.
+- INT8 ConvRot DiT weights on a GPU: the decode was checked on CPU against the real file (Comfy-Org's INT8 repack of Edit Turbo, the same format as the Dev one, whose decoded weights are within 1 % of the Dev bf16 file's), and the real file loads strictly in both modes. `int8_load: runtime` has not been run on a GPU with this model.

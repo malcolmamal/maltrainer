@@ -92,7 +92,7 @@ assertions added in the same commit as this document. The floor is the measured 
 | `finetune/repeats.py` | 21 / 21 | 100.0 | 21 / 21 | 100.0 | 98 |
 | `finetune/selection.py` | 11 / 11 | 100.0 | 11 / 11 | 100.0 | 98 |
 | `finetune/classes.py` | 14 / 15 | 93.3 | 14 / 15 | 93.3 | 91 |
-| `models/minimax_h3/int8_rotation.py` | 66 / 77 | 85.7 | 70 / 77 | 90.9 | 88 |
+| `models/minimax_h3/int8_rotation.py` | 66 / 77 | 85.7 | 75 / 82 | 91.5 | 88 |
 | `optimizers/automagic3_resume.py` (b) | 39 / 47 | 83.0 | 45 / 47 | 95.7 | 93 |
 | `optimizers/automagic3_base.py` (b) | 3 / 3 | 100.0 | 3 / 3 | 100.0 | 98 |
 | `models/moss_image/model_config.py` (b) | 23 / 31 | 74.2 | 30 / 31 | 96.8 | 94 |

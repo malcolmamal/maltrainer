@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 import torch
-from safetensors.torch import load_file, save_file
 
 from .runs import prepared, run_lora
 from .world import Workspace, named_weights
@@ -60,11 +59,36 @@ def test_a_missing_checkpoint_is_reported_by_the_loader(workspace: Workspace) ->
         trainer.load_transformer_and_lora()
 
 
-def test_an_int8_checkpoint_stops_the_run_with_the_reason(workspace: Workspace) -> None:
-    state = load_file(str(workspace.checkpoint))
-    state["layers.0.attention.qkv.comfy_quant"] = torch.zeros(4, dtype=torch.uint8)
-    save_file(state, str(workspace.checkpoint))
+def test_an_edit_turbo_int8_checkpoint_stops_the_run_with_the_reason(workspace: Workspace) -> None:
+    from tests.maltrainer.models.fibo2.int8_files import write_int8
+
+    path, _ = write_int8(workspace.root / "fibo2_edit_turbo_int8_convrot.safetensors")
     workspace.add_images(1)
 
     with pytest.raises(ValueError, match="Edit Turbo"):
-        run_lora(workspace.config())
+        run_lora(workspace.config(model={"transformer_path": str(path)}))
+
+
+def test_a_dev_int8_checkpoint_trains_decoded_by_default(workspace: Workspace) -> None:
+    from tests.maltrainer.models.fibo2.int8_files import write_int8
+
+    path, stored = write_int8(workspace.root / "fibo2_dev_int8_convrot.safetensors")
+    workspace.add_images(2)
+
+    trainer = run_lora(workspace.config(model={"transformer_path": str(path)}))
+
+    assert trainer.run_metadata["base_load"]["int8_load"] == "decode"
+    assert trainer.run_metadata["base_load"]["int8_layers"] == len(stored)
+    assert {p.dtype for p in trainer.transformer.parameters()} == {torch.float32}  # the tiny world trains in fp32
+
+
+def test_model_int8_load_runtime_keeps_the_dev_int8_linears_int8(workspace: Workspace) -> None:
+    from tests.maltrainer.models.fibo2.int8_files import write_int8
+
+    path, stored = write_int8(workspace.root / "fibo2_dev_int8_convrot.safetensors")
+    workspace.add_images(1)
+
+    trainer = prepared(workspace.config(model={"transformer_path": str(path), "int8_load": "runtime"}))
+
+    assert trainer.run_metadata["base_load"]["int8_load"] == "runtime"
+    assert trainer.transformer.get_submodule(stored[0]).weight.dtype == torch.int8
