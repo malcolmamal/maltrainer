@@ -36,8 +36,9 @@ def test_each_model_offers_its_optimizers_with_their_default_rates(client: TestC
     ]
 
 
-def test_krea2_offers_automagic3_prodigy_and_adamw8bit(client: TestClient) -> None:
-    assert [o["name"] for o in _models(client)["krea2"]["optimizers"]] == ["automagic3", "prodigy", "adamw8bit"]
+def test_krea2_offers_automagic3_prodigy_adamw8bit_and_muon(client: TestClient) -> None:
+    names = [o["name"] for o in _models(client)["krea2"]["optimizers"]]
+    assert names == ["automagic3", "prodigy", "adamw8bit", "muon"]
 
 
 def test_the_listing_carries_the_duration_defaults_and_auto_step_range(client: TestClient) -> None:

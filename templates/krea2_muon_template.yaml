@@ -1,0 +1,74 @@
+# Krea 2 LoRA template -- Muon, Fizgig's "Krea 2 Standard" preset (src/fizgig/families/krea2.py _preset(32, epochs=64):
+# every Fizgig Krea 2 preset is on Muon).
+#
+# Placeholders as in krea2_template.yaml: [person_to_train], [comfyui_models].
+#
+#   LoRA rank 32 / alpha 32 on every Linear (264), as Fizgig
+#   Muon at a flat 1e-4, Fizgig's default arguments: adjust_lr_fn=match_rms_adamw weight_decay=0.01 momentum=0.95
+#     nesterov=True ns_steps=5 (AdamW-sized steps, so AdamW's rates apply; train.weight_decay is not read)
+#   gradient clip 1.0, no warmup, batch 1, seed 42
+#   timesteps: logit-normal with the resolution-dependent krea2 shift (1.79 at 512 px)
+#   EMA 0.98, 0.25 MP (512 px buckets), 64 epochs
+#
+# Not ported from Fizgig: its per-image loss watch and per-image learning rate (KREA2_LOSS_WATCH / KREA2_PER_IMAGE_LR).
+# Muon has one rate per group, so isolation's side-by-sides can use lr_boost with it.
+
+model:
+  transformer_path: "[comfyui_models]/diffusion_models/krea2_raw_fp8_scaled.safetensors"
+  vae_path: "[comfyui_models]/vae/qwen_image_vae.safetensors"
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3vl_4b_fp8_scaled.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 512
+  aspect_mode: "bucket"
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 32
+  alpha: 32
+  prefix: "diffusion_model."
+  targets: "all"
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  # Duration: max_steps (> 0) wins; otherwise num_epochs full epochs.
+  max_steps: 0
+  num_epochs: 64
+  save_every: 0                  # only the final save (and s / q at the console)
+  timestep_distribution: "krea2_shift"
+  max_grad_norm: 1.0
+  optimizer: "muon"
+  learning_rate: 1.0e-4           # constant
+  muon_weight_decay: 0.01
+  muon_momentum: 0.95
+  muon_nesterov: true
+  muon_ns_steps: 5
+  muon_adjust_lr_fn: "match_rms_adamw"
+  ema_decay: 0.98                 # checkpoints save the average
+  # RAW samples with CFG against a negative prompt; an empty-prompt step now and then keeps the
+  # LoRA's unconditional branch in step.
+  caption_dropout: 0.05
+  # DOP (differential output preservation): see krea2_template.yaml. About 2x the step time; dop_every 2
+  # halves the extra cost.
+  dop: false
+  dop_class: "woman"
+  dop_multiplier: 1.0
+  dop_every: 1
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/krea2/[person_to_train]"
+  name: "krea2_[person_to_train]_muon"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

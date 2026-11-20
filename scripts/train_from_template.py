@@ -28,7 +28,11 @@ MODELS = {
     "krea2": (
         "train_krea2_lora.py",
         "templates/krea2_template.yaml",
-        {"prodigy": "templates/krea2_prodigy_template.yaml", "adamw8bit": "templates/krea2_adamw_template.yaml"},
+        {
+            "prodigy": "templates/krea2_prodigy_template.yaml",
+            "adamw8bit": "templates/krea2_adamw_template.yaml",
+            "muon": "templates/krea2_muon_template.yaml",
+        },
         {
             "transformer_path": ("diffusion_models", "krea2_raw_fp8_scaled.safetensors"),
             "vae_path": ("vae", "qwen_image_vae.safetensors"),
