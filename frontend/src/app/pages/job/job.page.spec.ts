@@ -81,12 +81,18 @@ describe('JobPage', () => {
     http.expectOne('/api/jobs/j1').flush(job);
     fixture.detectChanges();
 
-    expect(text(fixture, '.status')).toBe('running');
-    expect(text(fixture, '.summary')).toContain('cats');
-    expect(text(fixture, '.summary')).toContain('qwen_image_2_1 · automagic3');
-    expect(text(fixture, '.progressInfo')).toContain('10 / 40');
+    expect(text(fixture, '.status')).toBe('Training');
+    expect(text(fixture, 'ui-page-header h1')).toBe('cats');
+    expect(text(fixture, 'ui-page-header .description')).toBe(
+      'qwen_image_2_1 · automagic3 · 40 steps'
+    );
+    expect(text(fixture, '.summary')).toContain('/cfg/cats.yaml');
+    expect(text(fixture, '.progressInfo .big').replace(/\s+/g, ' ')).toBe('10 / 40 steps');
+    expect(text(fixture, '.progressInfo')).toContain('25% done');
     expect(fixture.componentInstance.progressPercent()).toBe(25);
-    expect(root(fixture).querySelector<HTMLElement>('.progressFill')?.style.width).toBe('25%');
+    expect(
+      root(fixture).querySelector<HTMLElement>('.progressCard ui-cook-timeline .fill')?.style.width
+    ).toBe('25%');
   });
 
   it('opens a websocket for the job id on the page host', () => {
@@ -162,8 +168,8 @@ describe('JobPage', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.logs()).toEqual([]);
-    expect(text(fixture, '.liveProgress .text')).toBe('20%|##');
-    expect(root(fixture).querySelector('.liveProgress')?.classList.contains('err')).toBe(true);
+    expect(text(fixture, 'ui-log-view .live .text')).toBe('20%|##');
+    expect(root(fixture).querySelector('ui-log-view .live')?.classList.contains('err')).toBe(true);
   });
 
   it('updates progress, status and job from socket messages', () => {
@@ -175,8 +181,8 @@ describe('JobPage', () => {
 
     socket().emit({ type: 'status', status: 'failed' });
     fixture.detectChanges();
-    expect(text(fixture, '.status')).toBe('failed');
-    expect(root(fixture).querySelector('.status')?.classList.contains('failed')).toBe(true);
+    expect(text(fixture, '.status')).toBe('Failed');
+    expect(root(fixture).querySelector('.status')?.classList.contains('ui-status--bad')).toBe(true);
 
     socket().emit({ type: 'status' });
     expect(fixture.componentInstance.status()).toBe('failed');
@@ -186,8 +192,10 @@ describe('JobPage', () => {
       job: { ...job, status: 'exited', progress: { step: 40, total: 40 } }
     });
     fixture.detectChanges();
-    expect(text(fixture, '.status')).toBe('exited');
-    expect(root(fixture).querySelector('.status')?.classList.contains('exited')).toBe(true);
+    expect(text(fixture, '.status')).toBe('Finished');
+    expect(root(fixture).querySelector('.status')?.classList.contains('ui-status--good')).toBe(
+      true
+    );
     expect(fixture.componentInstance.progressStep()).toBe(40);
   });
 
@@ -240,6 +248,87 @@ describe('JobPage', () => {
     fixture.destroy();
 
     expect(socket().closed).toBe(true);
+  });
+
+  it('charts the loss from progress lines and keeps them out of the log', () => {
+    const fixture = setup('j1');
+    http.expectOne('/api/jobs/j1').flush(job);
+    socket().emit({ type: 'progress', step: 12, total: 40 });
+    socket().emit({
+      type: 'log',
+      stream: 'stderr',
+      line: ' 30%|### | 12/40 [00:10<00:20, loss=0.2500, epoch=1/2]',
+      replace: true,
+      is_progress: true
+    });
+    socket().emit({ type: 'log', stream: 'stdout', line: 'step 20 loss=0.125 step=20' });
+    socket().emit({ type: 'log', stream: 'stdout', line: 'no numbers here' });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.loss()).toEqual([
+      { step: 12, loss: 0.25 },
+      { step: 20, loss: 0.125 }
+    ]);
+    expect(root(fixture).querySelectorAll('.lossCard polyline')).toHaveLength(2);
+    expect(fixture.componentInstance.logs().map((l) => l.line)).toEqual([
+      'step 20 loss=0.125 step=20',
+      'no numbers here'
+    ]);
+  });
+
+  it('measures speed between progress messages and estimates the time left', () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    try {
+      const fixture = setup('j1');
+      http.expectOne('/api/jobs/j1').flush(job);
+      socket().emit({ type: 'progress', step: 10, total: 1000 });
+      expect(fixture.componentInstance.secPerStep()).toBeNull();
+      expect(fixture.componentInstance.timeLeft()).toBeNull();
+
+      jest.setSystemTime(1_000_000 + 20_000);
+      socket().emit({ type: 'progress', step: 20, total: 1000 });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.secPerStep()).toBe(2);
+      expect(fixture.componentInstance.timeLeft()).toBe('33 min');
+      expect(text(fixture, '.progressInfo')).toContain('2.00 s per step');
+      expect(text(fixture, '.progressInfo')).toContain('33 min left');
+
+      socket().emit({ type: 'status', status: 'exited' });
+      expect(fixture.componentInstance.timeLeft()).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not take the replayed history on connect for live speed', () => {
+    jest.useFakeTimers({ now: 5_000_000 });
+    try {
+      const fixture = setup('j1');
+      http.expectOne('/api/jobs/j1').flush(job);
+      // On connect the backend replays its buffer: old progress arrives all at once.
+      for (const step of [100, 500, 1500]) socket().emit({ type: 'progress', step, total: 2000 });
+      expect(fixture.componentInstance.secPerStep()).toBeNull();
+
+      jest.setSystemTime(5_000_000 + 10_000);
+      socket().emit({ type: 'progress', step: 1501, total: 2000 });
+      expect(fixture.componentInstance.secPerStep()).toBe(10);
+      expect(fixture.componentInstance.timeLeft()).toBe('1 h 23 min');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('lists the run settings once the job is known', () => {
+    const fixture = setup('j1');
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.summary')).toBeNull();
+    expect(text(fixture, 'ui-page-header h1')).toBe('Training run');
+    expect(fixture.componentInstance.facts()).toEqual([]);
+    http.expectOne('/api/jobs/j1').flush(job);
+    fixture.detectChanges();
+    expect(
+      Array.from(root(fixture).querySelectorAll('.summary dt')).map((d) => d.textContent)
+    ).toEqual(['Model', 'Optimizer', 'Duration', 'Output folder', 'Config']);
   });
 
   it('can be destroyed without a socket', () => {

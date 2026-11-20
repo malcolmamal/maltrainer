@@ -1,40 +1,15 @@
 # Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.3.13.
+The maltrainer web UI: set up a training run, follow it live, and manage the queue. Angular 20, standalone
+components and signals, served by `npm start` on http://localhost:3003 with `/api` and `/ws` proxied to the
+backend on port 8008 (`run_webui.bat` / `run_webui.sh` start both).
 
-## Development server
+## Design system
 
-To start a local development server, run:
-
-```bash
-ng serve
-```
-
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Every screen is built from the components in `src/app/ui` and the colour tokens in `src/styles/_tokens.scss`,
+which define a dark and a light theme (the rail's theme switch, or the OS setting). The catalogue, the rules and
+how to add a component are in [AGENTS.md](AGENTS.md); `src/app/design-system.guard.spec.ts` fails the tests when
+a page writes its own colours or fonts, uses a raw control, or restyles a component.
 
 ## Testing
 
@@ -51,17 +26,3 @@ Coverage is collected from `src/**/*.ts` (not `main.ts`, specs, environments or 
 `jest.config.js` (`coverageThreshold`) sit just below the measured values, so `test:coverage` fails when coverage
 slips. They may only be raised, never lowered: write the missing test instead. CI runs lint, `test:coverage` and
 the build.
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

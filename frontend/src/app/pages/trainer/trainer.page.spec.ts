@@ -10,7 +10,7 @@ import {
   StartTrainRequest,
   TrainPlan
 } from '../../services/trainer-api.service';
-import { TrainerPage } from './trainer.page';
+import { formatMinutes, TrainerPage } from './trainer.page';
 
 const datasets: DatasetInfo[] = [
   { name: 'cats', path: '/d/cats', image_count: 12 },
@@ -107,7 +107,7 @@ describe('TrainerPage', () => {
   };
   const field = (label: string): HTMLInputElement | HTMLSelectElement => {
     const found = all('label.field').find(
-      (l) => l.querySelector('span')?.textContent?.trim() === label
+      (l) => l.querySelector('.label')?.textContent?.trim() === label
     );
     const control = found?.querySelector<HTMLInputElement | HTMLSelectElement>('input, select');
     if (!control) throw new Error(`No field "${label}"`);
@@ -167,16 +167,16 @@ describe('TrainerPage', () => {
     it('lists datasets, selects the first and prefers the Qwen model', () => {
       start();
 
-      expect(all('.datasetItem').map((d) => d.querySelector('h3')?.textContent)).toEqual([
+      expect(all('.datasetItem').map((d) => d.querySelector('.name')?.textContent)).toEqual([
         'cats',
         'dogs'
       ]);
-      expect(all('.datasetItem')[0].classList).toContain('active');
+      expect(all('.datasetItem')[0].getAttribute('aria-checked')).toBe('true');
       expect(page.selectedModelId()).toBe('qwen_image_2_1');
       expect(page.optimizer()).toBe('automagic3');
       expect(page.learningRate()).toBe(0.0001);
       expect(page.maxSteps()).toBeNull();
-      expect(text('.hint')).toBe('Trains at 1024px');
+      expect(text('.modelItem[aria-checked="true"] .meta')).toBe('Trains at 1024px');
     });
 
     it('falls back to the first model when Qwen is absent', () => {
@@ -257,7 +257,7 @@ describe('TrainerPage', () => {
       await settle();
 
       expect(page.selectedDataset()).toBe('dogs');
-      expect((field('Selected dataset') as HTMLSelectElement).value).toBe('dogs');
+      expect(all('.datasetItem')[1].getAttribute('aria-checked')).toBe('true');
       answerPlan();
     });
 
@@ -273,7 +273,8 @@ describe('TrainerPage', () => {
     it('resets every model-specific field when the model changes', async () => {
       start();
       answerPlan();
-      await type(field('Model'), 'z_image');
+      all('.modelItem')[1].click();
+      await settle();
 
       expect(page.selectedModelId()).toBe('z_image');
       expect(page.durationMode()).toBe('epochs');
@@ -322,7 +323,7 @@ describe('TrainerPage', () => {
     it('shows the optimizer note and the auto steps hint', () => {
       start();
       answerPlan();
-      const hints = all('.hint').map((h) => h.textContent?.replace(/\s+/g, ' ').trim());
+      const hints = all('.mt-hint').map((h) => h.textContent?.replace(/\s+/g, ' ').trim());
       expect(hints).toContain('Recommended for Qwen');
       expect(hints.some((h) => h?.includes('about 70 epochs') && h.includes('500–3000'))).toBe(
         true
@@ -338,14 +339,14 @@ describe('TrainerPage', () => {
     it('toggles between max steps and epochs inputs', () => {
       start();
       answerPlan();
-      expect(all('label.field span').map((s) => s.textContent)).toContain('Max steps');
+      expect(all('label.field .label').map((s) => s.textContent)).toContain('Max steps');
 
       button('Epochs').click();
       fixture.detectChanges();
       expect(page.durationMode()).toBe('epochs');
       expect(button('Epochs').getAttribute('aria-checked')).toBe('true');
-      expect(all('label.field span').map((s) => s.textContent)).toContain('Epochs');
-      expect(all('label.field span').map((s) => s.textContent)).not.toContain('Max steps');
+      expect(all('label.field .label').map((s) => s.textContent)).toContain('Epochs');
+      expect(all('label.field .label').map((s) => s.textContent)).not.toContain('Max steps');
 
       button('Max steps').click();
       fixture.detectChanges();
@@ -357,10 +358,10 @@ describe('TrainerPage', () => {
       start();
       answerPlan();
       expect((field('Trigger word') as HTMLInputElement).placeholder).toBe('cats (dataset name)');
-      expect(text('code')).toBe('cats, a woman, …');
+      expect(text('.qwenHint code')).toBe('cats, a woman, …');
       page.trigger.set('sks');
       fixture.detectChanges();
-      expect(text('code')).toBe('sks, a woman, …');
+      expect(text('.qwenHint code')).toBe('sks, a woman, …');
       answerPlan();
 
       page.selectModel('z_image');
@@ -450,11 +451,14 @@ describe('TrainerPage', () => {
         optimizer: 'automagic3'
       });
       expect(text('.planCard .inlineInfo')).toContain('840');
-      expect(text('.planCard .inlineInfo')).toContain('≈ 70 min');
+      expect(text('.planCard .inlineInfo')).toContain('≈ 1 h 10 min');
       expect(text('.planCard')).toContain('/out/cats');
       expect(text('.planCard')).toContain('checkpoint every 100 steps');
       expect(text('.note')).toBe('note one');
       expect(text('.warning')).toBe('careful');
+      expect(root().querySelector('.planCard ui-cook-timeline')?.getAttribute('aria-label')).toBe(
+        '840 steps, a checkpoint every 100'
+      );
     });
 
     it('shows a dash when the time estimate is unknown', () => {
@@ -490,7 +494,7 @@ describe('TrainerPage', () => {
 
       expect(page.plan()).toBeNull();
       expect(text('.error')).toBe('Output folder exists');
-      expect(root().querySelector('.planCard')).toBeNull();
+      expect(root().querySelector('.planCard ui-cook-timeline')).toBeNull();
     });
 
     it('joins validation messages from a list of details', () => {
@@ -575,8 +579,10 @@ describe('TrainerPage', () => {
       const items = all('.jobItem');
       expect(items).toHaveLength(2);
       expect(items[1].textContent).toContain('Qwen-Image 2.1 · automagic3 · 100 steps');
-      expect(items[1].textContent).toContain('5 / 50 · running');
+      expect(items[1].querySelector('.jobSteps')?.textContent).toBe('5 / 50');
+      expect(items[1].querySelector('ui-status-pill')?.textContent?.trim()).toBe('Training');
       expect(items[0].querySelector('a')?.getAttribute('href')).toBe('/jobs/q1');
+      expect(items[1].querySelector('ui-progress-bar')?.className).toContain('ui-progress--live');
     });
 
     it('falls back to the raw model id for unknown models', () => {
@@ -761,5 +767,18 @@ describe('TrainerPage', () => {
       jest.advanceTimersByTime(6000);
       http.expectNone('/api/jobs');
     });
+  });
+});
+
+describe('formatMinutes', () => {
+  it('shows minutes, hours with padded minutes, or a dash', () => {
+    expect(formatMinutes(null)).toBe('—');
+    expect(formatMinutes(47)).toBe('≈ 47 min');
+    expect(formatMinutes(60)).toBe('≈ 1 h 00 min');
+    expect(formatMinutes(125)).toBe('≈ 2 h 05 min');
+    // the backend sends one decimal
+    expect(formatMinutes(125.4)).toBe('≈ 2 h 05 min');
+    expect(formatMinutes(47.3)).toBe('≈ 47 min');
+    expect(formatMinutes(59.6)).toBe('≈ 1 h 00 min');
   });
 });

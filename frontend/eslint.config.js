@@ -42,6 +42,18 @@ module.exports = tseslint.config(
     },
   },
   {
+    // The design system (src/app/ui) uses the `ui` prefix: `ui-panel`, `button[uiButton]`.
+    // Only that folder may; pages and features keep the `app` prefix.
+    files: ["src/app/ui/**/*.ts"],
+    rules: {
+      "@angular-eslint/component-selector": "off",
+      "@angular-eslint/directive-selector": [
+        "error",
+        { type: "attribute", prefix: "ui", style: "camelCase" },
+      ],
+    },
+  },
+  {
     files: ["**/*.html"],
     extends: [
       ...angular.configs.templateRecommended,

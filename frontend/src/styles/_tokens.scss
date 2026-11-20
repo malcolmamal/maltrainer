@@ -1,0 +1,129 @@
+// Design tokens: the only place in the app where colour values are written.
+// Every component and page reads these custom properties; the guard spec
+// (src/app/design-system.guard.spec.ts) fails on colour literals anywhere else.
+//
+// Theme: dark by default, light when the OS asks for it, and either one forced by
+// `data-theme="light" | "dark"` on <html> (set by ThemeService).
+
+@mixin dark {
+  color-scheme: dark;
+  --mt-bg: #0e0f12;
+  --mt-rail: #0a0b0d;
+  --mt-surface: #15171b;
+  --mt-surface-2: #121418;
+  --mt-sunken: #0b0c0f;
+  --mt-hover: #1c1f24;
+  --mt-line: #1f2227;
+  --mt-line-strong: #2e3239;
+  --mt-text: #ecedef;
+  --mt-text-2: #a4a9b3;
+  --mt-text-3: #858b96;
+  --mt-track: #2a2e35;
+  --mt-tick: #5a606b;
+
+  --mt-accent: #ff7a3d;
+  --mt-accent-hover: #ff8f5c;
+  --mt-on-accent: #1a0c05;
+  --mt-accent-text: #ffb088;
+  --mt-accent-soft: rgba(255, 122, 61, 0.12);
+  --mt-accent-border: rgba(255, 122, 61, 0.6);
+  --mt-accent-disabled: #3a2c25;
+  --mt-on-accent-disabled: #8f7a70;
+
+  --mt-good: #7fb2ff;
+  --mt-good-text: #a9c9ff;
+  --mt-good-soft: rgba(127, 178, 255, 0.12);
+  --mt-good-border: rgba(127, 178, 255, 0.55);
+
+  --mt-warn: #f2b84b;
+  --mt-warn-text: #f6d597;
+  --mt-warn-soft: rgba(242, 184, 75, 0.09);
+  --mt-warn-border: rgba(242, 184, 75, 0.38);
+
+  --mt-danger: #ff5d6c;
+  --mt-danger-text: #ff8a94;
+  --mt-danger-soft: rgba(255, 93, 108, 0.1);
+  --mt-danger-border: rgba(255, 93, 108, 0.45);
+}
+
+@mixin light {
+  color-scheme: light;
+  --mt-bg: #f4f5f7;
+  --mt-rail: #eceef1;
+  --mt-surface: #ffffff;
+  --mt-surface-2: #ffffff;
+  --mt-sunken: #f0f1f4;
+  --mt-hover: #e7e9ed;
+  --mt-line: #e1e4e9;
+  --mt-line-strong: #c9ced6;
+  --mt-text: #16181c;
+  --mt-text-2: #474d57;
+  --mt-text-3: #5f6570;
+  --mt-track: #dde1e7;
+  --mt-tick: #9aa1ab;
+
+  --mt-accent: #f26a2e;
+  --mt-accent-hover: #ff7a3d;
+  --mt-on-accent: #1a0c05;
+  --mt-accent-text: #a83c0c;
+  --mt-accent-soft: rgba(242, 106, 46, 0.1);
+  --mt-accent-border: rgba(242, 106, 46, 0.65);
+  --mt-accent-disabled: #f1ddd3;
+  --mt-on-accent-disabled: #8f6f60;
+
+  --mt-good: #2f6fd6;
+  --mt-good-text: #1f55ad;
+  --mt-good-soft: rgba(47, 111, 214, 0.09);
+  --mt-good-border: rgba(47, 111, 214, 0.5);
+
+  --mt-warn: #c98a12;
+  --mt-warn-text: #7a5000;
+  --mt-warn-soft: rgba(201, 138, 18, 0.1);
+  --mt-warn-border: rgba(201, 138, 18, 0.45);
+
+  --mt-danger: #d93a4a;
+  --mt-danger-text: #b42333;
+  --mt-danger-soft: rgba(217, 58, 74, 0.08);
+  --mt-danger-border: rgba(217, 58, 74, 0.45);
+}
+
+:root {
+  @include dark;
+
+  --mt-font-ui: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mt-font-display: 'Bricolage Grotesque', 'Instrument Sans', system-ui, sans-serif;
+  --mt-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  --mt-space-1: 4px;
+  --mt-space-2: 8px;
+  --mt-space-3: 12px;
+  --mt-space-4: 16px;
+  --mt-space-5: 20px;
+  --mt-space-6: 24px;
+  --mt-space-7: 32px;
+  --mt-space-8: 40px;
+
+  --mt-radius-sm: 8px;
+  --mt-radius-md: 10px;
+  --mt-radius-lg: 12px;
+  --mt-radius-xl: 16px;
+  --mt-radius-pill: 999px;
+
+  --mt-control-h: 44px;
+  --mt-control-h-sm: 34px;
+  --mt-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    @include light;
+  }
+}
+
+:root[data-theme='light'] {
+  @include light;
+}
+
+:root[data-theme='dark'] {
+  @include dark;
+}

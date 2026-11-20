@@ -17,6 +17,10 @@ Run the quality gate before every commit: `.venv/Scripts/python -m maltrainer_qu
   merging: a module below its floor fails, a surviving mutant that is not equivalent gets an assertion (never a
   product-code edit), floors are only raised. It is not in the default gate. Rules and the scores:
   `docs/mutation-testing.md`.
+- **Frontend (`frontend/`):** read `frontend/AGENTS.md` first. Every screen uses the design system in
+  `frontend/src/app/ui` and the colour tokens in `frontend/src/styles/_tokens.scss` (dark and light). A guard test
+  fails the build on colour values, raw controls or restyled components outside them. Checks: `npm run lint`,
+  `npm run test:coverage`, `npm run build`.
 - Shared helpers live in `maltrainer/` (optimizers, finetune, data, utils); reuse them instead of copying between
   trainers.
 

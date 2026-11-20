@@ -1,84 +1,94 @@
-.appShell {
-  height: 100vh;
-  overflow: hidden; // Prevent body scrollbar
+.shell {
   display: flex;
-  flex-direction: column;
-  color: rgba(255, 255, 255, 0.92);
+  flex-wrap: wrap;
+  min-height: 100vh;
 }
 
-.appHeader {
-  flex-shrink: 0; // Don't shrink header
-  position: sticky;
-  top: 0;
-  z-index: 10;
+.rail {
+  flex: 1 1 232px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
-  background: rgba(12, 14, 18, 0.75);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-direction: column;
+  gap: 28px;
+  padding: var(--mt-space-5) 14px;
+  background: var(--mt-rail);
+  border-right: 1px solid var(--mt-line);
+}
+
+.content {
+  flex: 999 1 560px;
+  min-width: 0;
+  padding: 36px var(--mt-space-8) 72px;
 }
 
 .brand {
-  color: rgba(255, 255, 255, 0.92);
-  text-decoration: none;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.nav {
   display: flex;
-  gap: 12px;
-}
-
-.nav a {
-  color: rgba(255, 255, 255, 0.75);
-  text-decoration: none;
+  align-items: center;
+  gap: 10px;
   padding: 6px 10px;
-  border-radius: 10px;
-  position: relative;
+  color: var(--mt-text);
+  text-decoration: none;
+  font-size: 19px;
 }
 
-.nav a.active {
-  color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+.markFrame {
+  stroke: var(--mt-text);
 }
 
-.queueLink,
-.failedLink {
-  display: inline-flex;
+.markCurve {
+  stroke: var(--mt-accent);
+}
+
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navItem {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--mt-space-3);
+  min-height: var(--mt-control-h);
+  padding: 0 var(--mt-space-3);
+  border-radius: var(--mt-radius-md);
+  color: var(--mt-text-2);
+  text-decoration: none;
+  font-weight: 500;
 }
 
-.queueBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  color: white;
-  background: rgba(255, 90, 90, 0.9);
-  border-radius: 999px;
+.navItem:hover {
+  background: var(--mt-hover);
+  color: var(--mt-text);
 }
 
-.failedBadge {
-  @extend .queueBadge;
-  background: #ff3b30;
-  box-shadow: 0 0 8px rgba(255, 59, 48, 0.4);
+.navItem.active {
+  background: var(--mt-hover);
+  color: var(--mt-text);
 }
 
-.appMain {
-  flex: 1; // Take remaining space
-  overflow: hidden; // Prevent scrollbar here
-  padding: 0;
+.navItem.active ui-icon {
+  color: var(--mt-accent);
 }
 
+.railFoot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mt-space-2);
+  padding: 0 var(--mt-space-1);
+}
 
+.footLabel {
+  font-size: 12px;
+  color: var(--mt-text-3);
+}
+
+@media (max-width: 640px) {
+  .content {
+    padding: var(--mt-space-6) var(--mt-space-4) 56px;
+  }
+
+  .railFoot {
+    margin-top: 0;
+  }
+}

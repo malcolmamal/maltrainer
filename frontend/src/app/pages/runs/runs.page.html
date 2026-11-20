@@ -1,0 +1,79 @@
+<ui-page-header heading="Runs" [description]="summary()">
+  <button uiButton (click)="startNext()" [disabled]="startingQueue()">
+    {{ startingQueue() ? 'Starting…' : 'Start next' }}
+  </button>
+  <a uiButton variant="primary" routerLink="/trainer"><ui-icon name="plus" [size]="18" />New run</a>
+</ui-page-header>
+
+@if (jobsError()) {
+  <ui-alert class="jobsError">{{ jobsError() }}</ui-alert>
+}
+@if (actionError()) {
+  <ui-alert class="actionError">{{ actionError() }}</ui-alert>
+}
+
+<ui-segmented ariaLabel="Filter runs" [options]="filterOptions()" [(value)]="filter" />
+
+<div class="ui-table-box">
+  <table uiTable>
+    <thead>
+      <tr>
+        <th scope="col">Run</th>
+        <th scope="col">Optimizer</th>
+        <th scope="col">Progress</th>
+        <th scope="col">Status</th>
+        <th scope="col">Started</th>
+        <th scope="col"><span class="mt-visually-hidden">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (job of visible(); track job.job_id) {
+        <tr class="runRow">
+          <td>
+            <a class="runName mt-mono" [routerLink]="['/jobs', job.job_id]">{{ job.dataset }}</a>
+            <p class="runMeta">{{ modelLabel(job.model) }} · {{ job.duration }}</p>
+            @if (job.status === 'failed' && job.exit_code !== null) {
+              <p class="runError">
+                Exited with code {{ job.exit_code }}. Open the run for its output.
+              </p>
+            }
+          </td>
+          <td class="mt-mono">{{ job.optimizer }}</td>
+          <td>
+            <div class="progress mt-mono mt-num">
+              <ui-progress-bar
+                [value]="job.progress.step"
+                [max]="job.progress.total"
+                [tone]="tone(job.status)"
+              />
+              {{ job.progress.step }} / {{ job.progress.total }}
+            </div>
+          </td>
+          <td><ui-status-pill [status]="job.status" /></td>
+          <td class="mt-muted mt-num">
+            {{ job.status === 'queued' ? '—' : started(job.started_at) }}
+          </td>
+          <td>
+            <div class="rowActions">
+              @if (job.status === 'queued') {
+                <button uiButton size="sm" (click)="startJob(job.job_id)" [disabled]="hasRunning()">
+                  Start
+                </button>
+              }
+              <a uiButton size="sm" [routerLink]="['/jobs', job.job_id]">Open</a>
+            </div>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+  @if (loaded() && visible().length === 0) {
+    <p class="empty">
+      @if (jobs().length === 0) {
+        No runs yet. <a routerLink="/trainer">Set up the first one.</a>
+      } @else {
+        No runs match this filter.
+      }
+    </p>
+  }
+</div>

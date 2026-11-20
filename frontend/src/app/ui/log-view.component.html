@@ -1,0 +1,30 @@
+<div class="bar">
+  <ui-segmented ariaLabel="Show lines" [options]="filterOptions()" [(value)]="filter" />
+  <span class="follow" [class.paused]="!following()">
+    <span class="dot" aria-hidden="true"></span>
+    {{ following() ? 'Following new lines' : 'Paused: scroll to the bottom to follow' }}
+  </span>
+</div>
+@if (liveLine()) {
+  <div class="live mt-mono" [class.err]="liveStream() === 'stderr'">
+    <span class="stream">{{ liveStream() }}</span>
+    <span class="text">{{ liveLine() }}</span>
+  </div>
+}
+<div
+  #box
+  class="log mt-mono"
+  role="log"
+  aria-label="Training output"
+  tabindex="0"
+  (scroll)="onScroll()"
+>
+  @for (line of visible(); track $index) {
+    <div class="logLine" [class.err]="line.stream === 'stderr'">
+      <span class="stream">{{ line.stream }}</span>
+      <span class="text">{{ line.line }}</span>
+    </div>
+  } @empty {
+    <p class="empty">{{ lines().length ? 'No stderr lines yet.' : 'No output yet.' }}</p>
+  }
+</div>
