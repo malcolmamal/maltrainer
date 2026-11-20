@@ -42,7 +42,7 @@ def read_mask(path: str | Path) -> Image.Image:
         image.load()
         if image.mode in ("I;16", "I;16B", "I;16L", "I"):
             data = np.asarray(image, dtype=np.float64)
-            return Image.fromarray(np.clip(data / (257.0 if data.max() > 255 else 1.0), 0, 255).astype(np.uint8), "L")
+            return Image.fromarray(np.clip(data / (257.0 if np.max(data) > 255 else 1.0), 0, 255).astype(np.uint8), "L")
         if image.mode in ("RGBA", "LA", "PA") or (image.mode == "P" and "transparency" in image.info):
             rgba = image.convert("RGBA")
             flat: Image.Image = Image.alpha_composite(Image.new("RGBA", rgba.size, (0, 0, 0, 255)), rgba)
