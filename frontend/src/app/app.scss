@@ -1,11 +1,14 @@
+// The rail stays put and only the content scrolls, so the theme switch at the rail's foot is
+// always in view. On narrow screens the rail stacks on top and the whole page scrolls.
 .shell {
   display: flex;
-  flex-wrap: wrap;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
 }
 
 .rail {
-  flex: 1 1 232px;
+  flex: 0 0 232px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -15,8 +18,9 @@
 }
 
 .content {
-  flex: 999 1 560px;
+  flex: 1 1 0;
   min-width: 0;
+  overflow-y: auto;
   padding: 36px var(--mt-space-8) 72px;
 }
 
@@ -84,7 +88,22 @@
 }
 
 @media (max-width: 640px) {
+  .shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .rail {
+    flex: none;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--mt-line);
+  }
+
   .content {
+    flex: none;
+    overflow: visible;
     padding: var(--mt-space-6) var(--mt-space-4) 56px;
   }
 

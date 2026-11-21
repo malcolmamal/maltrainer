@@ -1,6 +1,6 @@
 <ui-page-header
   heading="New run"
-  description="Pick a dataset and a model, decide how long it cooks, and queue it. The run plan updates as you go."
+  description="Pick a model and a dataset, decide how long it cooks, and queue it. The run plan updates as you go."
 />
 
 @if (error()) {
@@ -9,37 +9,6 @@
 
 <div class="cols">
   <div class="formCol">
-    <section class="sec" aria-labelledby="h-dataset">
-      <div class="secHead">
-        <h2 id="h-dataset" class="mt-display">Dataset</h2>
-        <span class="mt-muted secMeta"
-          >{{ datasets().length }} folders in <code>DATASETS_PATH</code></span
-        >
-        <button uiButton size="sm" class="push" (click)="loadDatasets()" [disabled]="loading()">
-          Refresh
-        </button>
-      </div>
-      @if (loading()) {
-        <p class="placeholder">Loading datasets…</p>
-      } @else if (datasets().length === 0) {
-        <p class="placeholder">No datasets found.</p>
-      } @else {
-        <div class="datasetList" role="radiogroup" aria-labelledby="h-dataset">
-          @for (dataset of datasets(); track dataset.name) {
-            <button
-              uiChoice
-              class="datasetItem"
-              [selected]="dataset.name === selectedDataset()"
-              (click)="selectedDataset.set(dataset.name)"
-            >
-              <span class="name mt-mono">{{ dataset.name }}</span>
-              <span class="meta mt-num">{{ dataset.image_count }} images</span>
-            </button>
-          }
-        </div>
-      }
-    </section>
-
     <section class="sec" aria-labelledby="h-model">
       <div class="secHead">
         <h2 id="h-model" class="mt-display">Model</h2>
@@ -71,6 +40,63 @@
           }}: {{ modelsMissing().join(', ') }}. Set <code>COMFYUI_MODELS_PATH</code> to your ComfyUI
           <code>models</code> folder and restart the backend. Dry runs still work.
         </ui-alert>
+      }
+    </section>
+
+    <section class="sec" aria-labelledby="h-dataset">
+      <div class="secHead">
+        <h2 id="h-dataset" class="mt-display">Dataset</h2>
+        <span class="mt-muted secMeta"
+          >{{ datasets().length }} folders in <code>DATASETS_PATH</code></span
+        >
+        <button uiButton size="sm" class="push" (click)="loadDatasets()" [disabled]="loading()">
+          Refresh
+        </button>
+      </div>
+      @if (loading()) {
+        <p class="placeholder">Loading datasets…</p>
+      } @else if (datasets().length === 0) {
+        <p class="placeholder">No datasets found.</p>
+      } @else {
+        <div class="datasetTools">
+          <ui-field label="Filter" class="datasetFilter">
+            <input
+              uiInput
+              type="search"
+              placeholder="Part of a folder name"
+              autocomplete="off"
+              [ngModel]="datasetFilter()"
+              (ngModelChange)="datasetFilter.set($event)"
+            />
+          </ui-field>
+          <p class="mt-muted secMeta datasetCount" aria-live="polite">
+            @if (datasetFilter().trim()) {
+              {{ filteredDatasets().length }} of {{ datasets().length }} match
+            }
+            @if (selectedDataset()) {
+              <span class="selectedName"
+                >Selected <span class="mt-mono">{{ selectedDataset() }}</span></span
+              >
+            }
+          </p>
+        </div>
+        @if (filteredDatasets().length === 0) {
+          <p class="placeholder noMatch">No dataset matches “{{ datasetFilter().trim() }}”.</p>
+        } @else {
+          <div class="datasetList" role="radiogroup" aria-labelledby="h-dataset">
+            @for (dataset of filteredDatasets(); track dataset.name) {
+              <button
+                uiChoice
+                class="datasetItem"
+                [selected]="dataset.name === selectedDataset()"
+                (click)="selectedDataset.set(dataset.name)"
+              >
+                <span class="name mt-mono">{{ dataset.name }}</span>
+                <span class="meta mt-num">{{ dataset.image_count }} images</span>
+              </button>
+            }
+          </div>
+        }
       }
     </section>
 
@@ -221,7 +247,7 @@
       } @else if (planError()) {
         <ui-alert class="error planError">{{ planError() }}</ui-alert>
       } @else {
-        <p class="mt-hint">Pick a dataset and a model to see the plan.</p>
+        <p class="mt-hint">Pick a model and a dataset to see the plan.</p>
       }
       <div class="planActions">
         <button uiButton variant="primary" (click)="startTraining()" [disabled]="starting()">

@@ -65,10 +65,38 @@
   padding: var(--mt-space-3) 0;
 }
 
+.datasetTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--mt-space-2) var(--mt-space-5);
+}
+
+.datasetFilter {
+  flex: 1 1 260px;
+}
+
+.datasetCount {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mt-space-1) var(--mt-space-4);
+  min-height: var(--mt-control-h);
+  align-items: center;
+}
+
+.selectedName {
+  overflow-wrap: anywhere;
+}
+
+// Thousands of folders: the list scrolls on its own so the rest of the form stays in reach.
 .datasetList {
   display: flex;
   flex-direction: column;
   gap: var(--mt-space-2);
+  max-height: min(440px, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--mt-space-1);
 }
 
 .modelGrid {

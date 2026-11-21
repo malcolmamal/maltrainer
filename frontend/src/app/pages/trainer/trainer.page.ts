@@ -23,6 +23,16 @@ import { describeHttpError } from '../../services/http-error';
 import { Fact, SegmentOption, statusTone, UI } from '../../ui';
 
 /** "≈ 47 min", "≈ 2 h 05 min", or a dash when the backend has no estimate. */
+/** Datasets whose name holds every word of `query`, ignoring case. */
+export function filterDatasets(items: DatasetInfo[], query: string): DatasetInfo[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return items;
+  return items.filter((d) => {
+    const name = d.name.toLowerCase();
+    return words.every((w) => name.includes(w));
+  });
+}
+
 export function formatMinutes(estimate: number | null): string {
   if (estimate === null) return '—';
   // The backend sends one decimal; whole minutes are precise enough for an estimate.
@@ -47,6 +57,7 @@ export class TrainerPage implements OnDestroy {
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly selectedDataset = signal<string>('');
+  readonly datasetFilter = signal('');
   readonly dryRun = signal(false);
   readonly dryRunStepTime = signal(0.025);
   readonly starting = signal(false);
@@ -78,6 +89,8 @@ export class TrainerPage implements OnDestroy {
   readonly selectedInfo = computed(
     () => this.datasets().find((d) => d.name === this.selectedDataset()) ?? null
   );
+
+  readonly filteredDatasets = computed(() => filterDatasets(this.datasets(), this.datasetFilter()));
 
   readonly selectedModel = computed(
     () => this.models().find((m) => m.id === this.selectedModelId()) ?? null

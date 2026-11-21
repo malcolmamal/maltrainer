@@ -10,7 +10,7 @@ import {
   StartTrainRequest,
   TrainPlan
 } from '../../services/trainer-api.service';
-import { formatMinutes, TrainerPage } from './trainer.page';
+import { filterDatasets, formatMinutes, TrainerPage } from './trainer.page';
 
 const datasets: DatasetInfo[] = [
   { name: 'cats', path: '/d/cats', image_count: 12 },
@@ -259,6 +259,36 @@ describe('TrainerPage', () => {
       expect(page.selectedDataset()).toBe('dogs');
       expect(all('.datasetItem')[1].getAttribute('aria-checked')).toBe('true');
       answerPlan();
+    });
+
+    it('asks for the model before the dataset', () => {
+      start();
+      answerPlan();
+      expect(all('.sec h2').map((h) => h.textContent?.trim())).toEqual([
+        'Model',
+        'Dataset',
+        'Training'
+      ]);
+    });
+
+    it('filters datasets by name and keeps the selection when it is filtered out', async () => {
+      start();
+      answerPlan();
+      expect(text('.datasetCount')).toBe('Selected cats');
+
+      await type(field('Filter'), 'DO');
+      expect(all('.datasetItem .name').map((n) => n.textContent)).toEqual(['dogs']);
+      expect(text('.datasetCount')).toContain('1 of 2 match');
+      expect(page.selectedDataset()).toBe('cats');
+      expect(text('.selectedName')).toBe('Selected cats');
+
+      await type(field('Filter'), 'zebra');
+      expect(all('.datasetItem')).toEqual([]);
+      expect(text('.noMatch')).toBe('No dataset matches “zebra”.');
+
+      await type(field('Filter'), '  ');
+      expect(all('.datasetItem')).toHaveLength(2);
+      expect(text('.datasetCount')).toBe('Selected cats');
     });
 
     it('refreshes datasets with the button and disables it while loading', () => {
@@ -767,6 +797,25 @@ describe('TrainerPage', () => {
       jest.advanceTimersByTime(6000);
       http.expectNone('/api/jobs');
     });
+  });
+});
+
+describe('filterDatasets', () => {
+  const items: DatasetInfo[] = [
+    { name: 'Inkwash_Style-v2', path: '', image_count: 1 },
+    { name: 'inkwash_portraits', path: '', image_count: 1 },
+    { name: 'oil_style', path: '', image_count: 1 }
+  ];
+  const names = (query: string): string[] => filterDatasets(items, query).map((d) => d.name);
+
+  it('matches every word, in any order, ignoring case', () => {
+    expect(names('INKWASH')).toEqual(['Inkwash_Style-v2', 'inkwash_portraits']);
+    expect(names('style ink')).toEqual(['Inkwash_Style-v2']);
+    expect(names('style  oil')).toEqual(['oil_style']);
+  });
+
+  it('returns the list itself for an empty query', () => {
+    expect(filterDatasets(items, ' 	')).toBe(items);
   });
 });
 
