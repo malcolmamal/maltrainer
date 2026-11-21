@@ -126,3 +126,62 @@ def test_the_checkpoint_name_is_output_name_without_its_extension_or_a_default(
     trainer = Krea2FinetuneTrainer(workspace.finetune_config(output={"name": name}))
 
     assert trainer._name() == expected
+
+
+def test_a_numbered_save_is_skipped_when_the_model_fits_but_its_resume_state_does_not(
+    workspace: Workspace, disk: SimpleNamespace, caplog: pytest.LogCaptureFixture
+) -> None:
+    trainer = _trained(workspace)
+    state = finetune_save.state_bytes(trainer)
+    disk.free = trainer._model_bytes() + finetune_save.DISK_MARGIN  # the model alone would fit
+
+    with caplog.at_level(logging.ERROR):
+        saved = trainer.save_checkpoint(7)
+
+    assert state > 0 and saved is False and not list(workspace.out.glob("ft_step_7*"))
+    assert "Not saving step 7" in caplog.text
+    disk.free += state
+    assert trainer.save_checkpoint(8) is True and (workspace.out / "ft_state").is_dir()
+
+
+def test_without_a_resume_state_only_the_model_has_to_fit(workspace: Workspace, disk: SimpleNamespace) -> None:
+    trainer = _trained(workspace, save_state=False)
+    disk.free = trainer._model_bytes() + finetune_save.DISK_MARGIN
+
+    assert trainer.save_checkpoint(7) is True
+
+
+def test_a_failed_state_write_has_closed_its_file_so_the_unfinished_state_can_be_removed(
+    workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On Windows a file still open cannot be deleted: torch.save given a path kept it open while the error
+    # was handled, and the 11 GB unfinished state stayed on a full disk
+    trainer = _trained(workspace)
+    targets: list[Any] = []
+
+    def fail(_obj: Any, target: Any) -> None:
+        targets.append(target)
+        raise RuntimeError("unexpected pos")
+
+    monkeypatch.setattr(finetune_save.torch, "save", fail)
+    assert trainer.save_checkpoint(5) is True
+
+    assert len(targets) == 1 and targets[0].closed
+    assert not (workspace.out / "ft_state.tmp").exists()
+
+
+def test_an_unfinished_state_that_cannot_be_removed_is_reported_with_its_path(
+    workspace: Workspace, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    trainer = _trained(workspace)
+
+    def fail(_state_dir: Path, _weights: Path) -> None:
+        (workspace.out / "ft_state.tmp").mkdir()
+        raise OSError("disk full")
+
+    monkeypatch.setattr(trainer, "_save_state", fail)
+    monkeypatch.setattr(finetune_save.shutil, "rmtree", lambda *_args, **_kwargs: None)  # Windows refuses
+    with caplog.at_level(logging.ERROR):
+        trainer.save_checkpoint(5)
+
+    assert f"Could not remove {workspace.out / 'ft_state.tmp'}" in caplog.text

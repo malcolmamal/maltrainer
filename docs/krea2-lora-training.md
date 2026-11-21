@@ -14,6 +14,7 @@ python train_krea2_lora.py --config my_krea2_config.yaml
 run_krea2_training.bat feliciaday            # fills templates/krea2_template.yaml (Automagic3)
 run_krea2_training.bat feliciaday prodigy    # fills templates/krea2_prodigy_template.yaml
 run_krea2_training.bat feliciaday adamw8bit  # fills templates/krea2_adamw_template.yaml
+run_krea2_training.bat feliciaday muon       # fills templates/krea2_muon_template.yaml
 ```
 
 The third is the web UI: pick **Krea 2**, a dataset and an optimizer.
@@ -105,6 +106,23 @@ Alpha 1 scales the LoRA by 1/16, so that 3e-4 moves the weights about as much as
 alpha = rank: five times less than this template. Prodigy estimates its own step size and makes up
 for the 1/16, which likely explains why Prodigy did better than AdamW in OneTrainer.
 
+### Muon — `templates/krea2_muon_template.yaml` (Fizgig Standard on Muon)
+
+Fizgig's "Krea 2 Standard" preset (`families/krea2.py`, `_preset(32, epochs=64)`): every Fizgig Krea 2
+preset trains with Muon.
+
+| Setting | Value |
+|---|---|
+| LoRA | rank 32 / alpha 32, all 264 Linears |
+| Optimizer | Muon, flat 1e-4, Fizgig's default arguments: orthogonalised momentum with AdamW-sized steps (`match_rms_adamw`), so AdamW's rates apply |
+| Muon settings | `muon_weight_decay` 0.01, `muon_momentum` 0.95, `muon_nesterov` true, `muon_ns_steps` 5; `train.weight_decay` is not read |
+| Other | gradient clip 1.0, no warmup, batch 1, EMA 0.98, 0.25 MP (512), `krea2_shift` timesteps, caption dropout 0.05 (maltrainer's) |
+| Duration | 64 epochs; no intermediate checkpoints (`save_every: 0`), only the final one |
+
+Not ported: Fizgig's per-image loss watch and per-image learning rate. Muon has one rate per group, so
+isolation's side-by-sides `lr_boost` works with it (not with Automagic3). Muon is also in the web UI's
+optimizer list for Krea 2.
+
 ### Prodigy — `templates/krea2_prodigy_template.yaml` (your OneTrainer recipe)
 
 These are the values OneTrainer actually resolves from `krea2prodigy_template.json`. Several keys
@@ -153,11 +171,75 @@ prompt names them. The pass has its own backward. The log shows its loss as `DOP
 - **Class.** Use the word your prompts use for other people: `woman`, `man`, `person`.
 - **Cost.** About 2× the step time. `dop_every: 2` runs it on every second sample. Fizgig's
   Isolation does that at `dop_multiplier: 2`: the same average preservation for half the cost.
-- **Not included:** the rest of Fizgig's Isolation (fused trigger+class tokens, side-by-side
-  composites with strangers, several subjects in one LoRA). DOP alone is the "Leave the rest of
-  the model alone" setting on Fizgig's Subjects card.
+- **More than DOP:** several subjects in one LoRA, side-by-side pictures with strangers and joined
+  trigger words are [below](#several-subjects-in-one-lora-fizgig-lora-isolation). On its own, DOP is
+  the "Leave the rest of the model alone" setting on Fizgig's Subjects card.
 
 DOP is off in all three templates. In the web UI, turn it on in the template before a run.
+
+## Several subjects in one LoRA (Fizgig LoRA Isolation)
+
+Up to four people (or animals, things, styles) train into one LoRA, and each stays itself: stand them
+in one picture, or next to someone the model knows, and no face leaks. It combines DOP with Fizgig's
+own layers. Start from `templates/examples/train_krea2_lora_isolation.yaml`; `isolation.subjects` lists
+one folder and one trigger word per subject.
+
+```yaml
+isolation:
+  subjects:
+    - {path: datasets/zwxem, trigger: zwxem}
+    - {path: datasets/qrxt, trigger: qrxt}
+  side_by_side: {enabled: true, strangers_path: C:/path/to/multi_person_strangers}
+```
+
+| Part | What it does |
+|---|---|
+| Joined trigger | `zwxem, a woman smiling` trains as `zwxemwoman smiling`, so the subject never shares the plain " woman" token every other woman uses. The caption files are not changed. `fuse_triggers: false` reads them as written; `as_written: true` means they already hold the joined word |
+| DOP for every subject | One trigger-free caption per picture: each joined word swapped for its class phrase (`a woman and a man laughing`). Turned on at Fizgig's setting, every second step at weight 2, unless `train.dop` says otherwise. A caption naming no subject gets no pass; none at all refuses the run |
+| Balance | Smaller folders repeat so each subject trains about as often as the largest (`balance: false` switches it off) |
+| Side-by-sides | 16 per person (`per_subject`): one of the person's photos next to a stranger in one 2:1 frame, the stranger described first. They are built in `<output.path>/side_by_side` and train at `lr_boost` times the rate on their own steps. People only. They need a folder of strangers (`strangers.json` + pictures): Fizgig's published set, `ShootTheSound/fizgig-multi-person-strangers`, works as it is. Image Prep's `FaceCrop_` files are picked first; there is no face detector here, so other photos are centre-cropped |
+
+How to caption, choose trigger words and prompt the finished LoRA: Fizgig's `MULTI_PERSON.md` applies
+(the joined word in prompts, other people described, about 1.6x the epochs for two subjects of one kind).
+
+The full guide (dataset layout, captioning, trigger words, run length, prompting, troubleshooting) is
+[krea2-multi-subject-lora.md](krea2-multi-subject-lora.md).
+
+Things to know:
+- **`lr_boost` needs a single-rate optimizer.** Automagic3 adapts every weight's own rate, so there the
+  side-by-sides train at the normal rate and the log says so. Use `adamw`, `adamw8bit` or `muon`.
+- **Triggers** should start with different letters; the run warns when they don't.
+- **A style** (`kind: style`) keeps its trigger as written and gets no side-by-sides; its trigger is
+  simply dropped from DOP's caption.
+- **Cost:** about 1.5x a normal LoRA.
+- **Not copied from Fizgig:** its face detector, its "Check a trigger word" tool and the Subjects card.
+
+## Masked training
+
+Train on the part of each picture that matters: the subject, not the room. A black-and-white mask beside
+a picture (`beach.jpg` and `beach-masklabel.png`) says which part counts. White trains fully, black only
+as much as `masks.floor` says. The picture still trains whole, so the LoRA sees the subject in their
+scene and stops copying the scene. Masks from Fizgig or OneTrainer work as they are.
+
+```yaml
+masks:
+  enabled: true
+  floor: 0.1     # how much outside the mask counts: 0.1 keeps a little background; 0 ignores it
+  prior: 0.5     # optional: outside the mask, hold the LoRA to the base model's own picture
+```
+
+- A picture without a mask, or with one that can't be used (all black, or not its picture's shape:
+  cropped or rotated after the mask was made), trains as normal and the log names the mask. With
+  `enabled: true` and no usable mask anywhere, the run refuses to start.
+- **Each picture counts the same.** The weights are scaled to mean 1 per picture, so a small mask is not
+  trained more weakly than a big one.
+- **`prior`** (masked prior preservation, OneTrainer and ai-toolkit's `inverted_mask_prior`): at each
+  masked step the base model's prediction (adapters off) is the target outside the mask, at `prior`
+  times the inside's weight. One extra forward pass per masked picture.
+- **Mask files are never training images.** Anything named `*-masklabel.*` is left out of the dataset.
+- **The saved LoRA says so:** `maltrainer_masked_training` holds the floor, the prior and how many
+  pictures had a mask.
+- Masks and subjects cover the LoRA entry point (`train_krea2_lora.py`). The finetune trainers are unchanged.
 
 ## Text-fusion boost
 
@@ -198,6 +280,13 @@ file against the original before keeping it.
 | `train.dop_class` | — | The word that replaces the trigger in DOP's captions |
 | `train.dop_multiplier` | 1.0 | Weight of the DOP loss |
 | `train.dop_every` | 1 | Run the DOP pass on every Nth sample |
+| `masks.enabled` | `false` | Weight each picture's loss by the `-masklabel` mask beside it (see [Masked training](#masked-training)) |
+| `masks.floor` | 0.1 | The weight outside the mask |
+| `masks.prior` | 0 | Hold the outside of the mask to the base model's prediction, at this weight |
+| `isolation.subjects` | — | One to four `{path, trigger, what, kind, default_caption}` subjects (see [Several subjects](#several-subjects-in-one-lora-fizgig-lora-isolation)); the first stands in for `dataset.path` |
+| `isolation.fuse_triggers` / `as_written` | `true` / `false` | Read `trigger, a woman` as `triggerwoman`; or the captions already hold the joined word |
+| `isolation.balance` | `true` | Repeat smaller folders so every subject trains about as often |
+| `isolation.side_by_side.*` | off | `enabled`, `strangers_path`, `per_subject` (16), `lr_boost` (2.0), `panel` (512, each half's side) |
 | `train.max_steps` / `num_epochs` | — | `max_steps` > 0 wins |
 | `output.name` | `krea2_lora` | `<name>.safetensors` for the final checkpoint, `<name>_step_N` for the others |
 

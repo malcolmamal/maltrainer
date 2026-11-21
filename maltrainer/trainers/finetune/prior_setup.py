@@ -99,8 +99,12 @@ class FinetunePriorSetup(FinetuneDataset):
             )
         prior.load(path)
         missing = {k: c for k, c in captions.items() if self._rel(k) not in prior}
-        if not missing:
+        changed = {k: c for k, c in captions.items() if k not in missing and prior.captions[self._rel(k)] != c}
+        if not (missing or changed):
             return
+        if changed:
+            logger.info("Prior: %d image(s) re-captioned since it was recorded; recording them anew", len(changed))
+        missing.update(changed)  # a recorded prediction answers the caption it was recorded with
         logger.info(
             "Prior: %d image(s) added since it was recorded; recording theirs from the original "
             "weights in %s (~%.0f min)",

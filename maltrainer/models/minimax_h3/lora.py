@@ -11,7 +11,7 @@ from typing import Any, cast
 import torch
 from torch import nn
 
-from maltrainer.models.minimax_h3.lora_assistant import AssistantAttacher, read_adapter_pairs
+from maltrainer.models.minimax_h3.lora_assistant import attach_assistant
 from maltrainer.models.minimax_h3.lora_inject import inject_lora_layers
 from maltrainer.models.minimax_h3.lora_layers import GridAdaLNLoRA, MiniMaxH3LoRALayer
 
@@ -117,28 +117,18 @@ class MiniMaxH3LoRANetwork(nn.Module):
         silu(t_emb) precomputed on the table's grid (Fizgig ships it as
         ``assets/h3_silu_temb_grid.safetensors``). Without it they are skipped with a warning.
         """
-        pairs = read_adapter_pairs(path)
-
+        layers, attached = attach_assistant(
+            self.transformer,
+            path,
+            (self.prefix, multiplier, adaln_grid_path),
+            (device, dtype),
+            self._wrap_forward,
+            logger,
+        )
         if not hasattr(self, "assistant_layers"):
             self.assistant_layers = nn.ModuleDict()
-
-        attacher = AssistantAttacher(self.transformer, self.prefix, multiplier, device, dtype, adaln_grid_path)
-        for name, parts in sorted(pairs.items()):
-            if "down" not in parts or "up" not in parts:
-                continue
-            module_path, module = attacher.resolve(name)
-            if module is None:
-                continue
-            layer = attacher.build(module_path, module, parts)
-            if layer is None:
-                continue
-
-            self.assistant_layers[module_path.replace(".", "_")] = layer
-            self._wrap_forward(module, layer)
-            attacher.attached += 1
-
-        attacher.report(path, logger)
-        return attacher.attached
+        self.assistant_layers.update(layers)
+        return attached
 
     def set_lora_dtype(self, device: torch.device | str, dtype: torch.dtype) -> None:
         """Move/cast only the adapters, leaving the frozen base untouched.

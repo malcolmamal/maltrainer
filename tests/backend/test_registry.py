@@ -88,3 +88,13 @@ def test_a_missing_template_file_is_a_server_error(tweak_spec: Callable[..., spe
         files.load_template(spec, "alice")
 
     assert (error.value.status_code, error.value.detail) == (500, "Template not found: templates/nope.yaml")
+
+
+def test_krea2_offers_muon_with_its_own_template() -> None:
+    spec = registry.MODELS["krea2"]
+
+    muon = files.load_template(spec, "alice", "muon")
+
+    assert "muon" in [o.name for o in spec.optimizers]
+    assert (muon["train"]["optimizer"], muon["train"]["learning_rate"], muon["lora"]["rank"]) == ("muon", 1e-4, 32)
+    assert muon["train"]["muon_adjust_lr_fn"] == "match_rms_adamw" and muon["dataset"]["trigger"] == "alice"

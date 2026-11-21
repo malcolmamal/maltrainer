@@ -1,0 +1,55 @@
+// Layout only. Colours, controls and surfaces come from the design system (src/app/ui).
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mt-space-6);
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+table {
+  min-width: 860px;
+}
+
+.runName {
+  color: var(--mt-text);
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--mt-accent-text);
+    text-decoration: underline;
+  }
+}
+
+.runMeta {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--mt-text-3);
+}
+
+.runError {
+  margin-top: var(--mt-space-1);
+  font-size: 13px;
+  color: var(--mt-danger-text);
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.empty {
+  padding: var(--mt-space-8) var(--mt-space-4);
+  text-align: center;
+  color: var(--mt-text-3);
+}

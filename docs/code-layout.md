@@ -28,7 +28,7 @@ table and forbids module-level import cycles).
 
 | Path | What it is |
 |---|---|
-| `train_<model>_lora.py`, `train_krea2_finetune.py`, `train_moss_image_finetune.py`, `train_zimage_embedding.py` (deprecated) | One entry point per trainer: FLUX.3 [klein], Fibo 2.0, Krea 2, MOSS-Image, MiniMax H3, Qwen-Image 2.1, Z-Image (LoRA and textual inversion), and the two full finetunes. Each also has a `run_*.bat` launcher. |
+| `train_<model>_lora.py`, `train_krea2_finetune.py`, `train_minimax_h3_image_finetune.py`, `train_moss_image_finetune.py`, `train_zimage_embedding.py` (deprecated) | One entry point per trainer: FLUX.3 [klein], Fibo 2.0, Visage-Image, LTX-2.5, Krea 2, MOSS-Image, MiniMax H3, Qwen-Image 2.1, Z-Image (LoRA and textual inversion), and the three full finetunes. Each also has a `run_*.bat` launcher. |
 | `check_weights.py`, `compare_loras.py`, `inspect_lora.py` | Small root-level LoRA inspection tools. |
 | `scripts/` | Command-line tools that are not trainers: merge, resize and extract LoRAs, merge checkpoints and LoRAs into a model (`merge_lora_into_model.py` + `merge_into_model_*`), INT8 ConvRot to and from plain files, inspect metadata, inference, the Qwen 2.1 benchmark, `train_from_template.py`. Helper modules sit next to the script that uses them (`scripts` has no package). |
 | `backend/` | The web UI's FastAPI service (see below). |
@@ -44,13 +44,13 @@ table and forbids module-level import cycles).
 
 ### `training/`: shared trainer machinery
 `session.py` (accelerator, seeds, device), `steps.py` (step and epoch planning), `loop.py` (`StepLoop` with hooks),
-`image_lora.py` (`ImageLoRATrainer`, the base of the FLUX.3, Fibo 2.0, Krea 2 and MOSS-Image LoRA trainers), `optimizer.py`,
-`progress.py`, `saving.py`, `sigma.py` (timestep sampling), `dop.py` (differential output preservation), `cli.py`.
+`image_lora.py` (`ImageLoRATrainer`, the base of the FLUX.3, Fibo 2.0, Visage-Image, LTX-2.5, Krea 2 and MOSS-Image LoRA trainers), `optimizer.py`,
+`progress.py`, `saving.py`, `sigma.py` (timestep sampling), `dop.py` (differential output preservation), `masked_loss.py` (the mask-weighted loss and its prior), `cli.py`.
 H3, Qwen 2.1 and Z-Image have loops that differ too much to share the base; they reuse only the small pieces.
 
 ### `trainers/<model>/`: one model's pipeline
-Not every trainer has a package here. `trainers/` exists for Fibo 2.0 (its sigma sampler only), MiniMax H3, MOSS-Image, Qwen-Image 2.1, Z-Image and the
-two finetunes' parts. The FLUX.3 [klein], Fibo 2.0 and Krea 2 LoRA trainers are classes on `ImageLoRATrainer` that live in
+Not every trainer has a package here. `trainers/` exists for Fibo 2.0 (its sigma sampler only), Visage-Image (sigma, preview sampler and keys), LTX-2.5 (data, caching, step, sigma), MiniMax H3, MOSS-Image, Qwen-Image 2.1, Z-Image and the
+two finetunes' parts. The FLUX.3 [klein], Fibo 2.0, Visage-Image, LTX-2.5 and Krea 2 LoRA trainers are classes on `ImageLoRATrainer` that live in
 their root `train_*.py` files (still under 200 lines), and the finetune entry points import the LoRA script they
 extend (`train_krea2_finetune.py` -> `train_krea2_lora.py`, `train_moss_image_finetune.py` -> `train_moss_image_lora.py`).
 Modules by role: `data` (what is loaded), `model` (loading and wiring), `step` (one forward/backward), `loop`,
@@ -62,6 +62,9 @@ order). The finetunes are split into `finetune_*` modules:
   class in the method resolution order is declared under `if TYPE_CHECKING:`.
 - `trainers/krea2/finetune_*`: `host`, `model`, `optimizer`, `loop`, `step`, `save`; `previews` (Krea 2's sampler
   and decoder on MOSS-Image's `PreviewHooks`, and the gallery).
+- `trainers/krea2/lora_*`: the LoRA entry point's trainer, `lora_masked` (masks) then `lora_subjects` (up to four
+  subjects, side-by-sides, the higher rate) on `Krea2LoRATrainer`. The finetune builds on `Krea2LoRATrainer` itself and
+  never uses them.
 - `trainers/finetune/`: the mixins both finetunes share, `dataset` (regularisation images, per-folder repeats, the
   dataset fingerprint, --suggest-steps) and `prior_setup` (the prior recorded before the first step, reloaded on
   resume). They are mixins on `ImageLoRATrainer`, so they live with the trainers, not in `finetune/`.
@@ -89,9 +92,11 @@ working. Tests patch a name in the module where the code looks it up; moving a n
 `prodigy.py`: `build_prodigy`, shared by the trainers that offer Prodigy.
 
 ### `data/`
-`dataset.py` and one dataset per model (`flux3_dataset`, also used by Fibo 2.0, `krea2_dataset`, `qwen_dataset`, `minimax_dataset` +
+`dataset.py` and one dataset per model (`flux3_dataset`, also used by Fibo 2.0 and Visage-Image, `krea2_dataset`, `qwen_dataset`, `minimax_dataset` +
 `minimax_scan`), `walk.py` (the one directory walk: skips hidden folders), `media.py` (images and video frames),
-`disk_cache.py` (latent and embedding cache, shared by the MOSS trainers).
+`disk_cache.py` (latent and embedding cache, shared by the MOSS trainers). Krea 2 LoRA only: `masks.py` (the
+`-masklabel` files onto the latent grid), `subjects.py` + `subject_text.py` (up to four subjects, joined triggers,
+DOP captions) and `composites.py` (side-by-sides with strangers).
 
 ### `finetune/`
 Full-finetuning building blocks: `selection` (which parameters train), `rotation` (Krea 2 fp8 window rotation) and

@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from backend.registry_fibo2 import FIBO2
+from backend.registry_ltx25 import LTX25
+from backend.registry_visage import VISAGE
 from backend.specs import ModelSpec, OptimizerSpec
 
 MODELS: dict[str, ModelSpec] = {
@@ -87,6 +89,12 @@ MODELS: dict[str, ModelSpec] = {
                 OptimizerSpec(
                     "adamw8bit", "AdamW 8-bit (Fizgig Standard)", 1e-4, "rank 32, every Linear, flat 1e-4, EMA 0.98"
                 ),
+                OptimizerSpec(
+                    "muon",
+                    "Muon (Fizgig's preset)",
+                    1e-4,
+                    "rank 32, every Linear, flat 1e-4, EMA 0.98; AdamW-sized steps, so AdamW's rates apply",
+                ),
             ),
             default_optimizer="automagic3",
             default_duration_mode="steps",
@@ -103,6 +111,7 @@ MODELS: dict[str, ModelSpec] = {
             optimizer_templates=(
                 ("prodigy", "templates/krea2_prodigy_template.yaml"),
                 ("adamw8bit", "templates/krea2_adamw_template.yaml"),
+                ("muon", "templates/krea2_muon_template.yaml"),
             ),
             output_prefix="krea2_",
             caption_from_trigger=True,
@@ -171,6 +180,8 @@ MODELS: dict[str, ModelSpec] = {
             caption_from_trigger=True,
         ),
         FIBO2,
+        LTX25,
+        VISAGE,
     )
 }
 

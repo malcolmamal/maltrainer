@@ -87,3 +87,11 @@ def test_bria_template_leaves_the_sigma_draw_unclamped() -> None:
 
     assert clamped(torch.tensor([0.0, 1.0]), train).tolist() == [0.0, 1.0]
     assert clamped(torch.tensor([0.0, 1.0]), {}).tolist() == pytest.approx([0.001, 0.999])
+
+
+def test_the_main_template_adapts_every_linear_like_the_reference_trainers() -> None:
+    """BRIA's script and Fizgig's Fibo 2.0 preset (rank 32, "full model") adapt every Linear, the Perceiver, the
+    adaLN modulations and the input, timestep and output layers included."""
+    config = yaml.safe_load((TEMPLATE.parent / "fibo2_template.yaml").read_text(encoding="utf-8"))
+
+    assert (config["lora"]["targets"], config["lora"]["rank"], config["lora"]["alpha"]) == ("all", 32, 32)

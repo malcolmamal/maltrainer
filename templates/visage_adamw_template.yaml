@@ -1,0 +1,85 @@
+# Visage-Image LoRA template -- AdamW (train_visage_lora.py), the plain-optimizer alternative to visage_template.yaml.
+#
+# Used by the web UI, which fills in the placeholders:
+#   [person_to_train]   dataset folder name (also the default trigger word)
+#   [comfyui_models]    COMFYUI_MODELS_PATH; the UI finds each file anywhere under the matching subfolder
+# For the CLI, copy this file and replace the placeholders yourself.
+#
+# Recipe sources (docs/visage-lora-training.md):
+#   the model's own scripts/train_dit.py -- rectified flow, t = sigmoid(N(0, 1) + log sqrt(tokens / 64)), captions
+#     dropped to a zero embedding for the CFG branch (0.2 in the release; a LoRA needs less)
+#   torch AdamW at a flat 1e-4, weight decay 0.01, gradient clip 1.0, no warmup -- the usual LoRA starting point
+#     (BRIA's Fibo 2.0 recipe uses the same); EMA 0.98 as the Automagic3 template
+# The learning rate and the step count are starting points, not tuned on this model.
+
+model:
+  transformer_path: "[comfyui_models]/diffusion_models/Visage/visage-image.safetensors"
+  vae_path: "[comfyui_models]/vae/visage_vae.safetensors"
+  # Qwen3-0.6B; only its first 8 layers are used
+  text_encoder_path: "[comfyui_models]/text_encoders/qwen3_0.6b.safetensors"
+
+dataset:
+  path: "datasets/[person_to_train]"
+  resolution: 256            # the model's size; images are centre-cropped to a square
+  aspect_mode: "square"      # "bucket" keeps each image's aspect on a 16 px grid (the model was trained square)
+  trigger: "[person_to_train]"
+  default_caption: "a photo of [person_to_train]"
+  repeats: 1
+
+lora:
+  rank: 16
+  alpha: 16
+  prefix: "diffusion_model."
+  # blocks (attention and SwiGLU of the 18 blocks = 72 adapters) | attn (attention only = 36)
+  # | all (blocks + adaLN modulation, text, timestep and output Linears)
+  targets: "blocks"
+  dtype: "float32"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 8   # the model trained at batch 128; a sample per step is a very noisy gradient
+  # Duration: max_steps (> 0) wins; otherwise num_epochs full epochs.
+  max_steps: 1500
+  num_epochs: 70
+  save_every: 0
+  # visage (the release recipe) | logit_normal | uniform; timestep_shift 1 leaves the draw as it is
+  timestep_distribution: "visage"
+  timestep_shift: 1.0
+  max_grad_norm: 1.0
+  optimizer: "adamw"              # torch AdamW, betas (0.9, 0.999), eps 1e-8
+  learning_rate: 1.0e-4
+  learning_rate_warmup_steps: 0
+  weight_decay: 0.01
+  ema_decay: 0.98                 # checkpoints save the average
+  # A dropped caption's states become zeros (the model's unconditional branch).
+  caption_dropout: 0.1
+
+# Preview keys while it trains (console only): w and m render their prompt, g all of them, into
+# <output>/samples/. Training waits while it renders. Delete this section to switch the keys off.
+# Visage captions are comma lists, see the model's PROMPTING.md; the defaults are the sampler's tuned recipe.
+sample:
+  keys:
+    w: "[person_to_train], a woman in her 30s, amateur phone photo, smiling, natural light"
+    m: "[person_to_train], a man in his 30s, amateur phone photo, neutral expression, natural light"
+  prompts: []   # more prompts for g only (saved as p1, p2 ...)
+  steps: 50
+  guidance: 3.0
+  solver: "sde"
+  churn: 0.3
+  shift: 3.3
+  resolution: 256
+  seed: 42
+  ema: true
+
+dtype: "bfloat16"
+mixed_precision: "bf16"
+seed: 42
+
+output:
+  path: "./output/visage/[person_to_train]"
+  name: "visage_adamw_[person_to_train]"
+  dtype: "bfloat16"
+  embed_config: true
+
+logging:
+  level: "INFO"

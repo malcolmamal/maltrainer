@@ -10,8 +10,9 @@ it.
 
 **Which models?** This walkthrough is for MOSS-Image (`train_moss_image_finetune.py`). Krea 2
 has a finetune too (`train_krea2_finetune.py`), which trains in rotating windows to fit 12.9B
-parameters on 32 GB: see [krea2-finetuning.md](krea2-finetuning.md). The other models
-(FLUX.3 [klein], Qwen-Image 2.1, Z-Image, MiniMax H3) train LoRAs only. [Other
+parameters on 32 GB: see [krea2-finetuning.md](krea2-finetuning.md). MiniMax H3 Image has one too
+(`train_minimax_h3_image_finetune.py`, over its INT8 file: [minimax-h3-image-finetuning.md](minimax-h3-image-finetuning.md)).
+The other models (FLUX.3 [klein], Qwen-Image 2.1, Z-Image, MiniMax H3) train LoRAs only. [Other
 models](#other-models) at the end covers what is shared and what a new finetune trainer would
 need.
 

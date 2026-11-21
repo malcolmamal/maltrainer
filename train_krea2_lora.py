@@ -26,11 +26,9 @@ from maltrainer.models.krea2.lora import Krea2LoRANetwork
 from maltrainer.models.krea2.text_encoder import load_krea2_text_encoder
 from maltrainer.models.krea2.timesteps import sample_sigma
 from maltrainer.models.krea2.vae import load_krea2_vae
-from maltrainer.training.cli import start_run, training_arguments
 from maltrainer.training.dop import check_dop_config, dop_captions, dop_loss
 from maltrainer.training.image_lora import ImageLoRATrainer
 from maltrainer.training.session import free_memory
-from maltrainer.utils.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -190,10 +188,9 @@ class Krea2LoRATrainer(ImageLoRATrainer):
 
 
 def main() -> None:
-    args = training_arguments("Train a Krea 2 LoRA in maltrainer").parse_args()
-    config = load_config(args.config)
-    start_run(config)
-    Krea2LoRATrainer(config, dry_run=args.dry_run, dry_run_step_time=args.dry_run_step_time).run()
+    from maltrainer.trainers.krea2.lora_subjects import run_lora  # builds on this file's trainer
+
+    run_lora()
 
 
 if __name__ == "__main__":

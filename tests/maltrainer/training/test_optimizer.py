@@ -69,3 +69,36 @@ def test_automagic3_gets_no_warmup_because_it_would_only_lower_its_start_rate(
 
     assert optimizer.param_groups[0]["lr"] == 1e-4
     assert "Automagic3" in caplog.text
+
+
+def test_muon_gets_adamw_scaled_steps_and_its_own_weight_decay() -> None:
+    from maltrainer.optimizers.muon import BatchedMuon
+
+    class Factors:
+        def trainable_parameters(self) -> list[torch.nn.Parameter]:
+            return [torch.nn.Parameter(torch.zeros(4, 2)), torch.nn.Parameter(torch.zeros(2, 4))]
+
+    optimizer, resolved = build_lora_optimizer(
+        Factors(), {"optimizer": "muon", "learning_rate": 1e-4, "weight_decay": 0.5}, 16, strict=True
+    )
+
+    group = optimizer.param_groups[0]
+    assert isinstance(optimizer, BatchedMuon)
+    assert (group["lr"], group["weight_decay"], group["adjust_lr_fn"]) == (1e-4, 0.01, "match_rms_adamw")
+    assert (group["momentum"], group["nesterov"], group["ns_steps"]) == (0.95, True, 5)
+    assert resolved == {"name": "muon", "lr": 1e-4, "weight_decay": 0.01, "momentum": 0.95, "nesterov": True,
+                        "ns_steps": 5, "adjust_lr_fn": "match_rms_adamw"}  # fmt: skip
+
+
+def test_muon_settings_come_from_the_muon_keys() -> None:
+    class Factors:
+        def trainable_parameters(self) -> list[torch.nn.Parameter]:
+            return [torch.nn.Parameter(torch.zeros(4, 2))]
+
+    config = {"optimizer": "muon", "muon_weight_decay": 0.1, "muon_momentum": 0.9, "muon_nesterov": False,
+              "muon_ns_steps": 3, "muon_adjust_lr_fn": "original"}  # fmt: skip
+    optimizer, _ = build_lora_optimizer(Factors(), config, 16, strict=True)
+
+    group = optimizer.param_groups[0]
+    assert (group["weight_decay"], group["momentum"], group["nesterov"]) == (0.1, 0.9, False)
+    assert (group["ns_steps"], group["adjust_lr_fn"]) == (3, "original")

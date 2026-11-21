@@ -58,3 +58,12 @@ def _int_mm(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
         return torch._int_mm(left.contiguous(), right)
     padded = F.pad(left, (0, 0, 0, 17 - rows))
     return torch._int_mm(padded.contiguous(), right)[:rows]
+
+
+def dequantize_weight(
+    quantized: torch.Tensor, scale: torch.Tensor, group_size: int, dtype: torch.dtype
+) -> torch.Tensor:
+    """The dense weight an INT8 ConvRot Linear stands for: the codes times the per-row scale, with the stored input
+    rotation undone (the Hadamard matrix is its own inverse, so rotating again undoes it)."""
+    dense = quantized.float() * scale.float().reshape(-1, 1)
+    return rotate_activation(dense, group_size).to(dtype)

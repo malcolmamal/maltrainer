@@ -102,3 +102,14 @@ def test_with_ema_the_checkpoint_holds_the_average_and_the_raw_adapters_come_bac
     assert not torch.equal(network.get_state_dict(torch.bfloat16)[name], saved[name])
     with trainer.ema.applied():
         assert torch.equal(network.get_state_dict(torch.bfloat16)[name], saved[name])
+
+
+def test_muon_trains_the_adapters_with_its_own_settings(workspace: Workspace) -> None:
+    from maltrainer.optimizers.muon import BatchedMuon
+
+    trainer, saved = trained(workspace, train={"optimizer": "muon", "learning_rate": 1e-3, "num_epochs": 2})
+
+    assert isinstance(getattr(trainer.optimizer, "optimizer", trainer.optimizer), BatchedMuon)
+    assert trainer.run_metadata["optimizer_resolved"]["name"] == "muon"
+    assert all(torch.count_nonzero(saved[key]) > 0 for key in saved if key.endswith("lora_B.weight"))
+    assert all(torch.isfinite(saved[key]).all() for key in saved)

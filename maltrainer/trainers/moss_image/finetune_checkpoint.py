@@ -12,6 +12,7 @@ import torch
 
 from maltrainer.models.moss_image.finetune import save_full_model
 from maltrainer.trainers.moss_image.finetune_state import FinetuneState
+from maltrainer.utils.fsutil import remove_unfinished
 from maltrainer.utils.lora_metadata import build_metadata
 
 logger = logging.getLogger(__name__)
@@ -112,10 +113,10 @@ class FinetuneCheckpoint(FinetuneState):
                 try:
                     self._save_state(output_dir / f"{name}_state", weights=save_path if same_weights else None)
                 except Exception:  # logged with its traceback; the run goes on
-                    shutil.rmtree(output_dir / f"{name}_state.tmp", ignore_errors=True)
                     logger.exception(
                         "Writing the resume state for step %s failed; the partial copy is removed and "
                         "the previous state kept.",
                         step,
                     )
+                    remove_unfinished(output_dir / f"{name}_state.tmp", "resume state")
         return True

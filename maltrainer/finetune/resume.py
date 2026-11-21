@@ -1,9 +1,13 @@
-"""Whether a saved finetune state belongs to the run that wants to resume it."""
+"""Reading a saved finetune state, and whether it belongs to the run that wants to resume it."""
 
 from __future__ import annotations
 
+import pickle
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
+
+import torch
 
 
 def check_same_trainable_set(state: Mapping[str, Any], group_names: Sequence[str], param_names: Sequence[str]) -> None:
@@ -29,3 +33,15 @@ def check_same_trainable_set(state: Mapping[str, Any], group_names: Sequence[str
         f"(only in the saved state: {gone[:3]}; only now: {new[:3]}); keep finetune.trainable_prefixes "
         "and finetune.linears_only as they were"
     )
+
+
+def load_resume_file(path: Path, map_location: str | torch.device) -> Any:
+    """A resume file's contents: tensors, numbers, strings and the containers around them, nothing else.
+
+    ``weights_only`` makes torch refuse to build any other object, so a file from another machine cannot run
+    code when it is resumed. Everything the finetunes save (optimizer states, RNG states, counters) is plain data.
+    """
+    try:
+        return torch.load(path, map_location=map_location, weights_only=True)
+    except pickle.UnpicklingError as e:
+        raise ValueError(f"{path} holds more than plain tensors and numbers, so it is not loaded") from e

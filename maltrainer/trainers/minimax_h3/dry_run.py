@@ -15,7 +15,9 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
-def simulate(config: dict[str, Any], num_samples: int, step_time: float, show: bool) -> str:
+def simulate(
+    config: dict[str, Any], num_samples: int, step_time: float, show: bool, prefix: str = "minimax_h3_lora"
+) -> str:
     """Simulate training without downloading or loading models; returns the last record's path."""
     train_config = config.get("train", {})
     num_epochs = int(train_config.get("num_epochs", 10) or 1)
@@ -37,21 +39,24 @@ def simulate(config: dict[str, Any], num_samples: int, step_time: float, show: b
             time.sleep(step_time)
         progress_bar.update(1)
         if save_every > 0 and step % save_every == 0:
-            _write_record(config, output_dir, step, plan)
+            _write_record(config, output_dir, step, (plan, prefix))
     progress_bar.close()
-    last = _write_record(config, output_dir, "final", plan)
+    last = _write_record(config, output_dir, "final", (plan, prefix))
     logger.info("Dry run completed successfully.")
     return last
 
 
-def _write_record(config: dict[str, Any], output_dir: Path, step: Any, plan: tuple[int, int, int, float]) -> str:
+def _write_record(
+    config: dict[str, Any], output_dir: Path, step: Any, plan_and_prefix: tuple[tuple[int, int, int, float], str]
+) -> str:
+    plan, prefix = plan_and_prefix
     total_steps, steps_per_epoch, num_epochs, start_time = plan
     elapsed = max(time.time() - start_time, 0.0)
     completed_steps = total_steps if step == "final" else int(step)
     progress = min(completed_steps / max(total_steps, 1), 1.0)
     payload = {
         "mode": "dry_run",
-        "kind": "minimax_h3_lora",
+        "kind": prefix,
         "step": step,
         "total_steps": total_steps,
         "steps_per_epoch": steps_per_epoch,
@@ -63,6 +68,6 @@ def _write_record(config: dict[str, Any], output_dir: Path, step: Any, plan: tup
         },
         "config": config,
     }
-    save_path = output_dir / f"minimax_h3_lora_step_{step}.safetensors"
+    save_path = output_dir / f"{prefix}_step_{step}.safetensors"
     save_path.write_text(json.dumps(payload, indent=2))
     return str(save_path)

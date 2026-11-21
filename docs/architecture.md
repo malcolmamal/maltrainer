@@ -148,6 +148,8 @@ Which trainer is built on which base:
 |---|---|---|
 | `train_flux3_klein_lora.py`, `train_krea2_lora.py` | the class lives in the entry point itself | `ImageLoRATrainer` |
 | `train_fibo2_lora.py` | the class lives in the entry point; `trainers/fibo2/timesteps` | `ImageLoRATrainer` |
+| `train_visage_lora.py` | the class lives in the entry point; `trainers/visage` (`timesteps`, `sampling`, `previews`; the preview key parsing is Fibo 2.0's) | `ImageLoRATrainer` |
+| `train_ltx25_lora.py` | the class lives in the entry point; `trainers/ltx25` (`data`, `cache`, `step`, `timesteps`) | `ImageLoRATrainer` |
 | `train_moss_image_lora.py` | `trainers/moss_image` (`cache`, `previews`, `timesteps`), `training/advice` | `ImageLoRATrainer` |
 | `train_moss_image_finetune.py` | `trainers/moss_image/finetune_*` | the MOSS-Image LoRA trainer (4.4) |
 | `train_krea2_finetune.py` | `trainers/krea2/finetune_*`, `trainers/krea2/previews`, `trainers/finetune` | the Krea 2 LoRA trainer, imported from `train_krea2_lora` |
@@ -220,8 +222,10 @@ C4Component
 
 The other families follow the same shape: `krea2` (`model`, `layers`, `rope`, `loading`, `text_encoder`, `vae`,
 `timesteps`, `lora`, `finetune`), `flux3` (`model`, `config`, `layers`, `rope`, `loading`, `text_encoder`, `vae`,
-`vae_net`, `lora`), `fibo2` (`model`, `config`, `blocks`, `layers`, `rope`, `loading`, `prompt`, `text_encoder`, `lora`;
-its VAE and LoRA layer are FLUX.3's and its text encoder loads like FLUX.3's), `qwen_image_2_1` (`model*`, `vae*`, `text_encoder`, `checkpoint`, `lora*`) and `minimax_h3`
+`vae_net`, `lora`), `ltx25` (`model`, `conditioning`, `blocks`, `layers`, `connector`, `rope`, `config`, `loading`, `text_encoder`,
+`text_projection`, `video_vae`, `audio_vae`, `audio_features`, `lora`; its text-encoder loader, LoRA layer and INT8 kernels
+are FLUX.3's and MiniMax H3's), `fibo2` (`model`, `config`, `blocks`, `layers`, `rope`, `loading`, `prompt`, `text_encoder`, `lora`;
+its VAE and LoRA layer are FLUX.3's and its text encoder loads like FLUX.3's), `visage` (`model`, `config`, `layers`, `loading`, `text_encoder`, `vae*`, `lora`; its LoRA layer is FLUX.3's), `qwen_image_2_1` (`model*`, `vae*`, `text_encoder`, `checkpoint`, `lora*`) and `minimax_h3`
 (`model*`, `video_vae*`, `audio_vae*`, `text_encoder*`, `lora*`, and the shared INT8 and `comfy_quant*` layers). The
 VAE of MOSS-Image is FLUX.3's Flux2 VAE (`models/flux3/vae.py`), and the INT8 ConvRot kernels live in
 `models/minimax_h3/int8_*.py` and are used by four families, so the model packages know each other (section 6.1).
@@ -522,7 +526,7 @@ What holds, and what does not:
   between packages fails the test until the table in the test and here are changed together), forbids the library
   importing `trainers` or an entry point, and fails on any import cycle between modules.
 - **Models know each other.** The shared INT8 ConvRot layers live in `models/minimax_h3/int8_*.py` and
-  `comfy_quant*.py`, and `flux3`, `fibo2` (through the FLUX.3 text-encoder loader), `qwen_image_2_1` and `moss_image` import them (and each other's VAE, LoRA layer or
+  `comfy_quant*.py`, and `flux3`, `fibo2` and `ltx25` (through the FLUX.3 loaders), `qwen_image_2_1` and `moss_image` import them (and each other's VAE, LoRA layer or
   text encoder pieces). The rule is: reuse, do not copy; the cost is that `minimax_h3` is more of a platform
   package than its name says.
 - **Where logic lives.** Reusable code goes into `maltrainer/` and not into `train_*.py` (200 lines at most). A

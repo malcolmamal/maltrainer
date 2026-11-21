@@ -1,74 +1,57 @@
-<section class="job">
-  <div class="header">
-    <div>
-      <a routerLink="/trainer" class="back">← Back to trainer</a>
-      <h1>Training job</h1>
-      <p class="subtitle">Live output streamed from the training process.</p>
-    </div>
-    <div
-      class="status"
-      [class.failed]="status() === 'failed'"
-      [class.exited]="status() === 'exited'"
-    >
-      {{ status() }}
-    </div>
-  </div>
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a routerLink="/runs">Runs</a>
+  <span aria-hidden="true">/</span>
+  <span class="mt-mono">{{ job()?.dataset ?? 'Run' }}</span>
+</nav>
 
+<ui-page-header
+  [heading]="job()?.dataset ?? 'Training run'"
+  [monoHeading]="!!job()"
+  [description]="subtitle()"
+>
+  <ui-status-pill class="status" [status]="status()" />
+</ui-page-header>
+
+@if (error()) {
+  <ui-alert class="error">{{ error() }}</ui-alert>
+}
+
+<ui-panel heading="Progress" class="progressCard">
+  <div class="progressInfo mt-num">
+    <p class="big mt-display">
+      {{ progressStep().toLocaleString('en-US') }}
+      <small>/ {{ progressTotal() ? progressTotal().toLocaleString('en-US') : '—' }} steps</small>
+    </p>
+    <p class="stat">
+      <strong>{{ progressPercent() }}%</strong> done
+    </p>
+    @if (secPerStep(); as rate) {
+      <p class="stat">
+        <strong>{{ rate.toFixed(2) }} s</strong> per step
+      </p>
+    }
+    @if (timeLeft(); as left) {
+      <p class="stat">
+        <strong>{{ left }}</strong> left
+      </p>
+    }
+  </div>
+  @if (progressTotal() > 0) {
+    <ui-cook-timeline [total]="progressTotal()" [current]="progressStep()" />
+  }
+</ui-panel>
+
+<div class="grid">
+  <ui-panel heading="Loss" class="lossCard">
+    <ui-loss-chart [points]="loss()" [total]="progressTotal()" />
+  </ui-panel>
   @if (job()) {
-    <div class="summary">
-      <div>
-        <p class="label">Dataset</p>
-        <p class="value">{{ job()?.dataset }}</p>
-      </div>
-      <div>
-        <p class="label">Model · optimizer</p>
-        <p class="value">{{ job()?.model }} · {{ job()?.optimizer }}</p>
-      </div>
-      <div>
-        <p class="label">Duration</p>
-        <p class="value">{{ job()?.duration }}</p>
-      </div>
-      <div>
-        <p class="label">Output</p>
-        <p class="value">{{ job()?.output_path }}</p>
-      </div>
-      <div>
-        <p class="label">Config</p>
-        <p class="value">{{ job()?.config_path }}</p>
-      </div>
-    </div>
+    <ui-panel heading="Settings" class="summary">
+      <ui-fact-list [facts]="facts()" [columns]="1" />
+    </ui-panel>
   }
+</div>
 
-  <div class="progressCard">
-    <div class="progressInfo">
-      <span>Steps</span>
-      <span>{{ progressStep() }} / {{ progressTotal() || '—' }}</span>
-    </div>
-    <div class="progressBar">
-      <div class="progressFill" [style.width.%]="progressPercent()"></div>
-    </div>
-  </div>
-
-  @if (progressLine()) {
-    <div class="liveProgress" [class.err]="progressStream() === 'stderr'">
-      <span class="stream">{{ progressStream() }}</span>
-      <span class="text">{{ progressLine() }}</span>
-    </div>
-  }
-
-  @if (error()) {
-    <div class="error" role="alert">{{ error() }}</div>
-  }
-
-  <div class="logCard">
-    <div class="logHeader">Live output</div>
-    <div class="logBody">
-      @for (line of logs(); track $index) {
-        <div class="logLine" [class.err]="line.stream === 'stderr'">
-          <span class="stream">{{ line.stream }}</span>
-          <span class="text">{{ line.line }}</span>
-        </div>
-      }
-    </div>
-  </div>
-</section>
+<ui-panel heading="Output" class="logCard">
+  <ui-log-view [lines]="logs()" [liveLine]="progressLine()" [liveStream]="progressStream()" />
+</ui-panel>

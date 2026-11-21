@@ -1,0 +1,77 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mt-space-3);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  font-size: 12px;
+  color: var(--mt-text-2);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.now {
+  font-size: 14px;
+  margin-right: auto;
+}
+
+.now strong {
+  color: var(--mt-text);
+}
+
+.key {
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--mt-accent);
+}
+
+.key.raw {
+  opacity: 0.45;
+}
+
+.key.smooth {
+  height: 3px;
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.grid {
+  stroke: var(--mt-line);
+  stroke-width: 1;
+}
+
+.label {
+  fill: var(--mt-text-3);
+  font-family: var(--mt-font-mono);
+  font-size: 11px;
+}
+
+polyline {
+  fill: none;
+  stroke: var(--mt-accent);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.raw {
+  stroke-width: 1.2;
+  opacity: 0.45;
+}
+
+.smooth {
+  stroke-width: 2.5;
+}

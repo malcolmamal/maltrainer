@@ -8,7 +8,6 @@ import {
   OnDestroy
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import {
@@ -21,11 +20,32 @@ import {
   TrainPlan
 } from '../../services/trainer-api.service';
 import { describeHttpError } from '../../services/http-error';
+import { Fact, SegmentOption, statusTone, UI } from '../../ui';
+
+/** "≈ 47 min", "≈ 2 h 05 min", or a dash when the backend has no estimate. */
+/** Datasets whose name holds every word of `query`, ignoring case. */
+export function filterDatasets(items: DatasetInfo[], query: string): DatasetInfo[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return items;
+  return items.filter((d) => {
+    const name = d.name.toLowerCase();
+    return words.every((w) => name.includes(w));
+  });
+}
+
+export function formatMinutes(estimate: number | null): string {
+  if (estimate === null) return '—';
+  // The backend sends one decimal; whole minutes are precise enough for an estimate.
+  const minutes = Math.round(estimate);
+  if (minutes < 60) return `≈ ${minutes} min`;
+  const rest = String(minutes % 60).padStart(2, '0');
+  return `≈ ${Math.floor(minutes / 60)} h ${rest} min`;
+}
 
 @Component({
   selector: 'app-trainer-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, ...UI],
   templateUrl: './trainer.page.html',
   styleUrl: './trainer.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -37,6 +57,7 @@ export class TrainerPage implements OnDestroy {
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly selectedDataset = signal<string>('');
+  readonly datasetFilter = signal('');
   readonly dryRun = signal(false);
   readonly dryRunStepTime = signal(0.025);
   readonly starting = signal(false);
@@ -69,6 +90,8 @@ export class TrainerPage implements OnDestroy {
     () => this.datasets().find((d) => d.name === this.selectedDataset()) ?? null
   );
 
+  readonly filteredDatasets = computed(() => filterDatasets(this.datasets(), this.datasetFilter()));
+
   readonly selectedModel = computed(
     () => this.models().find((m) => m.id === this.selectedModelId()) ?? null
   );
@@ -80,6 +103,24 @@ export class TrainerPage implements OnDestroy {
   readonly hasRunning = computed(() => this.jobs().some((job) => job.status === 'running'));
 
   readonly modelsMissing = computed(() => this.selectedModel()?.missing_files ?? []);
+
+  readonly durationOptions: SegmentOption<DurationMode>[] = [
+    { value: 'steps', label: 'Max steps' },
+    { value: 'epochs', label: 'Epochs' }
+  ];
+
+  readonly planFacts = computed<Fact[]>(() => {
+    const p = this.plan();
+    if (!p) return [];
+    return [
+      { label: 'Total steps', value: p.total_steps.toLocaleString('en-US') },
+      { label: 'Epochs', value: p.epochs, detail: `× ${p.steps_per_epoch} steps` },
+      { label: 'Images', value: p.image_count },
+      { label: 'Estimated time', value: formatMinutes(p.estimated_minutes) }
+    ];
+  });
+
+  readonly tone = statusTone;
 
   constructor() {
     this.loadDatasets();

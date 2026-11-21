@@ -7,8 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import torch
-
+from maltrainer.finetune.resume import load_resume_file
 from maltrainer.trainers.krea2.finetune_host import STATE_OPTIMIZER, STATE_TRAINER, FinetuneHost
 
 logger = logging.getLogger(__name__)
@@ -43,8 +42,8 @@ def setup_optimizer(host: FinetuneHost) -> None:
     if host.always_on:
         host.always_optimizer = host._make_optimizer([p for _, p in host.always_on], "txtfusion")
     if host.resume_dir is not None:
-        saved = torch.load(host.resume_dir / STATE_OPTIMIZER, map_location="cpu", weights_only=False)
+        saved = load_resume_file(host.resume_dir / STATE_OPTIMIZER, "cpu")
         host.rotator.load_state_dict(saved["rotation"])
         if host.always_optimizer is not None and saved.get("always") is not None:
             host.always_optimizer.load_state_dict(saved["always"])
-        host.resume_state = torch.load(host.resume_dir / STATE_TRAINER, map_location="cpu", weights_only=False)
+        host.resume_state = load_resume_file(host.resume_dir / STATE_TRAINER, "cpu")

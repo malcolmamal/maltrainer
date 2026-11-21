@@ -47,6 +47,24 @@ def test_a_48_fps_clip_keeps_real_time_by_dropping_every_other_frame(make_clip: 
     assert _greys(frames) == [0, 40, 80, 120, 160, 200]
 
 
+def test_the_target_frame_rate_sets_the_tick_clock(make_clip: Callable[..., Path]) -> None:
+    path = make_clip("a.avi", frames=6, fps=24)
+
+    at_12 = read_video_frames(path, 32, 100, fps=12)
+    at_48 = read_video_frames(path, 32, 100, fps=48)
+
+    assert _greys(at_12) == [0, 40, 80]  # every other source frame: half as many ticks
+    assert _greys(at_48) == [0, 0, 20, 20, 40, 40, 60, 60, 80, 80, 100, 100]
+
+
+def test_audio_is_resampled_to_the_requested_rate(make_wav: Callable[..., Path]) -> None:
+    path = make_wav("a.wav", _tone(0.25), rate=16000)
+
+    wav = read_audio(path, rate=16000)
+
+    assert wav is not None and wav.shape == (2, 4000)
+
+
 @pytest.mark.parametrize(("fps", "max_frames", "expected"), [(24, 3, [0, 20, 40]), (12, 3, [0, 0, 20])])
 def test_decoding_stops_at_max_frames(
     make_clip: Callable[..., Path], fps: int, max_frames: int, expected: list[int]

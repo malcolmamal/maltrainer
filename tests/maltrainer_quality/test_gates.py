@@ -49,11 +49,14 @@ def test_the_table_runs_every_gate_in_order() -> None:
         "file length",
         "types",
         "dead code",
+        "unsafe load",
+        "duplicates",
         "tests",
         "coverage",
         "lock",
         "requirements",
         "audit",
+        "audit dev",
     ]
 
 

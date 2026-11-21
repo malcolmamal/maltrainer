@@ -48,13 +48,17 @@ def build_lora_optimizer(
     if name.startswith("prodigy"):
         optimizer, supported = build_prodigy(network.trainable_parameters(), train_config, lr, weight_decay)
         return optimizer, {"name": "prodigy", **supported}
+    if name == "muon":
+        return _muon(network, train_config, lr)
     if name in {"adamw8bit", "adam8bit"}:
         import bitsandbytes as bnb
 
         params = network.trainable_parameters()
         return cast(Any, bnb.optim).AdamW8bit(params, lr=lr, weight_decay=weight_decay), {"name": name, "lr": lr}
     if strict and name != "adamw":
-        raise ValueError(f"Unknown train.optimizer {name!r}: use automagic3, prodigy, adamw8bit, adam8bit or adamw")
+        raise ValueError(
+            f"Unknown train.optimizer {name!r}: use automagic3, prodigy, muon, adamw8bit, adam8bit or adamw"
+        )
     return AdamW(network.trainable_parameters(), lr=lr, weight_decay=weight_decay), {"name": "adamw", "lr": lr}
 
 
@@ -130,3 +134,19 @@ def automagic_one_group(
         kwargs["clip_threshold"],
     )
     return optimizer, {"name": "automagic3", **kwargs}
+
+
+def _muon(network: Any, train_config: dict[str, Any], lr: float) -> tuple[Any, dict[str, object]]:
+    """Muon with AdamW-sized steps (so AdamW's rates apply, 1e-4), over the adapters' 2D factors. Its settings are
+    the ``muon_*`` keys; ``train.weight_decay`` (0 for Automagic3) is not read, Muon's own default is 0.01."""
+    from maltrainer.optimizers.muon import BatchedMuon
+
+    settings: dict[str, Any] = {
+        "weight_decay": float(train_config.get("muon_weight_decay", 0.01)),
+        "momentum": float(train_config.get("muon_momentum", 0.95)),
+        "nesterov": bool(train_config.get("muon_nesterov", True)),
+        "ns_steps": int(train_config.get("muon_ns_steps", 5)),
+        "adjust_lr_fn": train_config.get("muon_adjust_lr_fn", "match_rms_adamw"),
+    }
+    logger.info("Using Muon: lr=%.2e, %s", lr, ", ".join(f"{k}={v}" for k, v in settings.items()))
+    return BatchedMuon(network.trainable_parameters(), lr=lr, **settings), {"name": "muon", "lr": lr, **settings}

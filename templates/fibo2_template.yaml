@@ -6,13 +6,15 @@
 # For the CLI, copy this file and replace the placeholders yourself.
 #
 # Recipe sources (docs/fibo2-lora-training.md):
-#   BRIA's fine_tuning/train_lora.py -- the Dev model, rank 64, timesteps sigmoid(N(shift, 1)) with the shift
+#   BRIA's fine_tuning/train_lora.py -- the Dev model, every Linear adapted, timesteps sigmoid(N(shift, 1)) with the shift
 #     rising with the token count (10 % uniform), a null-caption dropout of 0.1
 #   maltrainer's FLUX.3 Automagic3 setup -- one adaptive rate per module family, a 16-step sign window, no
 #     weight decay, EMA 0.98, 1e-6 launch point
 
 model:
-  # The Dev model (full, not distilled). Edit Turbo is distilled and refused by the trainer.
+  # The Dev model (full, not distilled). Edit Turbo is distilled and refused by the trainer. The 8.4 GB
+  # fibo2_dev_int8_convrot.safetensors works too: int8_load "decode" (default) trains as from bf16, "runtime" keeps the
+  # Linears int8 on the GPU (about half the VRAM).
   transformer_path: "[comfyui_models]/diffusion_models/Fibo2/fibo2_dev_bf16.safetensors"
   vae_path: "[comfyui_models]/vae/flux2_vae.safetensors"
   # Qwen3-VL-4B-Instruct, the same file FLUX.3 uses
@@ -27,12 +29,13 @@ dataset:
   repeats: 1
 
 lora:
-  rank: 16
-  alpha: 16
+  rank: 32
+  alpha: 32
   prefix: "diffusion_model."
-  # blocks (attention, SwiGLU and the injection blocks' cross-attention of the 2 refiner and 44 main blocks = 199)
-  # | main (the 44 main blocks only = 191) | all (blocks + Perceiver, adaLN, input/timestep/output)
-  targets: "blocks"
+  # all (blocks + Perceiver, adaLN, input/timestep/output: every Linear, as BRIA's script and Fizgig's rank-32 "full
+  # model" preset) | blocks (attention, SwiGLU and the injection blocks' cross-attention of the 2 refiner and 44 main
+  # blocks = 199) | main (the 44 main blocks only = 191)
+  targets: "all"
   dtype: "float32"
 
 train:
@@ -47,7 +50,7 @@ train:
   timestep_shift: 1.0
   max_grad_norm: 1.0
   gradient_checkpointing: true
-  optimizer: "automagic3"
+  optimizer: "automagic3"    # or muon: learning_rate 1e-4 (AdamW-sized steps), the other automagic_* keys unused
   learning_rate: 1.0e-6           # Automagic3 launch point; it adapts from here
   weight_decay: 0.0
   automagic_param_groups: true    # attention / MLP / other each adapt their own rate

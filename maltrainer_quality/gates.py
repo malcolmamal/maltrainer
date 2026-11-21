@@ -30,12 +30,17 @@ class Gate:
         return (sys.executable, "-m", self.module, *self.arguments)
 
 
+# The code that runs, as the dead code gate scans it (vulture paths in pyproject.toml); tests repeat setup on purpose.
+PACKAGES = ("maltrainer", "maltrainer_quality", "backend", "scripts")
+
+
 def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
     # A fixed count, not one per CPU: every worker imports torch and transformers (~25 s), so more
     # workers than a 4-core CI runner has stop paying off (measured: 4 -> 84 s, 8 -> 111 s, serial 145 s).
     pytest: tuple[str, ...] = ("-n", "4", "--dist", "worksteal", "--cov", "--cov-report=term-missing")
     if junit_dir is not None:
         pytest += (f"--junitxml={junit_dir / 'pytest.xml'}", f"--cov-report=xml:{junit_dir / 'coverage.xml'}")
+    sources = (*PACKAGES, *sorted(path.name for path in Path().glob("*.py")))
     return (
         Gate("lint", "ruff, with the rule families in pyproject.toml", "ruff", ("check", ".")),
         Gate("format", "formatting is decided by the tool, not by review", "ruff", ("format", "--check", ".")),
@@ -43,6 +48,18 @@ def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
         Gate("file length", "200 lines per Python or shell file", "maltrainer_quality.file_length"),
         Gate("types", "mypy over the whole tree", "maltrainer_quality.typing_gate"),
         Gate("dead code", "vulture at confidence 60; the whitelist is in pyproject.toml, with reasons", "vulture"),
+        Gate(
+            "unsafe load",
+            "bandit B614 only: torch.load without weights_only=True runs code from the file; ruff has no such rule",
+            "bandit",
+            ("-q", "-t", "B614", "-r", *sources),
+        ),
+        Gate(
+            "duplicates",
+            "pylint duplicate-code over the code that runs; the block size is in pyproject.toml",
+            "pylint",
+            sources,
+        ),
         Gate("tests", "behaviour", "pytest", pytest),
         # pytest-cov can print the shortfall without failing the session; `coverage report`
         # exits non-zero on its own.
@@ -54,6 +71,9 @@ def gates(junit_dir: Path | None) -> tuple[Gate, ...]:
             "no known vulnerabilities in the runtime lock (dev tools excluded)",
             "pip_audit",
             ("-r", "requirements.lock", "--no-deps", "--disable-pip"),
+        ),
+        Gate(
+            "audit dev", "no known vulnerabilities in the dev tools the gate runs with", "maltrainer_quality.audit_dev"
         ),
     )
 

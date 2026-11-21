@@ -59,6 +59,7 @@ MODELS_TARGETS: tuple[Target, ...] = (
             "tests/maltrainer/models/minimax_h3/test_int8_convrot_rotation.py",
             "tests/maltrainer/models/minimax_h3/test_int8_convrot_function.py",
             "tests/maltrainer/models/minimax_h3/test_int8_convrot_dispatch.py",
+            "tests/maltrainer/models/minimax_h3/test_int8_convrot_decode.py",
         ),
         88.0,
     ),

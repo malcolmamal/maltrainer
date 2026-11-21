@@ -1,345 +1,267 @@
-.trainer {
-  padding: 24px clamp(16px, 4vw, 48px) 48px;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.hero {
+// Layout only. Colours, controls and surfaces come from the design system (src/app/ui).
+:host {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 24px;
-  margin-bottom: 24px;
+  flex-direction: column;
+  gap: var(--mt-space-7);
+  max-width: 1240px;
+  margin: 0 auto;
 }
 
-.eyebrow {
-  text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.6);
+.cols {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--mt-space-8);
 }
 
-h1 {
-  font-size: clamp(28px, 3vw, 40px);
-  margin: 6px 0 8px;
+.formCol {
+  flex: 999 1 560px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
 }
 
-.subtitle {
-  color: rgba(255, 255, 255, 0.75);
-  max-width: 540px;
+.sideCol {
+  flex: 1 1 380px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mt-space-5);
 }
 
-.envHint {
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sec + .sec {
+  border-top: 1px solid var(--mt-line);
+  padding-top: var(--mt-space-7);
+}
+
+.secHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mt-space-3);
+
+  h2 {
+    font-size: 21px;
+  }
+}
+
+.secMeta {
   font-size: 13px;
 }
 
-.envHint span {
-  font-weight: 600;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-}
-
-.card {
-  background: rgba(12, 14, 18, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
-  padding: 18px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
-}
-
-.cardHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.cardActions {
-  display: flex;
-  gap: 8px;
-}
-
-.datasetList {
-  list-style: none;
-  padding: 0 6px 0 0;
-  margin: 0;
-  /* the dataset folder can hold hundreds of datasets: scroll inside the card instead of growing it */
-  max-height: min(70vh, 720px);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.datasetItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: pointer;
-  background: rgba(255, 255, 255, 0.02);
-  transition: 0.2s ease;
-}
-
-.datasetItem.active,
-.datasetItem:hover {
-  border-color: rgba(120, 160, 255, 0.45);
-  background: rgba(120, 160, 255, 0.08);
-}
-
-.datasetItem h3 {
-  margin: 0 0 4px;
-  font-size: 16px;
-}
-
-.datasetItem p {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 13px;
-}
-
-.tag {
-  background: rgba(72, 187, 120, 0.2);
-  color: #8bffb7;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 999px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.field span {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.field select,
-.field input {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: white;
-  padding: 10px 12px;
-  border-radius: 12px;
-}
-
-.inlineInfo {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.inlineInfo .label {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-}
-
-.inlineInfo .value {
-  margin: 4px 0 0;
-  font-weight: 600;
-}
-
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.toggle input {
-  width: 18px;
-  height: 18px;
-}
-
-.primary {
-  width: 100%;
-  border: none;
-  background: linear-gradient(120deg, #6a7dff, #9d6bff);
-  color: white;
-  padding: 12px 16px;
-  border-radius: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.ghost {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.8);
-  border-radius: 10px;
-  padding: 6px 12px;
-  cursor: pointer;
+.push {
+  margin-left: auto;
 }
 
 .placeholder {
-  color: rgba(255, 255, 255, 0.6);
-  padding: 12px;
+  color: var(--mt-text-3);
+  padding: var(--mt-space-3) 0;
+}
+
+.datasetTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--mt-space-2) var(--mt-space-5);
+}
+
+.datasetFilter {
+  flex: 1 1 260px;
+}
+
+.datasetCount {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mt-space-1) var(--mt-space-4);
+  min-height: var(--mt-control-h);
+  align-items: center;
+}
+
+.selectedName {
+  overflow-wrap: anywhere;
+}
+
+// Thousands of folders: the list scrolls on its own so the rest of the form stays in reach.
+.datasetList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mt-space-2);
+  max-height: min(440px, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--mt-space-1);
+}
+
+.modelGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.name {
+  font-weight: 600;
+}
+
+// The data font only ships 400 and 500; 600 would be a synthetic bold.
+.datasetItem .name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.modelItem .name {
+  padding-right: var(--mt-space-6);
+}
+
+.meta {
+  font-size: 13px;
+  color: var(--mt-text-3);
+}
+
+.missing {
+  font-size: 12px;
+  color: var(--mt-danger-text);
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--mt-space-4);
+}
+
+.durationRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mt-space-2);
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mt-text-2);
+}
+
+.dryRun {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--mt-space-3) var(--mt-space-6);
+  padding: var(--mt-space-3) var(--mt-space-4);
+  border-radius: var(--mt-radius-lg);
+  background: var(--mt-surface-2);
+  border: 1px solid var(--mt-line);
+}
+
+.stepTime {
+  flex: 0 1 220px;
+}
+
+.planTitle {
+  color: var(--mt-text-2);
+
+  strong {
+    color: var(--mt-text);
+    font-weight: 600;
+  }
+
+  .dataName {
+    color: var(--mt-text);
+    font-weight: 500;
+  }
+}
+
+.inlineInfo {
+  padding: var(--mt-space-4) 0;
+  border-top: 1px solid var(--mt-line);
+  border-bottom: 1px solid var(--mt-line);
+}
+
+.output {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.path {
+  font-size: 12.5px;
+  padding: 10px var(--mt-space-3);
+  border-radius: var(--mt-radius-sm);
+  background: var(--mt-sunken);
+  border: 1px solid var(--mt-line);
+  overflow-wrap: anywhere;
+}
+
+.planActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  button {
+    flex: 1 1 180px;
+  }
 }
 
 .jobList {
   list-style: none;
-  padding: 0;
-  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .jobItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--mt-space-2) var(--mt-space-3);
+  padding: 14px 0;
+  border-top: 1px solid var(--mt-line);
+
+  &:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
 }
 
-.jobItem h3 {
-  margin: 0 0 4px;
-  font-size: 16px;
+.jobName {
+  color: var(--mt-text);
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--mt-accent-text);
+    text-decoration: underline;
+  }
 }
 
-.jobItem p {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.7);
+.jobMeta {
   font-size: 13px;
+  color: var(--mt-text-3);
+}
+
+.jobSide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--mt-space-1);
+}
+
+.jobSteps {
+  font-size: 12px;
+  color: var(--mt-text-3);
+}
+
+.jobBar {
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .jobActions {
+  grid-column: 1 / -1;
   display: flex;
-  gap: 8px;
-}
-
-.error {
-  background: rgba(255, 70, 70, 0.2);
-  border: 1px solid rgba(255, 70, 70, 0.4);
-  color: #ffb3b3;
-  padding: 10px 12px;
-  border-radius: 12px;
-  margin-bottom: 12px;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 12px;
-}
-
-.hint {
-  margin: -6px 0 14px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-code {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 0.95em;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 1px 5px;
-  border-radius: 6px;
-}
-
-.segmented {
-  display: inline-flex;
-  padding: 3px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  width: fit-content;
-}
-
-.segmented button {
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  padding: 7px 14px;
-  border-radius: 9px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.segmented button.on {
-  background: rgba(120, 160, 255, 0.25);
-  color: white;
-}
-
-.planCard {
-  border: 1px solid rgba(120, 160, 255, 0.3);
-  background: rgba(120, 160, 255, 0.06);
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
-}
-
-.planCard .inlineInfo {
-  margin-bottom: 10px;
-}
-
-.planCard .label {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-}
-
-.planCard .value small {
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.planCard .path {
-  margin: 4px 0 0;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  word-break: break-all;
-}
-
-.warning {
-  margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(255, 184, 0, 0.12);
-  border: 1px solid rgba(255, 184, 0, 0.35);
-  color: #ffd98a;
-  font-size: 12px;
-}
-
-.jobItem .jobMeta {
-  color: rgba(160, 185, 255, 0.85);
-  margin-bottom: 2px;
-}
-
-.note {
-  margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(120, 160, 255, 0.1);
-  border: 1px solid rgba(120, 160, 255, 0.3);
-  color: rgba(200, 215, 255, 0.92);
-  font-size: 12px;
+  gap: var(--mt-space-2);
 }

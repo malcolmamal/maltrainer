@@ -28,7 +28,11 @@ MODELS = {
     "krea2": (
         "train_krea2_lora.py",
         "templates/krea2_template.yaml",
-        {"prodigy": "templates/krea2_prodigy_template.yaml", "adamw8bit": "templates/krea2_adamw_template.yaml"},
+        {
+            "prodigy": "templates/krea2_prodigy_template.yaml",
+            "adamw8bit": "templates/krea2_adamw_template.yaml",
+            "muon": "templates/krea2_muon_template.yaml",
+        },
         {
             "transformer_path": ("diffusion_models", "krea2_raw_fp8_scaled.safetensors"),
             "vae_path": ("vae", "qwen_image_vae.safetensors"),
@@ -53,6 +57,27 @@ MODELS = {
             "transformer_path": ("diffusion_models", "fibo2_dev_bf16.safetensors"),
             "vae_path": ("vae", "flux2_vae.safetensors"),
             "text_encoder_path": ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
+        },
+    ),
+    "visage": (
+        "train_visage_lora.py",
+        "templates/visage_template.yaml",
+        {"adamw": "templates/visage_adamw_template.yaml"},
+        {
+            "transformer_path": ("diffusion_models", "visage-image.safetensors"),
+            "vae_path": ("vae", "visage_vae.safetensors"),
+            "text_encoder_path": ("text_encoders", "qwen3_0.6b.safetensors"),
+        },
+    ),
+    "ltx25": (
+        "train_ltx25_lora.py",
+        "templates/ltx25_template.yaml",
+        {},
+        {
+            "transformer_path": ("diffusion_models", "ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors"),
+            "video_vae_path": ("vae", "ltx-2.5-video-vae-conv-bf16.safetensors"),
+            "audio_vae_path": ("vae", "ltx-2.5-audio-vae-bf16.safetensors"),
+            "text_encoder_path": ("text_encoders", "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors"),
         },
     ),
     "moss_image": (

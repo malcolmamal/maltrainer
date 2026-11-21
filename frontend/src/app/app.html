@@ -1,12 +1,42 @@
-<div class="appShell">
-  <header class="appHeader">
-    <a class="brand" routerLink="/trainer">Maltrainer</a>
-    <nav class="nav">
-      <a routerLink="/trainer" routerLinkActive="active">Trainer</a>
-    </nav>
-  </header>
+<div class="shell">
+  <nav class="rail" aria-label="Main">
+    <a class="brand mt-display" routerLink="/trainer">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect class="markFrame" x="2.5" y="2.5" width="19" height="19" rx="6" stroke-width="1.6" />
+        <path
+          class="markCurve"
+          d="M6.5 8.5c2.5 0 3 7 6 7s3.2-3 5-3"
+          stroke-width="2"
+          stroke-linecap="round"
+        />
+      </svg>
+      <span>maltrainer</span>
+    </a>
+    <div class="navList">
+      @for (item of nav; track item.path) {
+        <a
+          class="navItem"
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          ariaCurrentWhenActive="page"
+        >
+          <ui-icon [name]="item.icon" />
+          {{ item.label }}
+        </a>
+      }
+    </div>
+    <div class="railFoot">
+      <span class="footLabel">Theme</span>
+      <ui-segmented
+        ariaLabel="Theme"
+        [options]="themeOptions"
+        [value]="theme.preference()"
+        (valueChange)="theme.preference.set($event)"
+      />
+    </div>
+  </nav>
 
-  <main class="appMain">
+  <main class="content">
     <router-outlet />
   </main>
 </div>

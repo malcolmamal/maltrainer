@@ -76,6 +76,28 @@ def test_the_images_added_on_resume_get_the_original_models_predictions(workspac
         assert torch.equal(prior.targets["new/img0.png"][i], expected.to(torch.bfloat16))
 
 
+def test_an_image_whose_caption_changed_since_is_recorded_again_with_the_new_class_caption(
+    workspace: Workspace,
+) -> None:
+    first = _first_run(workspace, prior=PRIOR)
+    assert first.prior is not None
+    kept = first.prior.targets["old/img1.png"]
+    workspace.add_images("old", 1, caption="a picture of zed")  # img0 only: img1 keeps its caption
+
+    trainer = run_finetune(_resume_config(workspace, prior=PRIOR))
+
+    prior = trainer.prior
+    assert prior is not None
+    base = load_moss_image_transformer(workspace.layout, CPU, torch.bfloat16)[0]
+    x0 = trainer.latent_cache[str(workspace.data / "old" / "img0.png")]
+    context = trainer.text_cache["a picture of person"]
+    assert prior.captions == {"old/img0.png": "a picture of person", "old/img1.png": "a photo of person"}
+    for i in range(prior.samples_per_image):
+        expected = base_prediction(base, x0, prior.sigmas["old/img0.png"][i], prior.seeds["old/img0.png"][i], context)
+        assert torch.equal(prior.targets["old/img0.png"][i], expected.to(torch.bfloat16))
+    assert torch.equal(prior.targets["old/img1.png"], kept)
+
+
 def test_a_changed_samples_per_image_applies_to_new_images_only_and_is_reported(
     workspace: Workspace, caplog: pytest.LogCaptureFixture
 ) -> None:

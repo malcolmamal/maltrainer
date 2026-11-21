@@ -34,9 +34,21 @@ SCHEMA_VERSION = "1"
 # model_type -> (trainer script, ss_base_model_version, ss_network_module)
 ARCHITECTURES = {
     "minimax_h3": ("train_minimax_h3_lora.py", "minimax_h3_fl2va", "maltrainer.models.minimax_h3.lora"),
+    "minimax_h3_image": (
+        "train_minimax_h3_image_lora.py",
+        "minimax_h3_image",
+        "maltrainer.models.minimax_h3.lora",
+    ),
+    "minimax_h3_image_finetune": (
+        "train_minimax_h3_image_finetune.py",
+        "minimax_h3_image",
+        "maltrainer.models.minimax_h3_image.finetune",
+    ),
     "qwen_image_2_1": ("train_qwen_image_2_1_lora.py", "qwen_image_2_1", "maltrainer.models.qwen_image_2_1.lora"),
     "krea2": ("train_krea2_lora.py", "krea2_raw", "maltrainer.models.krea2.lora"),
     "flux3_klein": ("train_flux3_klein_lora.py", "flux3_image_klein_base", "maltrainer.models.flux3.lora"),
+    "visage": ("train_visage_lora.py", "visage_image", "maltrainer.models.visage.lora"),
+    "ltx25": ("train_ltx25_lora.py", "ltx25_22b_dev", "maltrainer.models.ltx25.lora"),
     "fibo2": ("train_fibo2_lora.py", "fibo2_dev", "maltrainer.models.fibo2.lora"),
     "moss_image": ("train_moss_image_lora.py", "moss_image_base", "maltrainer.models.moss_image.lora"),
     "moss_image_finetune": ("train_moss_image_finetune.py", "moss_image_base", "maltrainer.models.moss_image.finetune"),

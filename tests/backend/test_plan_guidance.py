@@ -86,3 +86,16 @@ def test_square_images_and_other_models_get_no_squashing_warning(make_dataset: M
     plan, _ = build(model="zimage")
 
     assert plan.warnings == []
+
+
+def test_visage_crops_non_square_images_so_the_plan_does_not_say_they_are_squashed(
+    make_dataset: Maker, install_models: Maker
+) -> None:
+    install_models("visage")
+    folder = make_dataset(count=1)
+    write_images(folder / "wide", 3, (16, 8))
+
+    plan, config = build(model="visage")
+
+    assert plan.image_count == 4 and plan.warnings == []
+    assert config["dataset"]["aspect_mode"] == "square"

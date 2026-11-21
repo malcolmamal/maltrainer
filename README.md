@@ -25,6 +25,17 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   template. Plain or structured JSON captions. Run it with
   `train_fibo2_lora.py`, `run_fibo2_training.bat` or the web UI. See the
   [Fibo 2.0 training guide](docs/fibo2-lora-training.md).
+- **MiniMax H3 Image LoRA Training**: trains MiniMax H3 Image (the picture model, not the audio/video H3) at its 6
+  distilled noise levels, each through its own head, with Fizgig's default recipe. Run it with
+  `train_minimax_h3_image_lora.py`. See the [MiniMax H3 Image training guide](docs/minimax-h3-image-lora-training.md).
+- **Visage-Image LoRA Training**: trains Visage-Image (Sherstnev, 237M, 256 px faces) from ComfyUI's single files (the
+  DiT, the f16 VAE and Qwen3-0.6B), with an Automagic3 template and an AdamW one. Run it with `train_visage_lora.py`,
+  `run_visage_training.bat` or the web UI. Matches the upstream modules exactly on the real files; not yet run as a
+  training. See the [Visage-Image training guide](docs/visage-lora-training.md).
+- **LTX-2.5 LoRA Training**: trains LTX-2.5 Dev (Lightricks, 22B audio-video) on stills, video clips and their
+  soundtracks, from ComfyUI's single files (the INT8 ConvRot DiT, the video and audio VAEs and Gemma 4 12B). Run it
+  with `train_ltx25_lora.py`, `run_ltx25_training.bat` or the web UI. Checked against ComfyUI's code; not yet run
+  on the LTX-2.5 files. See the [LTX-2.5 training guide](docs/ltx25-lora-training.md).
 - **MOSS-Image LoRA Training**: trains MOSS-Image Base (OpenMOSS, 5B) from ComfyUI's single files
   (the bf16 or INT8 ConvRot DiT, the Flux2 VAE and Qwen3.5-9B), with an Automagic3 template and a
   Prodigy template. Run it with `train_moss_image_lora.py`, `run_moss_image_training.bat` or the
@@ -39,6 +50,10 @@ Modern AI model training toolkit for Qwen-Image 2.1, Z-Image and other modern di
   one window of blocks at a time over an fp8 frozen trunk, with prior preservation, regularisation images, per-folder
   repeats, previews and an exact resume (also with people added). Measured on an RTX 5090: 29.3 GB peak, ~2 s a step
   at 512 px. See [Krea 2 finetuning](docs/krea2-finetuning.md) (with the results of an eight-person run).
+- **MiniMax H3 Image full finetuning**: `train_minimax_h3_image_finetune.py` trains the DiT's own weights from ComfyUI's
+  INT8 file on a 32 GB GPU, a window of blocks at a time over the frozen INT8 model, with fused Automagic3, Fizgig's
+  training adapter as a switch, an INT8 file out and an exact resume. Not yet run on the GPU. See
+  [MiniMax H3 Image finetuning](docs/minimax-h3-image-finetuning.md).
 - **Lossless LoRA merging**: `scripts/merge_loras.py` merges LoRAs into one file that applies
   exactly what stacking them does, with per-LoRA strengths given on the command line or in a YAML
   config. It also bakes a strength into a single LoRA. See [merging LoRAs](docs/merge-loras.md).
@@ -346,7 +361,8 @@ uv sync --extra cpu --group dev      # creates .venv: CPU torch, the pinned runt
 .venv/Scripts/python -m maltrainer_quality      # or quality.bat / ./quality.sh, which pick .venv
 ```
 
-It runs lint and formatting (ruff), the complexity and file-length limits, the type check (mypy),
+It runs lint and formatting (ruff), the complexity and file-length limits, the type check (mypy), dead code (vulture), `torch.load` without `weights_only=True` (bandit, B614 only; ruff's `S` rules
+have no such check), duplicate code (pylint),
 the tests (pytest), and the coverage floor. `ruff format .` fixes formatting; `ruff check --fix .` fixes what lint can.
 Every gate runs even after one fails; the failed ones are listed at the end. A tool that isn't
 installed in the interpreter you launched it with fails its gate.
@@ -373,7 +389,10 @@ python -m maltrainer_quality.requirements --write
 ```
 
 The gate fails when either lock is stale (`uv lock --check`, then a byte comparison with `uv export`) and when
-`pip-audit` finds a known vulnerability in `requirements.lock`; the audit needs network access, like `uv lock --check`.
+`pip-audit` finds a known vulnerability in `requirements.lock` or in the pinned dev tools (`audit dev` exports the `dev`
+group from `uv.lock`); the audits need network access, like `uv lock --check`. The duplicate-code gate flags a block of
+at least `min-similarity-lines` (`[tool.pylint.similarities]`) repeated across files; lower it as blocks move into shared
+helpers, never raise it.
 
 **Mutation testing** (not in the gate, it takes about five minutes): `python -m maltrainer_quality.mutation --changed`
 changes the pure-math modules one expression at a time and checks that the tests notice. Run it when a change touches
@@ -393,11 +412,13 @@ C4 diagrams.
 ## Documentation
 
 See `docs/` directory for detailed documentation:
+- [Steps, epochs and what happens in one step (for dummies)](docs/steps-and-epochs-for-dummies.md)
 - [Code layout: where things live](docs/code-layout.md)
 - [Mutation testing: policy, scores, how to run](docs/mutation-testing.md)
 - [Architecture: C4 diagrams and description](docs/architecture.md)
 - [Finetuning walkthrough: setup, commands, troubleshooting](docs/finetune-tutorial.md)
 - [Krea 2 full finetuning on 32 GB (rotating windows)](docs/krea2-finetuning.md)
+- [MiniMax H3 Image full finetuning from the INT8 file (rotating windows)](docs/minimax-h3-image-finetuning.md)
 - [MOSS-Image finetune in ComfyUI: 8-step setup and prompting](docs/moss-image-comfyui-prompting.md)
 - [Qwen-Image 2.1 LoRA Training](docs/qwen-image-2.1-lora-training.md)
 - [Qwen-Image 2.1 Optimizer Benchmark: AdamW vs Prodigy vs Automagic3](docs/qwen-image-2.1-optimizer-benchmark.md)

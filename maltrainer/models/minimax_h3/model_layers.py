@@ -35,6 +35,17 @@ def get_timestep_embedding(
     return emb
 
 
+def table_embedding(table: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
+    """A pruned checkpoint's AdaLN row for ``timestep`` in [0, 1]: linear interpolation along the table."""
+    table = table.float()
+    position = timestep.to(device=table.device, dtype=torch.float32).clamp(0.0, 1.0) * (table.shape[0] - 1)
+    lower = position.floor().long()
+    upper = (lower + 1).clamp(max=table.shape[0] - 1)
+    fraction = (position - lower.float()).unsqueeze(1)
+    embedding = table.index_select(0, lower) * (1.0 - fraction) + table.index_select(0, upper) * fraction
+    return embedding.to(timestep.device)
+
+
 def _apply_rotary_emb(hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
     rotary_dim = cos.shape[-1]
     rotary, passthrough = hidden_states[..., :rotary_dim], hidden_states[..., rotary_dim:]

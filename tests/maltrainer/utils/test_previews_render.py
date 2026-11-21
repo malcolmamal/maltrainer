@@ -150,3 +150,22 @@ def test_the_listing_is_written_once_per_process(tmp_path: Path, renderer: _Rend
     previews.render(200, renderer, ready=lambda _prompt: False)
 
     assert listing.read_text(encoding="utf-8") == "edited\n"
+
+
+def test_a_preview_that_cannot_be_written_is_reported_and_training_goes_on(
+    tmp_path: Path, renderer: _Renderer, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    previews = _previews(tmp_path)
+    (tmp_path / "samples").mkdir(exist_ok=True)
+
+    def full(_image: Image.Image, path: Path, *_args: object, **_kwargs: object) -> None:
+        Path(path).write_bytes(b"half")
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Image.Image, "save", full)
+    with caplog.at_level(logging.ERROR):
+        previews.render(100, renderer)
+
+    assert renderer.calls == [("a", 40), ("c", 42)]
+    assert caplog.text.count("could not be written") == 3 and "training continues" in caplog.text
+    assert not list((tmp_path / "samples").glob("*.png"))

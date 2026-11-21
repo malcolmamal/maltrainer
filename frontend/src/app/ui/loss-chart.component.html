@@ -1,0 +1,35 @@
+@if (geometry(); as g) {
+  <div class="legend">
+    <p class="now mt-mono mt-num">
+      <strong>{{ g.last.loss.toFixed(4) }}</strong> now · {{ g.lastSmooth.toFixed(4) }} smoothed
+    </p>
+    <span><i class="key raw"></i>Per step</span>
+    <span><i class="key smooth"></i>Smoothed</span>
+  </div>
+  <svg
+    [attr.viewBox]="'0 0 ' + width + ' 236'"
+    role="img"
+    [attr.aria-label]="
+      'Loss at step ' +
+      g.last.step +
+      ' is ' +
+      g.last.loss.toFixed(4) +
+      ', smoothed ' +
+      g.lastSmooth.toFixed(4)
+    "
+  >
+    @for (line of g.grid; track line.y) {
+      <line class="grid" [attr.x1]="left" [attr.x2]="right" [attr.y1]="line.y" [attr.y2]="line.y" />
+      <text class="label" [attr.x]="left - 8" [attr.y]="line.y + 4" text-anchor="end">
+        {{ line.label }}
+      </text>
+    }
+    <polyline class="raw" [attr.points]="g.raw" />
+    <polyline class="smooth" [attr.points]="g.smooth" />
+    @for (tick of g.ticks; track tick.x) {
+      <text class="label" [attr.x]="tick.x" y="230" text-anchor="middle">{{ tick.label }}</text>
+    }
+  </svg>
+} @else {
+  <p class="mt-hint">The chart starts once the trainer reports its loss.</p>
+}

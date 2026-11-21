@@ -8,6 +8,7 @@ from typing import Any, cast
 import torch
 from safetensors.torch import load_file
 
+from maltrainer.trainers.krea2.lora_subjects import Krea2SubjectsLoRATrainer
 from train_krea2_finetune import Krea2FinetuneTrainer
 from train_krea2_lora import Krea2LoRATrainer
 
@@ -17,6 +18,22 @@ from .world import Workspace
 def run_lora(config: dict[str, Any]) -> Krea2LoRATrainer:
     trainer = Krea2LoRATrainer(config)
     trainer.run()
+    return trainer
+
+
+def run_subjects(config: dict[str, Any]) -> Krea2SubjectsLoRATrainer:
+    """The LoRA entry point's trainer (masks and subjects), run to the end."""
+    trainer = Krea2SubjectsLoRATrainer(config)
+    trainer.run()
+    return trainer
+
+
+def prepared_subjects(config: dict[str, Any]) -> Krea2SubjectsLoRATrainer:
+    """The LoRA entry point's trainer with its data cached, its model loaded and its optimizer built."""
+    trainer = Krea2SubjectsLoRATrainer(config)
+    trainer.precache_dataset()
+    trainer.load_transformer_and_lora()
+    trainer.setup_optimizer()
     return trainer
 
 

@@ -7,6 +7,8 @@ from typing import Any
 
 import torch
 
+from maltrainer.models.minimax_h3.packing import AUDIO_SIGMA_SHIFT, VIDEO_SIGMA_SHIFT
+
 
 def sample_timesteps(train_config: dict[str, Any], batch_size: int, device: torch.device) -> torch.Tensor:
     # fp32: in bf16 a sigma near 1 lands on a 1/256 grid, and the audio remap
@@ -59,3 +61,12 @@ def resolve_flow_shift(train_config: dict[str, Any], latent_h: int, latent_w: in
     slope = (1.15 - 0.5) / (6400 - 256)
     mu = 0.5 + slope * (packed_tokens - 256)
     return math.exp(mu)
+
+
+def schedule_note(train_config: dict[str, Any], flow_shift: float, latent: tuple[int, int]) -> str:
+    """The log line that says how this run's first sample is noised."""
+    return (
+        f"Timestep schedule: {train_config.get('timestep_distribution', 'krea2_shift')}, sigma shift "
+        f"{flow_shift:.3f} (latent {latent[0]}x{latent[1]}); audio sigma follows the inference coupling "
+        f"(video shift {VIDEO_SIGMA_SHIFT:.0f} -> audio shift {AUDIO_SIGMA_SHIFT:.0f})"
+    )

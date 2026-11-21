@@ -2,7 +2,8 @@
 """
 Fibo 2.0 (briaai/Fibo-2.0-dev) LoRA training for maltrainer, text-to-image.
 
-Trains the full, non-distilled Dev model on ComfyUI's single files: the bf16 DiT (fibo2_dev_bf16), the Flux2 VAE and
+Trains the full, non-distilled Dev model on ComfyUI's single files: the bf16 DiT (fibo2_dev_bf16, or the INT8
+ConvRot repack fibo2_dev_int8_convrot, decoded to bf16 or run int8: ``model.int8_load``), the Flux2 VAE and
 the Qwen3-VL-4B text encoder (qwen3vl_4b_int8_convrot, or _bf16). Latents and caption embeddings are cached once, then
 the encoders are unloaded before the DiT loads. Captions are plain sentences or Fibo's structured JSON (a .txt file
 holding the JSON object); a JSON caption is cleaned and compacted as in training. Edit training and the images of
@@ -103,8 +104,13 @@ class Fibo2LoRATrainer(FiboPreviews, ImageLoRATrainer):
         print("=== Step 2/2: Loading Fibo 2.0 DiT ===", flush=True)
         lora_config = self.config.get("lora", {})
         train_config = self.config.get("train", {})
+        model_config = self.config["model"]
         self.transformer, load_info = load_fibo2_transformer(
-            self.config["model"]["transformer_path"], self.device, self.dtype
+            model_config["transformer_path"],
+            self.device,
+            self.dtype,
+            int8_load=str(model_config.get("int8_load", "decode")),
+            grad_precision=str(train_config.get("int8_grad_precision", "bf16")),
         )
         self.run_metadata["base_load"] = load_info
         if bool(train_config.get("gradient_checkpointing", True)):

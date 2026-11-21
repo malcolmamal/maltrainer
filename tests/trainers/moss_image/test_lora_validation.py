@@ -12,7 +12,9 @@ from .world import Workspace
 def test_an_unknown_optimizer_is_refused_not_replaced_by_adamw(workspace: Workspace, name: str) -> None:
     workspace.add_images("p", 2)
 
-    with pytest.raises(ValueError, match=rf"Unknown train\.optimizer '{name}': use automagic3, prodigy, adamw8bit"):
+    with pytest.raises(
+        ValueError, match=rf"Unknown train\.optimizer '{name}': use automagic3, prodigy, muon, adamw8bit"
+    ):
         prepared_lora(workspace.lora_config(train={"optimizer": name}))
 
 

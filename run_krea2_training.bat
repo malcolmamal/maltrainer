@@ -2,7 +2,7 @@
 REM ==========================================================================
 REM  Krea 2 LoRA training from a template, without the web UI.
 REM
-REM    run_krea2_training.bat <dataset> [automagic3^|prodigy^|adamw8bit] [extra args...]
+REM    run_krea2_training.bat <dataset> [automagic3^|prodigy^|adamw8bit^|muon] [extra args...]
 REM    run_krea2_training.bat feliciaday
 REM    run_krea2_training.bat feliciaday prodigy
 REM    run_krea2_training.bat feliciaday automagic3 --max-steps 2000 --dry-run
@@ -16,7 +16,7 @@ cd /d "%~dp0"
 if exist "%~dp0webui.local.bat" call "%~dp0webui.local.bat"
 
 if "%~1"=="" (
-    echo Usage: run_krea2_training.bat ^<dataset^> [automagic3^|prodigy^|adamw8bit] [extra args]
+    echo Usage: run_krea2_training.bat ^<dataset^> [automagic3^|prodigy^|adamw8bit^|muon] [extra args]
     exit /b 1
 )
 
